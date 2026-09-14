@@ -6,6 +6,10 @@ export function AddSecret(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddSecret'](arg1, arg2, arg3, arg4);
 }
 
+export function ApplyOnboardingString(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ApplyOnboardingString'](arg1, arg2, arg3);
+}
+
 export function DeleteSecret(arg1) {
   return window['go']['main']['App']['DeleteSecret'](arg1);
 }
@@ -16,6 +20,14 @@ export function DisableTUN() {
 
 export function EnableTUN() {
   return window['go']['main']['App']['EnableTUN']();
+}
+
+export function ExportOnboarding(arg1) {
+  return window['go']['main']['App']['ExportOnboarding'](arg1);
+}
+
+export function ExportOnboardingQR(arg1) {
+  return window['go']['main']['App']['ExportOnboardingQR'](arg1);
 }
 
 export function GetAdaptiveStatus() {
@@ -70,12 +82,20 @@ export function ListTests() {
   return window['go']['main']['App']['ListTests']();
 }
 
+export function LoadOnboardingFile() {
+  return window['go']['main']['App']['LoadOnboardingFile']();
+}
+
 export function NetGuardStatus() {
   return window['go']['main']['App']['NetGuardStatus']();
 }
 
 export function OpenLogsDir() {
   return window['go']['main']['App']['OpenLogsDir']();
+}
+
+export function PreviewOnboardingString(arg1, arg2) {
+  return window['go']['main']['App']['PreviewOnboardingString'](arg1, arg2);
 }
 
 export function RevealSecret(arg1) {
@@ -96,6 +116,10 @@ export function RunProxyHeal() {
 
 export function RunTest(arg1) {
   return window['go']['main']['App']['RunTest'](arg1);
+}
+
+export function SaveOnboardingFile(arg1) {
+  return window['go']['main']['App']['SaveOnboardingFile'](arg1);
 }
 
 export function SaveSecret(arg1, arg2) {

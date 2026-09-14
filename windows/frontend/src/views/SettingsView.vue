@@ -8,7 +8,7 @@ import { computed, onMounted, ref } from 'vue'
 import HintBox from '../components/HintBox.vue'
 import { api, isBuildPhase } from '../api/backend'
 import { APP_VERSION } from '../api/contract'
-import type { DeliveryProfile } from '../api/contract'
+import type { DeliveryProfile, OnboardingPreview } from '../api/contract'
 import { useSecretsStore } from '../composables/secretsStore'
 import { fmtDateTime } from '../api/labels'
 
@@ -69,6 +69,66 @@ function fmtDate(iso: string): string {
 function shortId(id: string): string {
   if (!id) return '—'
   return id.length > 10 ? id.slice(0, 8) + '…' : id
+}
+
+// ---------- Onboarding (V2-049/F8): перенос на новое устройство ----------
+const obPass = ref('')
+const obBusy = ref(false)
+const obError = ref('')
+const obQr = ref('') // data-URL PNG
+const obSavedPath = ref('')
+const obImpPass = ref('')
+const obImpTransport = ref('')
+const obImpPreview = ref<OnboardingPreview | null>(null)
+const obImpDone = ref<OnboardingPreview | null>(null)
+
+async function doExportQr(): Promise<void> {
+  if (isBuildPhase() || obBusy.value) return
+  obBusy.value = true; obError.value = ''; obQr.value = ''; obSavedPath.value = ''
+  try {
+    const r = await api.exportOnboardingQr(obPass.value)
+    obQr.value = r.dataUrl
+  } catch (e) {
+    obError.value = e instanceof Error ? e.message : String(e)
+  } finally { obBusy.value = false }
+}
+
+async function doSaveFile(): Promise<void> {
+  if (isBuildPhase() || obBusy.value) return
+  obBusy.value = true; obError.value = ''; obQr.value = ''; obSavedPath.value = ''
+  try {
+    const p = await api.saveOnboardingFile(obPass.value)
+    if (p) obSavedPath.value = p
+  } catch (e) {
+    obError.value = e instanceof Error ? e.message : String(e)
+  } finally { obBusy.value = false }
+}
+
+async function doImportPreview(): Promise<void> {
+  if (isBuildPhase() || obBusy.value) return
+  obBusy.value = true; obError.value = ''; obImpDone.value = null
+  try {
+    let t = obImpTransport.value
+    if (!t) t = await api.loadOnboardingFile()
+    if (!t) { obError.value = 'Бандл не выбран или пуст.'; return }
+    obImpTransport.value = t
+    obImpPreview.value = await api.previewOnboarding(t, obImpPass.value)
+  } catch (e) {
+    obImpPreview.value = null
+    obError.value = e instanceof Error ? e.message : String(e)
+  } finally { obBusy.value = false }
+}
+
+async function doImportApply(): Promise<void> {
+  if (isBuildPhase() || obBusy.value || !obImpPreview.value) return
+  if (obImpPreview.value.wouldDowngrade) return // кнопка скрыта, но guard честный
+  obBusy.value = true; obError.value = ''
+  try {
+    obImpDone.value = await api.applyOnboarding(obImpTransport.value, obImpPass.value, true)
+    obImpPreview.value = null
+  } catch (e) {
+    obError.value = e instanceof Error ? e.message : String(e)
+  } finally { obBusy.value = false }
 }
 </script>
 
@@ -156,6 +216,81 @@ function shortId(id: string): string {
         <p class="secrets-note">
           Значения никогда не показываются: только SHA256-отпечатки и статусы проверки.
         </p>
+      </section>
+
+      <!-- Перенос на новое устройство (V2-049/F8) -->
+      <section class="card">
+        <div class="card-header"><h2>Перенос на новое устройство</h2></div>
+        <p class="secrets-note">
+          Бандл содержит подписанный профиль каналов, ключи доверия и значения секретов,
+          зашифрованные (scrypt + AES-256-GCM) парольной фразой. Фраза нигде не сохраняется —
+          без неё бандл бесполезен. Импорт проверяет подпись профиля и отвергает бандл старее
+          уже принятого (антидаунгрейд).
+        </p>
+
+        <div class="ob-grid">
+          <div class="ob-col">
+            <h3>Экспорт (с этого устройства)</h3>
+            <input
+              v-model="obPass"
+              type="password"
+              class="ob-input"
+              placeholder="Парольная фраза (минимум 8 символов)"
+              autocomplete="new-password"
+            />
+            <div class="ob-actions">
+              <button class="btn" :disabled="obBusy || obPass.length < 8" @click="doExportQr">Показать QR</button>
+              <button class="btn" :disabled="obBusy || obPass.length < 8" @click="doSaveFile">Сохранить в файл…</button>
+            </div>
+            <img v-if="obQr" :src="obQr" class="ob-qr" alt="QR-код бандла переноса" />
+            <p v-if="obSavedPath" class="secrets-note">Сохранено: {{ obSavedPath }}</p>
+          </div>
+
+          <div class="ob-col">
+            <h3>Импорт (на новом устройстве)</h3>
+            <input
+              v-model="obImpPass"
+              type="password"
+              class="ob-input"
+              placeholder="Парольная фраза бандла"
+              autocomplete="off"
+            />
+            <textarea
+              v-model="obImpTransport"
+              class="ob-input ob-textarea"
+              rows="3"
+              placeholder="…или вставьте transport-строку бандла (SNOB1.…)"
+            ></textarea>
+            <div class="ob-actions">
+              <button class="btn" :disabled="obBusy || !obImpPass" @click="doImportPreview">Проверить бандл</button>
+            </div>
+
+            <div v-if="obImpPreview" class="ob-preview">
+              <p><strong>Внутри бандла:</strong> каналов — {{ obImpPreview.channels }}, секретов — {{ obImpPreview.secrets }}, версия профиля — {{ obImpPreview.bundleVersion }}.</p>
+              <p v-if="obImpPreview.wouldDowngrade" class="ob-warn">Версия бандла ниже уже принятой ({{ obImpPreview.currentVersion }}) — импорт будет отклонён.</p>
+              <div v-if="obImpPreview.keys.length" class="ob-keys">
+                <p>Ключи подписи (сверьте отпечатки с устройством-источником):</p>
+                <div v-for="k in obImpPreview.keys" :key="k.keyId" class="row">
+                  <span class="mono">{{ k.fingerprint }}</span>
+                  <span class="sr-title">{{ k.keyId }}</span>
+                </div>
+              </div>
+              <div class="ob-actions">
+                <button
+                  class="btn primary"
+                  :disabled="obBusy || obImpPreview.wouldDowngrade"
+                  @click="doImportApply"
+                >Применить на этом устройстве</button>
+              </div>
+            </div>
+
+            <div v-if="obImpDone" class="ob-preview ob-done">
+              ✔ Импорт применён: каналов — {{ obImpDone.channels }}, секретов — {{ obImpDone.secrets }}. Перезапустите подключение, чтобы новый профиль вступил в силу.
+            </div>
+          </div>
+        </div>
+
+        <p v-if="obError" class="ob-warn">{{ obError }}</p>
       </section>
     </div>
 
@@ -329,6 +464,69 @@ export default { emits: ['navigate'] }
 
 @media (max-width: 1000px) {
   .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Onboarding (F8) */
+.ob-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+.ob-col h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.ob-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #3a3a4a);
+  border-radius: 6px;
+  background: var(--bg-input, #1c1c28);
+  color: inherit;
+  font: inherit;
+}
+.ob-textarea {
+  resize: vertical;
+  font-family: monospace;
+  font-size: 12px;
+}
+.ob-actions {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.ob-qr {
+  width: 220px;
+  height: 220px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+.ob-preview {
+  border: 1px solid var(--border, #3a3a4a);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.ob-keys .mono {
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.ob-warn {
+  color: #e2b344;
+  margin: 6px 0 0;
+}
+.ob-done {
+  border-color: #3f9d63;
+  color: #7dd8a0;
+}
+@media (max-width: 1000px) {
+  .ob-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -6,6 +6,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/go-ole/go-ole v1.3.0
 	github.com/sagernet/sing-box v1.13.19
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/wailsapp/wails/v2 v2.13.0
 	golang.org/x/crypto v0.51.0
 	golang.org/x/sys v0.44.0

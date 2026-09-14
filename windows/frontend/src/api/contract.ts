@@ -262,3 +262,23 @@ export type MetricsView = {
   at: string
   connections: ConnView[]
 }
+
+/** Отпечаток доверенного ключа из onboarding-бандла (F8). */
+export type OnboardingKeyPreview = {
+  keyId: string
+  fingerprint: string
+  comment: string
+}
+
+/** Превью содержимого onboarding-бандла до применения (F8). */
+export type OnboardingPreview = {
+  createdAt: string
+  deviceName: string
+  channels: number
+  secrets: number
+  splitDirect: number
+  keys: OnboardingKeyPreview[]
+  bundleVersion: number
+  currentVersion: number
+  wouldDowngrade: boolean
+}

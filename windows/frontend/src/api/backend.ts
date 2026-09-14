@@ -10,6 +10,7 @@ import { EventsOn } from '../../wailsjs/runtime/runtime'
 import type {
   AdaptiveStatus,
   MetricsView,
+  OnboardingPreview,
   AppState,
   ChannelDescriptor,
   DeliveryProfile,
@@ -244,6 +245,55 @@ export const api = {
   async setAutostart(on: boolean): Promise<void> {
     if (isBuildPhase()) return
     await App.SetAutostart(on)
+  },
+
+  // Onboarding (V2-049/F8): экспорт/импорт бандла переноса устройства.
+  async exportOnboardingQr(passphrase: string): Promise<{ transport: string; dataUrl: string }> {
+    if (isBuildPhase()) return { transport: '', dataUrl: '' }
+    const r = await App.ExportOnboardingQR(passphrase)
+    return { transport: r.transport ?? '', dataUrl: r.dataUrl ?? '' }
+  },
+
+  async saveOnboardingFile(passphrase: string): Promise<string> {
+    if (isBuildPhase()) return ''
+    return (await App.SaveOnboardingFile(passphrase)) ?? ''
+  },
+
+  async loadOnboardingFile(): Promise<string> {
+    if (isBuildPhase()) return ''
+    return (await App.LoadOnboardingFile()) ?? ''
+  },
+
+  async previewOnboarding(transport: string, passphrase: string): Promise<OnboardingPreview> {
+    if (isBuildPhase()) throw new Error('preview недоступен в build-phase')
+    const p = await App.PreviewOnboardingString(transport, passphrase)
+    return {
+      createdAt: p.created_at ?? '',
+      deviceName: p.device_name ?? '',
+      channels: p.channels ?? 0,
+      secrets: p.secrets ?? 0,
+      splitDirect: p.split_direct ?? 0,
+      keys: ((p.keys ?? []) as Array<{ key_id?: string; fingerprint?: string; comment?: string }>).map((k) => ({ keyId: k.key_id ?? '', fingerprint: k.fingerprint ?? '', comment: k.comment ?? '' })),
+      bundleVersion: Number(p.bundle_version ?? 0),
+      currentVersion: Number(p.current_version ?? 0),
+      wouldDowngrade: !!p.would_downgrade,
+    }
+  },
+
+  async applyOnboarding(transport: string, passphrase: string, confirm: boolean): Promise<OnboardingPreview> {
+    if (isBuildPhase()) throw new Error('import недоступен в build-phase')
+    const p = await App.ApplyOnboardingString(transport, passphrase, confirm)
+    return {
+      createdAt: p.created_at ?? '',
+      deviceName: p.device_name ?? '',
+      channels: p.channels ?? 0,
+      secrets: p.secrets ?? 0,
+      splitDirect: p.split_direct ?? 0,
+      keys: ((p.keys ?? []) as Array<{ key_id?: string; fingerprint?: string; comment?: string }>).map((k) => ({ keyId: k.key_id ?? '', fingerprint: k.fingerprint ?? '', comment: k.comment ?? '' })),
+      bundleVersion: Number(p.bundle_version ?? 0),
+      currentVersion: Number(p.current_version ?? 0),
+      wouldDowngrade: !!p.would_downgrade,
+    }
   },
 
   async getSplitDirect(): Promise<string[]> {

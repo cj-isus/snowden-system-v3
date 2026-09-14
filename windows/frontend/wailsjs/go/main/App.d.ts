@@ -5,11 +5,17 @@ import {main} from '../models';
 
 export function AddSecret(arg1:string,arg2:string,arg3:string,arg4:string):Promise<secretvault.Meta>;
 
+export function ApplyOnboardingString(arg1:string,arg2:string,arg3:boolean):Promise<main.OnboardingPreview>;
+
 export function DeleteSecret(arg1:string):Promise<void>;
 
 export function DisableTUN():Promise<void>;
 
 export function EnableTUN():Promise<void>;
+
+export function ExportOnboarding(arg1:string):Promise<string>;
+
+export function ExportOnboardingQR(arg1:string):Promise<main.OnboardingQRResult>;
 
 export function GetAdaptiveStatus():Promise<main.AdaptiveStatus>;
 
@@ -37,9 +43,13 @@ export function ListSecrets():Promise<Array<secretvault.Meta>>;
 
 export function ListTests():Promise<Array<main.TestResultView>>;
 
+export function LoadOnboardingFile():Promise<string>;
+
 export function NetGuardStatus():Promise<main.NetGuardStatus>;
 
 export function OpenLogsDir():Promise<void>;
+
+export function PreviewOnboardingString(arg1:string,arg2:string):Promise<main.OnboardingPreview>;
 
 export function RevealSecret(arg1:string):Promise<string>;
 
@@ -50,6 +60,8 @@ export function RunProbe():Promise<void>;
 export function RunProxyHeal():Promise<boolean>;
 
 export function RunTest(arg1:string):Promise<main.TestResultView>;
+
+export function SaveOnboardingFile(arg1:string):Promise<string>;
 
 export function SaveSecret(arg1:string,arg2:string):Promise<secretvault.Meta>;
 

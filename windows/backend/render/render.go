@@ -214,6 +214,16 @@ func parseSet(channels []ChannelDescriptor) ([]ChannelDescriptor, error) {
 // (антидаунгрейд; живёт рядом с envelope).
 func envelopeVersionPath(dir string) string { return filepath.Join(dir, "version.txt") }
 
+// CurrentEnvelopeVersion — последняя версия envelope, принятая этой машиной
+// (0 = envelope не применялся/нет). Точка для onboarding-импорта (V2-049):
+// бандл с версией ниже текущей отвергается (антидаунгрейд V2-034).
+func CurrentEnvelopeVersion() uint64 {
+	if envelopeStore == nil {
+		return 0
+	}
+	return readEnvelopeVersion(envelopeStore.Dir)
+}
+
 func readEnvelopeVersion(dir string) uint64 {
 	data, err := os.ReadFile(envelopeVersionPath(dir))
 	if err != nil {
