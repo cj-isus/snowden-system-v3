@@ -1,0 +1,8 @@
+# Секреты и артефакты — никогда не в git (PLAN.md §7)
+secrets/
+logs/
+*.exe
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+build/bin/

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "snowden.system",
+  "outputfilename": "snowden-system",
+  "frontend:install": "npm install --no-fund --no-audit",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "info": {
+    "productName": "snowden.system",
+    "productVersion": "2.0.0",
+    "companyName": "snowden.system",
+    "comments": "Fail-closed VPN client UI. Показывает только факты."
+  }
+}

@@ -1,0 +1,4 @@
+secrets/
+vps.env
+*.env
+.tmp/

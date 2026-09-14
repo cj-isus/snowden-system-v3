@@ -1,0 +1,345 @@
+/* snowden.system — дизайн-токены concept (docs/concept/ui.css), глобальные стили.
+   Тёмная «глубоководная» тема: панельный синий + неоновый зелёный статусов. */
+
+:root {
+  color-scheme: dark;
+
+  /* Фон и панели */
+  --bg: #06111d;
+  --bg-deep: #040d17;
+  --sidebar: #071522;
+
+  --panel: #0a1928;
+  --panel-2: #0d1e2f;
+  --panel-3: #102437;
+
+  --border: #1a344b;
+  --border-light: #24445e;
+
+  /* Текст */
+  --text: #e9f1f7;
+  --text-soft: #c3d0dc;
+  --muted: #8399ad;
+  --muted-2: #61798e;
+
+  /* Статусные акценты */
+  --green: #25e3a0;
+  --green-bright: #43f2b1;
+  --green-dark: #0c9e70;
+  --blue: #148cff;
+  --blue-bright: #42b3ff;
+  --yellow: #f4bd35;
+  --red: #ff4f59;
+
+  /* Мягкие подложки статусов */
+  --green-soft: rgba(37, 227, 160, 0.12);
+  --green-border: rgba(37, 227, 160, 0.22);
+  --blue-soft: rgba(20, 140, 255, 0.13);
+  --blue-border: rgba(20, 140, 255, 0.25);
+  --yellow-soft: rgba(244, 189, 53, 0.12);
+  --yellow-border: rgba(244, 189, 53, 0.24);
+  --red-soft: rgba(255, 79, 89, 0.12);
+  --red-border: rgba(255, 79, 89, 0.23);
+  --gray-soft: rgba(113, 132, 154, 0.1);
+  --gray-border: rgba(113, 132, 154, 0.22);
+
+  --shadow:
+    0 18px 40px rgba(0, 0, 0, 0.2),
+    inset 0 1px rgba(255, 255, 255, 0.025);
+
+  --radius: 8px;
+
+  /* Фоновая подсветка приложения (радиальные пятна + диагональный блик) */
+  --app-glow:
+    radial-gradient(ellipse 700px 500px at 48% 18%, rgba(13, 57, 91, 0.34), transparent 70%),
+    radial-gradient(ellipse 550px 500px at 3% 90%, rgba(16, 48, 75, 0.4), transparent 70%),
+    linear-gradient(135deg, #071522 0%, #06121f 48%, #050f1a 100%);
+
+  --mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+  --sans: Inter, 'Segoe UI', Arial, sans-serif;
+
+  /* Совместимость с существующими компонентами (TestCard, SecretCard, HintBox,
+     ToastHost и др.): те же роли в палитре concept. */
+  --bg-elevated: #0b1e2f;
+  --bg-panel: #0a1928;
+  --bg-hover: #10283b;
+  --bg-active: #12314a;
+  --border-soft: #1a344b66;
+  --text-dim: #8399ad;
+  --text-faint: #61798e;
+  --accent: #148cff;
+  --accent-soft: rgba(20, 140, 255, 0.13);
+  --ok: #25e3a0;
+  --ok-soft: rgba(37, 227, 160, 0.12);
+  --warn: #f4bd35;
+  --warn-soft: rgba(244, 189, 53, 0.12);
+  --danger: #ff4f59;
+  --danger-soft: rgba(255, 79, 89, 0.12);
+  --private: #71869a;
+  --private-soft: rgba(113, 132, 154, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    transform 0.08s ease,
+    filter 0.14s ease;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 1px solid var(--blue-bright);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(20, 140, 255, 0.35);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+/* Скроллбары — тонкие, в палитре concept */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #071521;
+}
+::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: #1b384e;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #28536f;
+}
+
+/* ---------- общие примитивы ---------- */
+
+/* Панель-карточка общего вида */
+.card {
+  border: 1px solid var(--border);
+  background: linear-gradient(145deg, rgba(11, 29, 45, 0.96), rgba(7, 20, 33, 0.96));
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  gap: 8px;
+}
+
+.card-header h2 {
+  margin: 0;
+  color: #eef4f8;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+/* Плашка статуса (универсальная) */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.pill.success {
+  color: #42e8ad;
+  border: 1px solid var(--green-border);
+  background: var(--green-soft);
+}
+.pill.success .dot {
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(37, 227, 160, 0.65);
+}
+
+.pill.info {
+  color: #51b8ff;
+  border: 1px solid var(--blue-border);
+  background: var(--blue-soft);
+}
+.pill.info .dot {
+  background: var(--blue);
+  box-shadow: 0 0 8px rgba(20, 140, 255, 0.65);
+}
+
+.pill.warning {
+  color: #ffc643;
+  border: 1px solid var(--yellow-border);
+  background: var(--yellow-soft);
+}
+.pill.warning .dot {
+  background: var(--yellow);
+  box-shadow: 0 0 8px rgba(244, 189, 53, 0.65);
+}
+
+.pill.danger {
+  color: #ff6870;
+  border: 1px solid var(--red-border);
+  background: var(--red-soft);
+}
+.pill.danger .dot {
+  background: var(--red);
+  box-shadow: 0 0 8px rgba(255, 79, 89, 0.65);
+}
+
+.pill.neutral {
+  color: #a1b2c0;
+  border: 1px solid var(--gray-border);
+  background: var(--gray-soft);
+}
+.pill.neutral .dot {
+  background: #71869a;
+}
+
+/* Кнопки */
+.btn {
+  height: 29px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid #28455d;
+  border-radius: 6px;
+  color: #dce7ee;
+  background: #0a1d2d;
+  font-size: 10px;
+}
+.btn:hover:not(:disabled) {
+  border-color: #367091;
+  background: #10283b;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn.primary {
+  height: 32px;
+  border: 1px solid #178cff;
+  border-radius: 6px;
+  color: #fff;
+  background: linear-gradient(180deg, #168fff, #0d72d6);
+  box-shadow: 0 5px 14px rgba(13, 114, 214, 0.18);
+  font-size: 11px;
+}
+.btn.primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.btn.success {
+  border-color: #25e3a0;
+  background: #071b28;
+  color: #f2f7f9;
+  font-weight: 650;
+  font-size: 13px;
+}
+.btn.success:hover:not(:disabled) {
+  background: #0a2637;
+  box-shadow: 0 0 14px rgba(37, 227, 160, 0.12);
+}
+
+/* Значения задержек/чисел */
+.green-value {
+  color: #31e3a5 !important;
+}
+.blue-value {
+  color: #4db5ff !important;
+}
+.yellow-value {
+  color: #ffc64a !important;
+}
+.red-value {
+  color: #ff6870 !important;
+}
+
+.mono {
+  font-family: var(--mono);
+  letter-spacing: -0.2px;
+}
+
+/* Заголовок раздела внутри контента */
+.section-title-group {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.section-title-group h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.count-badge {
+  min-width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #b8c8d4;
+  background: #172d41;
+  font-size: 11px;
+  padding: 0 7px;
+}

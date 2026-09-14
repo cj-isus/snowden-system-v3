@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "phase": 0,
+  "timestamp": "2026-08-27T00:00:00Z",
+  "evidence_source": "local verification + GitHub API + Cloudflare DNS + file system checks",
+  "platforms": {
+    "windows": {
+      "versions": ["11"],
+      "architectures": ["x64"],
+      "build": "26200",
+      "edition": "Pro"
+    },
+    "android": {
+      "primary_device_class": "PTP-N49",
+      "android_version": "16",
+      "sdk_level": 36
+    }
+  },
+  "networks": {
+    "home_wifi": {
+      "label": "unknown",
+      "ipv4": true,
+      "ipv6": "unknown"
+    },
+    "mobile_primary": {
+      "label": "mobile-a",
+      "operator": "redacted",
+      "ipv4": true,
+      "ipv6": "unknown"
+    }
+  },
+  "cloudflare": {
+    "account_label": "redacted",
+    "account_id": "redacted",
+    "zones": {
+      "primary": {
+        "label": "redacted",
+        "zone_id": "redacted",
+        "status": "active",
+        "plan": "free",
+        "ssl_mode": "full",
+        "dns_records_count": 2,
+        "verified_date": "2026-08-27",
+        "verification_method": "dns_resolution_1.1.1.1 + curl_tls"
+      },
+      "secondary": {
+        "label": "redacted",
+        "zone_id": "redacted",
+        "status": "active",
+        "plan": "free",
+        "ssl_mode": "full",
+        "dns_records_count": 2,
+        "verified_date": "2026-08-27",
+        "verification_method": "dns_resolution_1.1.1.1 + curl_tls"
+      }
+    },
+    "control_plane": {
+      "worker": false,
+      "pages": false,
+      "kv": false,
+      "d1": false
+    },
+    "api_token": {
+      "status": "ip_restricted",
+      "allowed_ip": "192.0.2.66",
+      "current_ip": "different",
+      "error_code": 9109
+    }
+  },
+  "servers": {
+    "vps_1": {
+      "label": "vps-main",
+      "ip_class": "public-ipv4",
+      "provider": "AdminVPS",
+      "asn": "AS57043",
+      "region": "Amsterdam, NL",
+      "os": "Ubuntu 24.04.4 LTS",
+      "kernel": "6.8.0-138-generic x86-64",
+      "virtualization": "KVM",
+      "specs": "1 CPU / 2GB RAM / 15GB NVMe",
+      "sing_box": {
+        "version": "v1.13.19",
+        "revision": "0000000000000000000000000000000000000000",
+        "status": "active",
+        "source": "https://github.com/SagerNet/sing-box/releases/tag/v1.13.19"
+      }
+    }
+  },
+  "artifacts": {
+    "sing_box": {
+      "version": "v1.13.19",
+      "revision": "0000000000000000000000000000000000000000",
+      "source": "https://github.com/SagerNet/sing-box/releases/tag/v1.13.19",
+      "license": "GPL-3.0",
+      "release_date": "2026-08-17",
+      "signer": "nekohasekai",
+      "gpg_key_id": "CD109927C34A63C4"
+    },
+    "libbox": {
+      "version": "v1.13.19",
+      "revision": "0000000000000000000000000000000000000000",
+      "source": "built from sing-box repository at same commit",
+      "license": "GPL-3.0",
+      "build_command": "make lib_android"
+    },
+    "android": {
+      "compile_sdk": 36,
+      "target_sdk": 35
+    }
+  },
+  "secrets": {
+    "cloudflare_api_token": "exists",
+    "vps_ssh_key": "exists",
+    "channel_credentials": {
+      "vless_uuid": "exists",
+      "hy2_password": "exists"
+    },
+    "tls_certificates": {
+      "status": "generated",
+      "type": "self_signed",
+      "curve": "prime256v1",
+      "validity_years": 10,
+      "san": [
+        "vpn.example.com",
+        "www.vpn.example.com",
+        "legacy.example.com",
+        "www.legacy.example.com"
+      ]
+    },
+    "registrar_credentials": "exists",
+    "metadata_signing_keys": "exists"
+  },
+  "configs": {
+    "sing_box_server_vless_ws_tls": "created",
+    "sing_box_server_hysteria2": "created",
+    "sing_box_client_template": "created"
+  },
+  "scripts": {
+    "protected_probe": "created"
+  },
+  "verification": {
+    "dns_resolution": {
+      "vpn.example.com": "verified_via_1.1.1.1",
+      "legacy.example.com": "verified_via_1.1.1.1"
+    },
+    "tls": {
+      "vpn.example.com": "valid_certificate",
+      "legacy.example.com": "valid_certificate"
+    },
+    "cloudflare_api": {
+      "status": "ip_restricted",
+      "error_code": 9109,
+      "allowed_ip": "192.0.2.66",
+      "resolution": "update IP allowlist or create new token"
+    }
+  },
+  "blockers": {
+    "resolved": [
+      "tls_certificates_generated",
+      "sing_box_configs_created",
+      "protected_probe_script_created",
+      "windows_skeleton_created"
+    ],
+    "remaining": [
+      {
+        "id": "cf_ip_restriction",
+        "description": "Cloudflare API token IP restricted",
+        "action": "Update IP allowlist or create new token",
+        "docs": "docs/cloudflare-ip-restriction.md"
+      },
+      {
+        "id": "no_live_protected_probe",
+        "description": "No live protected probe evidence",
+        "action": "Run protected-probe.sh on device with VPN",
+        "script": "scripts/protected-probe.sh"
+      },
+      {
+        "id": "no_runtime_implementation",
+        "description": "Windows/Android runtime skeletons only",
+        "action": "Implement Phase 5/6 with sing-box integration"
+      }
+    ]
+  }
+}

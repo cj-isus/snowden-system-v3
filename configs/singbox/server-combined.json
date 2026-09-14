@@ -1,0 +1,66 @@
+{
+  "log": {
+    "level": "info",
+    "output": "stdout",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-in",
+      "listen": "127.0.0.1",
+      "listen_port": 8443,
+      "users": [
+        {
+          "name": "user-1",
+          "uuid": "{{VLESS_UUID}}"
+        }
+      ],
+      "transport": {
+        "type": "ws",
+        "path": "{{WS_PATH}}",
+        "max_early_data": 2048,
+        "early_data_header_name": "Sec-WebSocket-Protocol"
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "hy2-in",
+      "listen": "0.0.0.0",
+      "listen_port": 8444,
+      "users": [
+        {
+          "name": "user-1",
+          "password": "{{HY2_PASSWORD}}"
+        }
+      ],
+      "obfs": {
+        "type": "salamander",
+        "password": "{{HY2_OBFS_PASSWORD}}"
+      },
+      "tls": {
+        "enabled": true,
+        "certificate_path": "{{ORIGIN_CERT_PATH}}",
+        "key_path": "{{ORIGIN_KEY_PATH}}"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "hijack-dns"
+      }
+    ],
+    "final": "direct"
+  }
+}
