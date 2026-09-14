@@ -11,6 +11,7 @@ import type {
   AdaptiveStatus,
   MetricsView,
   OnboardingPreview,
+  UpdatePreview,
   AppState,
   ChannelDescriptor,
   DeliveryProfile,
@@ -294,6 +295,34 @@ export const api = {
       currentVersion: Number(p.current_version ?? 0),
       wouldDowngrade: !!p.would_downgrade,
     }
+  },
+
+  // Обновления приложения (V2-050/F15): подписанный манифест + payload.
+  async pickUpdateDir(): Promise<string> {
+    if (isBuildPhase()) return ''
+    return (await App.PickUpdateDir()) ?? ''
+  },
+
+  async checkUpdate(dir: string): Promise<UpdatePreview> {
+    if (isBuildPhase()) throw new Error('check недоступен в build-phase')
+    const p = await App.CheckUpdate(dir)
+    return {
+      currentVersion: p.current_version ?? '',
+      version: p.version ?? '',
+      notes: p.notes ?? '',
+      releasedAt: p.released_at ?? '',
+      size: Number(p.size ?? 0),
+      sha256: p.sha256 ?? '',
+      keyId: p.key_id ?? '',
+      floor: p.floor ?? '',
+      ok: !!p.ok,
+      reason: p.reason ?? '',
+    }
+  },
+
+  async applyUpdate(dir: string): Promise<string> {
+    if (isBuildPhase()) throw new Error('apply недоступен в build-phase')
+    return (await App.ApplyUpdate(dir)) ?? ''
   },
 
   async getSplitDirect(): Promise<string[]> {

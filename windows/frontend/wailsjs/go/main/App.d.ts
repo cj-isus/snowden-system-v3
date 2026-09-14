@@ -7,6 +7,10 @@ export function AddSecret(arg1:string,arg2:string,arg3:string,arg4:string):Promi
 
 export function ApplyOnboardingString(arg1:string,arg2:string,arg3:boolean):Promise<main.OnboardingPreview>;
 
+export function ApplyUpdate(arg1:string):Promise<string>;
+
+export function CheckUpdate(arg1:string):Promise<main.UpdatePreview>;
+
 export function DeleteSecret(arg1:string):Promise<void>;
 
 export function DisableTUN():Promise<void>;
@@ -48,6 +52,8 @@ export function LoadOnboardingFile():Promise<string>;
 export function NetGuardStatus():Promise<main.NetGuardStatus>;
 
 export function OpenLogsDir():Promise<void>;
+
+export function PickUpdateDir():Promise<string>;
 
 export function PreviewOnboardingString(arg1:string,arg2:string):Promise<main.OnboardingPreview>;
 

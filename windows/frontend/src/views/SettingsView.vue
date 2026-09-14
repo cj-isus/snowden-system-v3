@@ -8,7 +8,7 @@ import { computed, onMounted, ref } from 'vue'
 import HintBox from '../components/HintBox.vue'
 import { api, isBuildPhase } from '../api/backend'
 import { APP_VERSION } from '../api/contract'
-import type { DeliveryProfile, OnboardingPreview } from '../api/contract'
+import type { DeliveryProfile, OnboardingPreview, UpdatePreview } from '../api/contract'
 import { useSecretsStore } from '../composables/secretsStore'
 import { fmtDateTime } from '../api/labels'
 
@@ -129,6 +129,45 @@ async function doImportApply(): Promise<void> {
   } catch (e) {
     obError.value = e instanceof Error ? e.message : String(e)
   } finally { obBusy.value = false }
+}
+
+// ---------- Обновления (V2-050/F15) ----------
+const updBusy = ref(false)
+const updError = ref('')
+const updPreview = ref<UpdatePreview | null>(null)
+let updDir = ''
+
+function fmtSize(n: number): string {
+  if (!n) return '—'
+  if (n > 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' МБ'
+  return Math.round(n / 1024) + ' КБ'
+}
+
+async function updPickAndCheck(): Promise<void> {
+  if (isBuildPhase() || updBusy.value) return
+  updBusy.value = true; updError.value = ''; updPreview.value = null
+  try {
+    const dir = await api.pickUpdateDir()
+    if (!dir) return // отмена
+    updDir = dir
+    updPreview.value = await api.checkUpdate(dir)
+  } catch (e) {
+    updError.value = e instanceof Error ? e.message : String(e)
+  } finally { updBusy.value = false }
+}
+
+async function updApply(): Promise<void> {
+  if (isBuildPhase() || updBusy.value || !updDir) return
+  if (!updPreview.value?.ok) return
+  updBusy.value = true; updError.value = ''
+  try {
+    // Успех = процесс перезапустится; окно закроется само.
+    await api.applyUpdate(updDir)
+  } catch (e) {
+    updError.value = e instanceof Error ? e.message : String(e)
+    updBusy.value = false
+  }
+  // При успехе не снимаем busy: приложение уходит на перезапуск.
 }
 </script>
 
@@ -316,6 +355,35 @@ async function doImportApply(): Promise<void> {
           <p>Fail-closed — лучше остановить передачу, чем отправить трафик напрямую.</p>
         </div>
       </div>
+    </section>
+
+    <!-- Обновления приложения (V2-050/F15) -->
+    <section class="card">
+      <div class="card-header"><h2>Обновления</h2></div>
+      <p class="secrets-note">
+        Обновление — подписанный манифест (та же цепочка Ed25519, что у профиля каналов)
+        и payload с SHA-256. Применяется только версия строго выше текущей и выше этажа
+        уже принятых (антидаунгрейд переживает переустановку старой версии). Подмена
+        бинарника атомарна: старый exe сохраняется как .old до успешного старта нового.
+      </p>
+      <div class="ob-actions">
+        <button class="btn" :disabled="updBusy" @click="updPickAndCheck">Выбрать каталог обновления…</button>
+      </div>
+      <div v-if="updPreview" class="ob-preview">
+        <template v-if="updPreview.ok">
+          <p><strong>Доступно:</strong> v{{ updPreview.version }} (текущая v{{ updPreview.currentVersion }})</p>
+          <p v-if="updPreview.notes">{{ updPreview.notes }}</p>
+          <p class="secrets-note mono-small">sha256: {{ updPreview.sha256.slice(0, 16) }}… · {{ fmtSize(updPreview.size) }} · key {{ updPreview.keyId.slice(0, 10) }}…</p>
+          <div class="ob-actions">
+            <button class="btn primary" :disabled="updBusy" @click="updApply">Применить и перезапустить</button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="ob-warn">Обновление не принято: {{ updPreview.reason || 'причина не указана' }}</p>
+          <p v-if="updPreview.version" class="secrets-note">Проверялась версия v{{ updPreview.version }} (текущая v{{ updPreview.currentVersion }}, этаж {{ updPreview.floor }}).</p>
+        </template>
+      </div>
+      <p v-if="updError" class="ob-warn">{{ updError }}</p>
     </section>
 
     <!-- Системная информация -->
@@ -524,6 +592,10 @@ export default { emits: ['navigate'] }
 .ob-done {
   border-color: #3f9d63;
   color: #7dd8a0;
+}
+.mono-small {
+  font-family: monospace;
+  font-size: 11px;
 }
 @media (max-width: 1000px) {
   .ob-grid {

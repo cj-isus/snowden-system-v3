@@ -598,6 +598,36 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class UpdatePreview {
+	    current_version: string;
+	    version: string;
+	    notes?: string;
+	    released_at?: string;
+	    size: number;
+	    sha256: string;
+	    key_id: string;
+	    floor: string;
+	    ok: boolean;
+	    reason?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdatePreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current_version = source["current_version"];
+	        this.version = source["version"];
+	        this.notes = source["notes"];
+	        this.released_at = source["released_at"];
+	        this.size = source["size"];
+	        this.sha256 = source["sha256"];
+	        this.key_id = source["key_id"];
+	        this.floor = source["floor"];
+	        this.ok = source["ok"];
+	        this.reason = source["reason"];
+	    }
+	}
 
 }
 

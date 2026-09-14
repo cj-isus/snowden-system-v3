@@ -35,10 +35,16 @@ try {
 # NOTE: deliberately WITHOUT -nsis. The wails default installer is machine-scope
 # and ships only the exe (no wintun.dll -> TUN breaks on a clean machine).
 # Our installer (build/windows/installer.nsi) is the single source of installers.
-Write-Host "[2/4] wails build (tags)..." -ForegroundColor Yellow
+Write-Host "[2/4] wails build (tags + version ldflags)..." -ForegroundColor Yellow
 Push-Location $root
 try {
-    wails build -tags "with_utls,with_gvisor,with_quic,with_clash_api"
+    # F15 (V2-050): the running version must be machine-readable for the update
+    # chain (strict-increase policy + anti-downgrade floor).
+    $wailsJson0 = Get-Content (Join-Path $root "wails.json") -Raw | ConvertFrom-Json
+    $appVersion = $wailsJson0.info.productVersion
+    if (-not $appVersion) { $appVersion = "2.0.0" }
+    $ldflags = "-X main.runningVersion=$appVersion"
+    wails build -tags "with_utls,with_gvisor,with_quic,with_clash_api" -ldflags "$ldflags"
     if ($LASTEXITCODE -ne 0) { throw "wails build failed" }
 } finally { Pop-Location }
 

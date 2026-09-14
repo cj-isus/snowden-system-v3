@@ -282,3 +282,17 @@ export type OnboardingPreview = {
   currentVersion: number
   wouldDowngrade: boolean
 }
+
+/** Превью проверки обновления (F15). ok=false — честный отказ с причиной. */
+export type UpdatePreview = {
+  currentVersion: string
+  version: string
+  notes: string
+  releasedAt: string
+  size: number
+  sha256: string
+  keyId: string
+  floor: string
+  ok: boolean
+  reason: string
+}

@@ -10,6 +10,14 @@ export function ApplyOnboardingString(arg1, arg2, arg3) {
   return window['go']['main']['App']['ApplyOnboardingString'](arg1, arg2, arg3);
 }
 
+export function ApplyUpdate(arg1) {
+  return window['go']['main']['App']['ApplyUpdate'](arg1);
+}
+
+export function CheckUpdate(arg1) {
+  return window['go']['main']['App']['CheckUpdate'](arg1);
+}
+
 export function DeleteSecret(arg1) {
   return window['go']['main']['App']['DeleteSecret'](arg1);
 }
@@ -92,6 +100,10 @@ export function NetGuardStatus() {
 
 export function OpenLogsDir() {
   return window['go']['main']['App']['OpenLogsDir']();
+}
+
+export function PickUpdateDir() {
+  return window['go']['main']['App']['PickUpdateDir']();
 }
 
 export function PreviewOnboardingString(arg1, arg2) {
