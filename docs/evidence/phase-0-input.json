@@ -80,7 +80,7 @@
       "specs": "1 CPU / 2GB RAM / 15GB NVMe",
       "sing_box": {
         "version": "v1.13.19",
-        "revision": "0000000000000000000000000000000000000000",
+        "revision": "b5ebaa1fc0f2b94256180b95468e73ef53caa27d",
         "status": "active",
         "source": "https://github.com/SagerNet/sing-box/releases/tag/v1.13.19"
       }
@@ -89,7 +89,7 @@
   "artifacts": {
     "sing_box": {
       "version": "v1.13.19",
-      "revision": "0000000000000000000000000000000000000000",
+      "revision": "b5ebaa1fc0f2b94256180b95468e73ef53caa27d",
       "source": "https://github.com/SagerNet/sing-box/releases/tag/v1.13.19",
       "license": "GPL-3.0",
       "release_date": "2026-08-17",
@@ -98,7 +98,7 @@
     },
     "libbox": {
       "version": "v1.13.19",
-      "revision": "0000000000000000000000000000000000000000",
+      "revision": "b5ebaa1fc0f2b94256180b95468e73ef53caa27d",
       "source": "built from sing-box repository at same commit",
       "license": "GPL-3.0",
       "build_command": "make lib_android"
@@ -123,8 +123,8 @@
       "san": [
         "vpn.example.com",
         "www.vpn.example.com",
-        "legacy.example.com",
-        "www.legacy.example.com"
+        "legacy-zone.dpdns.org",
+        "www.legacy-zone.dpdns.org"
       ]
     },
     "registrar_credentials": "exists",
@@ -141,11 +141,11 @@
   "verification": {
     "dns_resolution": {
       "vpn.example.com": "verified_via_1.1.1.1",
-      "legacy.example.com": "verified_via_1.1.1.1"
+      "legacy-zone.dpdns.org": "verified_via_1.1.1.1"
     },
     "tls": {
       "vpn.example.com": "valid_certificate",
-      "legacy.example.com": "valid_certificate"
+      "legacy-zone.dpdns.org": "valid_certificate"
     },
     "cloudflare_api": {
       "status": "ip_restricted",

@@ -4,8 +4,9 @@
 #   powershell -ExecutionPolicy Bypass -File tools\package.ps1               # build + installer
 #   powershell -ExecutionPolicy Bypass -File tools\package.ps1 -NoInstaller  # build only
 #
-# Guarantees:
-#   - exe is built with the sing-box tags (with_utls,with_gvisor,with_quic);
+# Guarantees:# - exe is built with the sing-box tags (with_utls,with_gvisor,with_quic,with_clash_api);
+#   with_clash_api enables the read-only metrics controller (V2-048/F12); without
+#   the tag the app starts the same way but metrics report unavailable.
 #   - wintun.dll is placed next to the exe (TUN breaks on a clean machine without it);
 #   - no secrets go into the package (vault lives in %AppData%; the installer
 #     ships only the exe + wintun.dll).
@@ -37,7 +38,7 @@ try {
 Write-Host "[2/4] wails build (tags)..." -ForegroundColor Yellow
 Push-Location $root
 try {
-    wails build -tags "with_utls,with_gvisor,with_quic"
+    wails build -tags "with_utls,with_gvisor,with_quic,with_clash_api"
     if ($LASTEXITCODE -ne 0) { throw "wails build failed" }
 } finally { Pop-Location }
 

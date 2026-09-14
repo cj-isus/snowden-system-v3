@@ -188,6 +188,9 @@ func (a *App) startup(ctx context.Context) {
 	a.appendLog("info", "vault: "+vaultPath)
 	a.pushState()
 
+	// Системный трей (V2-048/F13): меню = lifecycle + каналы + автозапуск.
+	a.startTray()
+
 	// Автоподключение после переключения режима (TUN⇄SOCKS): VPN работал до
 	// перезапуска — восстанавливаем состояние без второго нажатия.
 	if autoConnectRequested() {
@@ -203,6 +206,10 @@ func (a *App) startup(ctx context.Context) {
 // ---------- контракт §4.1: состояние и lifecycle ----------
 
 // GetState возвращает текущее фактическое состояние (без выдумок).
+// GetSplitDirect — активный список процессов прямого обхода (V2-048/F10,
+// read-only: список доставляется подписанным envelope, не редактируется в UI).
+func (a *App) GetSplitDirect() []string { return render.SplitDirect() }
+
 func (a *App) GetState() AppState {
 	a.mu.Lock()
 	defer a.mu.Unlock()

@@ -16,6 +16,24 @@ const profile = ref<DeliveryProfile | null>(null)
 const profileError = ref('')
 const { items } = useSecretsStore()
 
+// Автозапуск (V2-048/F14): HKCU Run, без UAC. Ошибка — честно текстом.
+const autostart = ref(false)
+const autostartBusy = ref(false)
+const autostartError = ref('')
+async function toggleAutostart(): Promise<void> {
+  if (isBuildPhase() || autostartBusy.value) return
+  autostartBusy.value = true
+  autostartError.value = ''
+  try {
+    await api.setAutostart(!autostart.value)
+    autostart.value = !autostart.value
+  } catch (e) {
+    autostartError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    autostartBusy.value = false
+  }
+}
+
 onMounted(async () => {
   if (isBuildPhase()) {
     profileError.value = 'Биндинги недоступны: приложение запущено вне Wails (предпросмотр).'
@@ -25,6 +43,11 @@ onMounted(async () => {
     profile.value = await api.getDeliveryProfile()
   } catch (e) {
     profileError.value = e instanceof Error ? e.message : String(e)
+  }
+  try {
+    autostart.value = await api.getAutostart()
+  } catch {
+    /* справочная настройка; ошибка уйдёт при переключении */
   }
 })
 
@@ -84,6 +107,27 @@ function shortId(id: string): string {
         <HintBox kind="info" title="Что это">
           Подписанный metadata-envelope (FR-008) заменяет встроенный набор каналов. Envelope без
           действующей подписи, с даунгрейдом версии или истёкший — отвергается (fail-closed).
+        </HintBox>
+      </section>
+
+      <!-- Системные настройки (V2-048/F14) -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Система</h2>
+        </div>
+        <div class="rows">
+          <div class="row">
+            <span>Автозапуск с системой</span>
+            <button class="btn" :disabled="autostartBusy" @click="toggleAutostart">
+              {{ autostart ? 'Включён — выключить' : 'Выключен — включить' }}
+            </button>
+          </div>
+        </div>
+        <p v-if="autostartError" class="profile-error">{{ autostartError }}</p>
+        <HintBox kind="info" title="Как работает">
+          Обычная пользовательская запись в реестре (HKCU\...\Run, без прав администратора).
+          Приложение стартует с флагом --auto-connect: подключение идёт через честный
+          failover-on-start с probe-проверкой, как и при ручном «Подключить».
         </HintBox>
       </section>
 

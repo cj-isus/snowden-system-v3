@@ -8,7 +8,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import HintBox from '../components/HintBox.vue'
 import { api, isBuildPhase } from '../api/backend'
-import type { NetStats } from '../api/contract'
+import type { MetricsView, NetStats } from '../api/contract'
 import { useBackendState, initBackendState } from '../composables/backendState'
 
 const { state, channels } = useBackendState()
@@ -104,13 +104,41 @@ const axisLabels = computed(() => {
 onMounted(() => {
   void initBackendState()
   void refresh()
+  void refreshMetrics()
   timer = window.setInterval(() => void refresh(), 3000)
+  metricsTimer = window.setInterval(() => void refreshMetrics(), 2000)
   measureTimer = window.setInterval(measure, 2000)
 })
 onUnmounted(() => {
   window.clearInterval(timer)
+  window.clearInterval(metricsTimer)
   window.clearInterval(measureTimer)
 })
+
+// ---------- Живой трафик ядра (V2-048/F12, clash_api read-only) ----------
+const metrics = ref<MetricsView | null>(null)
+let metricsTimer: number | undefined
+async function refreshMetrics(): Promise<void> {
+  if (isBuildPhase()) return
+  try {
+    metrics.value = await api.getMetrics()
+  } catch {
+    /* контроллер мог умереть вместе с ядром — покажем past-value */
+  }
+}
+const coreDown = computed(() => metrics.value?.rateDown ?? 0)
+const coreUp = computed(() => metrics.value?.rateUp ?? 0)
+function fmtRate(bps: number): string {
+  if (!bps) return '0 Б/с'
+  const units = ['Б/с', 'КБ/с', 'МБ/с']
+  let v = bps
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} ${units[i]}`
+}
 </script>
 
 <template>
@@ -162,6 +190,54 @@ onUnmounted(() => {
 
       <p v-if="loadError" class="load-error">Нет данных: {{ loadError }}</p>
       <p v-else-if="stats?.alias" class="adapter-note mono">адаптер: {{ stats.alias }}<template v-if="speed"> · {{ speed }}</template></p>
+    </section>
+
+    <section v-if="metrics" class="card">
+      <div class="card-header">
+        <h2>Соединения ядра</h2>
+        <span class="adapter-pill mono">через туннель, live</span>
+      </div>
+      <template v-if="metrics.available">
+        <div class="traffic-summary">
+          <div class="traffic-metric">
+            <div class="traffic-value"><span class="traffic-arrow down">↓</span> {{ fmtRate(coreDown) }}</div>
+            <div class="traffic-label">скорость получения (ядро)</div>
+          </div>
+          <div class="traffic-metric">
+            <div class="traffic-value"><span class="traffic-arrow up">↑</span> {{ fmtRate(coreUp) }}</div>
+            <div class="traffic-label">скорость отправки (ядро)</div>
+          </div>
+          <div class="traffic-metric">
+            <div class="traffic-value">{{ fmtBytes(metrics.sessionDown) }}</div>
+            <div class="traffic-label">получено за сессию ядра</div>
+          </div>
+          <div class="traffic-metric">
+            <div class="traffic-value">{{ fmtBytes(metrics.sessionUp) }}</div>
+            <div class="traffic-label">отправлено за сессию ядра</div>
+          </div>
+        </div>
+        <table v-if="metrics.connections.length" class="conn-table">
+          <thead>
+            <tr><th>Хост</th><th>Тип</th><th>Канал</th><th>↓</th><th>↑</th><th>С</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(c, i) in metrics.connections" :key="i">
+              <td class="mono" :title="c.process">{{ c.host }}</td>
+              <td>{{ c.network }}</td>
+              <td>{{ c.chain || '—' }}</td>
+              <td class="mono">{{ fmtBytes(c.down) }}</td>
+              <td class="mono">{{ fmtBytes(c.up) }}</td>
+              <td class="mono">{{ c.since }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="adapter-note">Соединений пока нет — откройте любой сайт.</p>
+        <p class="adapter-note">
+          Источник — сам ядро (read-only clash_api на loopback): счётчики от старта ядра,
+          скорость — дельта между опросами. Никакой выдуманной истории.
+        </p>
+      </template>
+      <p v-else class="adapter-note">Метрики недоступны: {{ metrics.note }}</p>
     </section>
 
     <div class="grid">
@@ -366,5 +442,31 @@ onUnmounted(() => {
   margin-top: 8px;
   color: #70889d;
   font-size: 11px;
+}
+</style>
+<style scoped>
+.conn-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.conn-table th {
+  text-align: left;
+  color: var(--text-dim, #8a8f98);
+  font-weight: 500;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border, #2a2d33);
+}
+.conn-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border, #23262b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.conn-table tbody tr:hover {
+  background: var(--hover, #1d2025);
 }
 </style>

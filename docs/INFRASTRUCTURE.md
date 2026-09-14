@@ -35,7 +35,7 @@ firewall (nft/ufw): 22/tcp, 80/tcp, 443/tcp, 8443/udp(legacy), 8444/udp
 
 ```text
 vpn.example.com    — zone active (CF), A @ → 203.0.113.10 proxied
-legacy.example.com — zone active (CF), A @ → 203.0.113.10 proxied
+legacy-zone.dpdns.org — zone active (CF), A @ → 203.0.113.10 proxied
 SSL mode: full; edge TLS 1.3; оба домена отвечают 200 с edge
 ```
 

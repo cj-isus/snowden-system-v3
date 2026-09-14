@@ -27,11 +27,25 @@ import (
 // Config — типизированное подмножество конфига sing-box, необходимое ядру.
 // Неизвестные поля запрещены на верхнем уровне (Parse проверяет имена полей).
 type Config struct {
-	Log       *LogConfig   `json:"log,omitempty"`
-	DNS       *DNSConfig   `json:"dns,omitempty"`
-	Inbounds  []Inbound    `json:"inbounds"`
-	Outbounds []Outbound   `json:"outbounds"`
-	Route     *RouteConfig `json:"route"`
+	Log          *LogConfig          `json:"log,omitempty"`
+	DNS          *DNSConfig          `json:"dns,omitempty"`
+	Inbounds     []Inbound           `json:"inbounds"`
+	Outbounds    []Outbound          `json:"outbounds"`
+	Route        *RouteConfig        `json:"route"`
+	Experimental *ExperimentalConfig `json:"experimental,omitempty"`
+}
+
+// ExperimentalConfig — экспериментальный блок sing-box. Используем только
+// clash_api (read-only метрики трафика/соединений для UI, V2-048): контроллер
+// слушает только loopback, доступ по per-session секрету. CacheFile сознательно
+// не включаем (V2-046: «cache.db в CWD» — мусор и стейт между сессиями).
+type ExperimentalConfig struct {
+	ClashAPI *ClashAPIConfig `json:"clash_api,omitempty"`
+}
+
+type ClashAPIConfig struct {
+	ExternalController string `json:"external_controller,omitempty"`
+	Secret             string `json:"secret,omitempty"`
 }
 
 type LogConfig struct {
@@ -139,8 +153,9 @@ type Outbound struct {
 }
 
 type RouteConfig struct {
-	Rules []RouteRule `json:"rules,omitempty"`
-	Final string      `json:"final"`
+	Rules       []RouteRule `json:"rules,omitempty"`
+	Final       string      `json:"final"`
+	FindProcess bool        `json:"find_process,omitempty"` // V2-048/F10: нужен для process_name-правил
 }
 
 type RouteRule struct {
@@ -149,6 +164,7 @@ type RouteRule struct {
 	Outbound     string   `json:"outbound,omitempty"`
 	IPCidr       []string `json:"ip_cidr,omitempty"`
 	DomainSuffix []string `json:"domain_suffix,omitempty"`
+	ProcessName  []string `json:"process_name,omitempty"` // V2-048/F10: сплит по процессам (Windows)
 }
 
 // Parse разбирает и валидирует конфиг. Возвращает ошибку с точной причиной.
@@ -207,6 +223,7 @@ func checkUnknownTopLevel(data []byte) error {
 	}
 	allowed := map[string]bool{
 		"log": true, "dns": true, "inbounds": true, "outbounds": true, "route": true,
+		"experimental": true, // V2-048: clash_api метрики (read-only, loopback)
 	}
 	for k := range raw {
 		if !allowed[k] {

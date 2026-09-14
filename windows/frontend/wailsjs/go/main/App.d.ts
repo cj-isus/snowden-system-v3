@@ -13,13 +13,19 @@ export function EnableTUN():Promise<void>;
 
 export function GetAdaptiveStatus():Promise<main.AdaptiveStatus>;
 
+export function GetAutostart():Promise<boolean>;
+
 export function GetDeliveryProfile():Promise<main.DeliveryProfile>;
 
 export function GetFailoverStatus():Promise<main.FailoverStatus>;
 
+export function GetMetrics():Promise<main.MetricsView>;
+
 export function GetNetStats():Promise<main.NetStats>;
 
 export function GetNetworkFacts():Promise<main.NetworkFacts>;
+
+export function GetSplitDirect():Promise<Array<string>>;
 
 export function GetState():Promise<main.AppState>;
 
@@ -48,6 +54,8 @@ export function RunTest(arg1:string):Promise<main.TestResultView>;
 export function SaveSecret(arg1:string,arg2:string):Promise<secretvault.Meta>;
 
 export function SelectChannel(arg1:string):Promise<void>;
+
+export function SetAutostart(arg1:boolean):Promise<void>;
 
 export function Start():Promise<void>;
 

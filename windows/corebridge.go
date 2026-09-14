@@ -65,6 +65,8 @@ type coreRuntime struct {
 	cc        *render.ClientConfig
 	startBusy bool
 	watchOn   bool // сторожевой тикер запущен
+
+	metrics *metricsState // read-only метрики clash_api (V2-048), nil = выключены
 }
 
 // watchdogInterval — период контроля защищённого пути. Умеренный тик: probe
@@ -173,6 +175,16 @@ func (a *App) renderAndPrepare(channelID string) (*render.ClientConfig, error) {
 		f.Close()
 	}
 	opts = append(opts, render.WithEngineLogPath(enginePath))
+	// Метрики (V2-048/F12): сессия на каждый рендер; у каждого рендера свой
+	// порт+секрет, ядро биндит контроллер при Start этого рендера.
+	runtime_.mu.Lock()
+	runtime_.metrics = newMetricsSession()
+	runtime_.mu.Unlock()
+	opts = append(opts, runtime_.metrics.renderOption()...)
+	// Метрики (V2-048/F12): сессия собирается ДО рендера — рендер включает
+	// experimental.clash_api только если и ядро умеет, и порт получен.
+	metrics := newMetricsSession()
+	opts = append(opts, metrics.renderOption()...)
 	cc, err := render.RenderFrom(channels, src, opts...)
 	if err != nil {
 		return nil, err
@@ -647,6 +659,7 @@ func (a *App) stopCore() error {
 	runtime_.manager = nil
 	runtime_.engine = nil
 	runtime_.cc = nil
+	runtime_.metrics = nil // сессия метрик умирает вместе с ядром (новый порт+секрет на старте)
 	runtime_.mu.Unlock()
 
 	a.mu.Lock()

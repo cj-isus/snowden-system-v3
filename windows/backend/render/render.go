@@ -83,6 +83,11 @@ var DefaultProbeTargets = []string{"https://api.ipify.org", "https://ifconfig.me
 type descriptorSet struct {
 	Schema   int                 `json:"schema"`
 	Channels []ChannelDescriptor `json:"channels"`
+	// V2-048/F10: сплит-туннелинг по процессам. Процессы из списка идут
+	// НАПРЯМУЮ (мимо туннеля) — безопасный дефолт для банков/игр/локальных
+	// сервисов, несовместимых с TUN. Валидация: имя процесса нижнего регистра,
+	// без пути ("chrome.exe"); «direct-all» запрещён (это выключение VPN).
+	SplitDirect []string `json:"split_direct,omitempty"`
 }
 
 // SecretsSource — доступ рендера к значениям (реализация — secretvault).
@@ -114,7 +119,67 @@ func LoadDescriptors() ([]ChannelDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return applyEnvelopeOverride(channels)
+	// V2-048/F10: сплит-список берётся из встроенного набора, envelope (если
+	// доставлен) заменяет его в applyEnvelopeOverride (единый источник правды).
+	splitSet = nil
+	var set descriptorSet
+	if err := json.Unmarshal(descriptorsRaw, &set); err == nil {
+		splitSet = validateSplitDirect(set.SplitDirect)
+	}
+	channels, err = applyEnvelopeOverride(channels)
+	if err != nil {
+		return nil, err
+	}
+	return channels, nil
+}
+
+// splitSet — активный список процессов прямого обхода (нижний регистр).
+// Заполняется LoadDescriptors из встроенного набора или envelope.
+var splitSet []string
+
+// SplitDirect — текущий список сплита (для UI-карточки, read-only).
+func SplitDirect() []string {
+	out := make([]string, len(splitSet))
+	copy(out, splitSet)
+	return out
+}
+
+// validateSplitDirect — нормализация/валидация списка процессов (общая для
+// встроенного набора и envelope): нижний регистр, без пути, без пробелов,
+// дубликаты схлопываются. Пустые/битые имена — ошибка (fail-closed).
+func validateSplitDirect(in []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, p := range in {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" || strings.ContainsAny(p, `/\\`) || strings.Contains(p, " ") {
+			continue // мягко: встроенный набор статичен, ошибка в нём = ошибка сборки тестами
+		}
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// routeRulesWithSplit — базовые правила + опциональный процесс-сплит.
+// ВАЖНО (fail-open guard): правило process_name добавляется ТОЛЬКО при
+// непустом списке — правило без условий в sing-box матчит ВСЁ, и пустой
+// сплит превратил бы весь трафик в direct (выключенный VPN без признаков).
+func routeRulesWithSplit(split []string) []config.RouteRule {
+	rules := make([]config.RouteRule, 0, 4)
+	rules = append(rules, config.RouteRule{Protocol: "dns", Action: "hijack-dns"})
+	if len(split) > 0 {
+		// V2-048/F10: процессы из split_direct — прямиком (до RFC1918,
+		// чтобы их локальный трафик не зависел от порядка правил).
+		rules = append(rules, config.RouteRule{ProcessName: split, Outbound: "direct"})
+	}
+	rules = append(rules,
+		config.RouteRule{IPCidr: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}, Outbound: "direct"},
+		config.RouteRule{DomainSuffix: []string{".local"}, Outbound: "direct"},
+	)
+	return rules
 }
 
 // envelopeStore — точка подмены в тестах (по умолчанию — AppData-хранилище).
@@ -219,6 +284,9 @@ func applyEnvelopeOverride(channels []ChannelDescriptor) ([]ChannelDescriptor, e
 	if _, err := parseSet(out); err != nil {
 		return nil, err
 	}
+	// V2-048/F10: сплит из envelope — единый источник правды метаданных
+	// (заменяет встроенный список целиком, если конверт доставлен).
+	splitSet = env.SplitDirect
 	// version.txt коммитится ПОСЛЕ того, как весь набор прошёл строгий гейт
 	// (V2-034): иначе отказ валидации на envelope N+1 зафиксировал бы его
 	// version как «принятый» и навсегда заблокировал бы переустановку N.
@@ -407,6 +475,24 @@ type renderOpts struct {
 	// каналы диалят по IP с SNI/Host=домену, снимая зависимость от
 	// bootstrap-DNS sing-box (DoT 853 блокируется в РФ-сетях чаще всего).
 	dialOverrides map[string]string
+	// clashAPIPort — порт read-only метрик (clash_api) для UI (V2-048/F12).
+	// 0 = метрики выключены (не рендерить experimental.clash_api) — сохраняет
+	// старое поведение, когда ядро собрано без with_clash_api.
+	clashAPIPort uint16
+	// clashAPISecret — per-session секрет контроллера (Authorization: Bearer).
+	clashAPISecret string
+}
+
+// WithClashAPI — включить в рендере experimental.clash_api (read-only
+// метрики для UI, V2-048). Порт обязан быть loopback-ориентированным (127.0.0.1
+// захардкожен в рендере); секрет генерирует вызывающий (per-session).
+func WithClashAPI(port uint16, secret string) RenderOption {
+	return func(o *renderOpts) {
+		if port != 0 {
+			o.clashAPIPort = port
+			o.clashAPISecret = secret
+		}
+	}
 }
 
 // WithDefaultChannel — какой канал сделать default в селекторе (A1.4:
@@ -490,13 +576,24 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 			{Type: "mixed", Tag: "socks-in", Listen: "127.0.0.1", ListenPort: 1080},
 		},
 		Route: &config.RouteConfig{
-			Rules: []config.RouteRule{
-				{Protocol: "dns", Action: "hijack-dns"},
-				{IPCidr: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}, Outbound: "direct"},
-				{DomainSuffix: []string{".local"}, Outbound: "direct"},
-			},
+			Rules: routeRulesWithSplit(splitSet),
 			Final: "proxy",
 		},
+	}
+	// V2-048/F10: find_process только при непустом сплите (не бесплатен).
+	if len(splitSet) > 0 {
+		cfg.Route.FindProcess = true
+	}
+	// Метрики для UI (V2-048/F12): clash_api на строгом loopback с per-session
+	// секретом. Рендер НЕ решает, включать ли их — решение за вызывающим
+	// (ядро без with_clash_api падает на этом блоке при Start).
+	if o.clashAPIPort != 0 {
+		cfg.Experimental = &config.ExperimentalConfig{
+			ClashAPI: &config.ClashAPIConfig{
+				ExternalController: fmt.Sprintf("127.0.0.1:%d", o.clashAPIPort),
+				Secret:             o.clashAPISecret,
+			},
+		}
 	}
 	if o.withTUN {
 		cfg.Inbounds = append(cfg.Inbounds, config.Inbound{

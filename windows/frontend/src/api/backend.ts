@@ -9,6 +9,7 @@ import * as App from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 import type {
   AdaptiveStatus,
+  MetricsView,
   AppState,
   ChannelDescriptor,
   DeliveryProfile,
@@ -232,6 +233,45 @@ export const api = {
       outOctets: s.outOctets ?? 0,
       speedBps: s.speedBps ?? 0,
       alias: s.alias ?? '',
+    }
+  },
+
+  async getAutostart(): Promise<boolean> {
+    if (isBuildPhase()) return false
+    return await App.GetAutostart()
+  },
+
+  async setAutostart(on: boolean): Promise<void> {
+    if (isBuildPhase()) return
+    await App.SetAutostart(on)
+  },
+
+  async getSplitDirect(): Promise<string[]> {
+    if (isBuildPhase()) return []
+    const list = await App.GetSplitDirect()
+    return (list ?? []).map((x) => String(x))
+  },
+
+  async getMetrics(): Promise<MetricsView | null> {
+    if (isBuildPhase()) return null
+    const m = await App.GetMetrics()
+    return {
+      available: !!m.available,
+      note: m.note ?? '',
+      rateUp: m.rateUp ?? 0,
+      rateDown: m.rateDown ?? 0,
+      sessionUp: m.sessionUp ?? 0,
+      sessionDown: m.sessionDown ?? 0,
+      at: m.at ?? '',
+      connections: (m.connections ?? []).map((c) => ({
+        host: c.host ?? '',
+        network: c.network ?? '',
+        chain: c.chain ?? '',
+        process: c.process ?? '',
+        up: c.up ?? 0,
+        down: c.down ?? 0,
+        since: c.since ?? '',
+      })),
     }
   },
 

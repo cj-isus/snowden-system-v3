@@ -46,6 +46,10 @@ type Envelope struct {
 	Signature       string    `json:"signature,omitempty"`
 	Channels        []Channel `json:"channels"`
 	Revocations     []string  `json:"revocations,omitempty"`
+	// V2-048/F10: процессы, идущие мимо туннеля (нижний регистр, без пути).
+	// Полный список заменяет предыдущий (не merge): envelope — единый источник
+	// правды метаданных. Доставed owner'ом через тот же подписанный конверт.
+	SplitDirect []string `json:"split_direct,omitempty"`
 }
 
 // Channel — дескриптор канала во встроенном формате render (schema 1/2:
@@ -87,6 +91,15 @@ func (e *Envelope) Validate(now time.Time, minimumVersion uint64) error {
 	}
 	if len(e.Channels) == 0 {
 		return errors.New("metadata: empty channels")
+	}
+	// V2-048/F10: имена процессов — нижний регистр, без пути/аргументов.
+	// Пустой список валиден (нет сплита); «.exe» голым не бывает — имя файла.
+	for i, p := range e.SplitDirect {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" || strings.ContainsAny(p, `/\`) || strings.Contains(p, " ") || filepath.Base(p) != p {
+			return fmt.Errorf("metadata: split_direct[%d]: invalid process name %q", i, e.SplitDirect[i])
+		}
+		e.SplitDirect[i] = p
 	}
 	seen := map[string]bool{}
 	revoked := map[string]bool{}

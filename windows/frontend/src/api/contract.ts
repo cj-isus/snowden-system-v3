@@ -240,3 +240,25 @@ export type AdaptiveStatus = {
   warpDomains: string[]
   note: string
 }
+/** Одно живое соединение ядра (V2-048, clash_api read-only). */
+export type ConnView = {
+  host: string
+  network: string // tcp | udp
+  chain: string   // outbound-цепочка ядра (имя канала — ближний к цели)
+  process: string // процесс-инициатор (TUN-режим; в SOCKS-режиме пусто)
+  up: number
+  down: number
+  since: string
+}
+
+/** Снимок метрик ядра (F12). available=false — честная недоступность с причиной. */
+export type MetricsView = {
+  available: boolean
+  note: string
+  rateUp: number   // байт/сек
+  rateDown: number
+  sessionUp: number   // от первого замера сессии ядра (подписано в UI)
+  sessionDown: number
+  at: string
+  connections: ConnView[]
+}

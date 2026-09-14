@@ -3,9 +3,6 @@ secrets/
 logs/
 *.exe
 frontend/node_modules/
-frontend/dist/*
-!frontend/dist/.gitkeep
+frontend/dist/
 build/bin/
-
-# Служебные артефакты ядра (V2-046: cache.db от эксперимента PlatformWriter)
 *.db

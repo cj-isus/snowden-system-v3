@@ -81,8 +81,10 @@ func TestParseRejectsTwoObjects(t *testing.T) {
 
 func TestParseRejectsUnknownTopLevelField(t *testing.T) {
 	// DisallowUnknownFields даёт точное имя поля — этого достаточно.
-	wantErr(t, `{"experimental": {}, "inbounds": [], "outbounds": [], "route": {"final": "proxy"}}`,
-		`unknown field "experimental"`)
+	// (V2-048: "experimental" теперь легитимное поле — clash_api метрики;
+	// неизвестным стало "bogus_section".)
+	wantErr(t, `{"bogus_section": {}, "inbounds": [], "outbounds": [], "route": {"final": "proxy"}}`,
+		`unknown field "bogus_section"`)
 }
 
 func TestParseRejectsUnknownInboundField(t *testing.T) {

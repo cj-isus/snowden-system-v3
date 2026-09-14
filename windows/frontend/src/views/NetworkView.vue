@@ -21,11 +21,15 @@ const factsError = ref('')
 const netGuard = ref<NetGuardStatus | null>(null)
 const adaptive = ref<AdaptiveStatus | null>(null)
 const adaptiveBusy = ref(false)
+const splitList = ref<string[]>([])
 const loading = ref(false)
 let timer: number | undefined
 
 async function refresh(): Promise<void> {
   loading.value = true
+  try {
+    if (!isBuildPhase()) splitList.value = await api.getSplitDirect()
+  } catch { /* read-only справка */ }
   try {
     if (isBuildPhase()) {
       factsError.value = 'Биндинги недоступны: приложение запущено вне Wails (предпросмотр).'
@@ -116,6 +120,22 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
         </div>
 
         <p v-if="countryOriginNote" class="origin-note mono">источник страны: {{ countryOriginNote }}</p>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Прямой обход процессов</h2>
+        </div>
+        <p v-if="splitList.length" class="sub">
+          Эти приложения ходят мимо туннеля (правило доставлено подписанным конвертом):
+        </p>
+        <p v-else class="sub">
+          Список пуст: весь трафик идёт через туннель. Изменить список может только владелец —
+          он приходит в подписанном конверте конфигурации, вручную в приложении не редактируется.
+        </p>
+        <div class="split-chips">
+          <span v-for="p in splitList" :key="p" class="adapter-pill mono">{{ p }}</span>
+        </div>
       </section>
 
       <section class="card netguard">
@@ -349,5 +369,12 @@ export default { emits: ['navigate'] }
   .grid {
     grid-template-columns: 1fr;
   }
+}
+</style>
+<style scoped>
+.split-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>

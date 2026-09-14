@@ -177,6 +177,30 @@ export namespace main {
 		}
 	}
 	
+	export class ConnView {
+	    host: string;
+	    network: string;
+	    chain: string;
+	    process: string;
+	    up: number;
+	    down: number;
+	    since: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConnView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.host = source["host"];
+	        this.network = source["network"];
+	        this.chain = source["chain"];
+	        this.process = source["process"];
+	        this.up = source["up"];
+	        this.down = source["down"];
+	        this.since = source["since"];
+	    }
+	}
 	export class DeliveryProfile {
 	    present: boolean;
 	    version: number;
@@ -236,6 +260,51 @@ export namespace main {
 	        this.level = source["level"];
 	        this.text = source["text"];
 	    }
+	}
+	export class MetricsView {
+	    available: boolean;
+	    note?: string;
+	    rateUp: number;
+	    rateDown: number;
+	    sessionUp: number;
+	    sessionDown: number;
+	    // Go type: time
+	    at: any;
+	    connections: ConnView[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MetricsView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.note = source["note"];
+	        this.rateUp = source["rateUp"];
+	        this.rateDown = source["rateDown"];
+	        this.sessionUp = source["sessionUp"];
+	        this.sessionDown = source["sessionDown"];
+	        this.at = this.convertValues(source["at"], null);
+	        this.connections = this.convertValues(source["connections"], ConnView);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class NetGuardEvent {
 	    time: string;

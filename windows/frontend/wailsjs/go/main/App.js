@@ -22,6 +22,10 @@ export function GetAdaptiveStatus() {
   return window['go']['main']['App']['GetAdaptiveStatus']();
 }
 
+export function GetAutostart() {
+  return window['go']['main']['App']['GetAutostart']();
+}
+
 export function GetDeliveryProfile() {
   return window['go']['main']['App']['GetDeliveryProfile']();
 }
@@ -30,12 +34,20 @@ export function GetFailoverStatus() {
   return window['go']['main']['App']['GetFailoverStatus']();
 }
 
+export function GetMetrics() {
+  return window['go']['main']['App']['GetMetrics']();
+}
+
 export function GetNetStats() {
   return window['go']['main']['App']['GetNetStats']();
 }
 
 export function GetNetworkFacts() {
   return window['go']['main']['App']['GetNetworkFacts']();
+}
+
+export function GetSplitDirect() {
+  return window['go']['main']['App']['GetSplitDirect']();
 }
 
 export function GetState() {
@@ -92,6 +104,10 @@ export function SaveSecret(arg1, arg2) {
 
 export function SelectChannel(arg1) {
   return window['go']['main']['App']['SelectChannel'](arg1);
+}
+
+export function SetAutostart(arg1) {
+  return window['go']['main']['App']['SetAutostart'](arg1);
 }
 
 export function Start() {
