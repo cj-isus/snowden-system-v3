@@ -30,6 +30,9 @@ export type IconName =
   | 'eye'
   | 'trash'
   | 'pulse'
+  | 'search'
+  | 'stats'
+  | 'bell'
 
 const paths: Record<IconName, string> = {
   dashboard: 'M3 3h8v10H3zM13 3h8v6h-8zM13 11h8v10h-8zM3 15h8v6H3z',
@@ -54,6 +57,9 @@ const paths: Record<IconName, string> = {
   eye: 'M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6zM12 12h.01M9 12a3 3 0 1 0 6 0 3 3 0 0 0-6 0z',
   trash: 'M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M7 7l1 13h8l1-13M10 11v5M14 11v5',
   pulse: 'M3 12h4l2-7 4 14 2-7h6',
+  search: 'M20.5 20.5L16 16M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0z',
+  stats: 'M4 20V10M10 20V4M16 20v-6M21 20H3',
+  bell: 'M18 9a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M10.3 21a2 2 0 0 0 3.4 0',
 }
 
 const sizeNum = (): number => props.size ?? 16

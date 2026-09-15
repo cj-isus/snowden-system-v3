@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -241,7 +242,22 @@ func (a *App) startCore() {
 	a.pushStateLocked()
 	a.mu.Unlock()
 
-	cc, err := a.renderAndPrepare("")
+	// Авто-выбор первого канала по классу сети (V2-054): mobile → HY2/QUIC
+	// первым (CGNAT-валоны бьют по CDN-пути, V2-026), wifi/ethernet → vless+ws
+	// первым. Probe-безопасно: выбор влияет только на ПОРЯДОК попыток —
+	// failover-on-start всё равно переберёт validated каналы при провале;
+	// нет класса/нет совпадения/дескрипторы нечитаемы — прежний pickDefault
+	// (рендер с "" = первый live-verified из дескрипторов).
+	defaultCh := ""
+	if netClass := currentNetClass(); netClass != "" {
+		if descs, derr := render.LoadDescriptors(); derr == nil {
+			if want := pickDefaultChannel(descs, netClass); want != "" {
+				defaultCh = want
+				a.appendLog("info", "запуск: класс сети "+classLabel(netClass)+" — первым пробую канал "+want)
+			}
+		}
+	}
+	cc, err := a.renderAndPrepare(defaultCh)
 	if err != nil {
 		a.failCore("рендер конфига", err)
 		return
@@ -406,6 +422,10 @@ func (a *App) failCore(stage string, err error) {
 	a.state.ProxyMode = ""
 	a.state.Active = nil
 	a.state.ActiveID = ""
+	// V2-053: авто-ретрай с растущим backoff — волна деградации может
+	// кончиться, когда никто не смотрит в окно. Планируем только здесь:
+	// живой туннель после отката переключения сюда не попадает.
+	a.scheduleFailClosedRetryLocked(time.Now())
 	a.mu.Unlock()
 	a.appendLog("error", a.state.Error)
 	a.pushState()
@@ -541,6 +561,9 @@ func (a *App) watchCore(ctx context.Context) {
 				a.state.BlockedReason = "all_channels_failed"
 				a.state.Error = "failover: защищённый путь недоступен на всех validated каналах — туннель остановлен (BLOCKED). Повторите подключение, когда сеть восстановится."
 				a.state.Probe = toView(report)
+				// V2-053: авто-ретрай и после исчерпания сторожа (та же волна,
+				// та же честная автоматика; попытка = полный перебор с probe).
+				a.scheduleFailClosedRetryLocked(time.Now())
 				a.pushStateLocked()
 				a.mu.Unlock()
 				continue
@@ -824,41 +847,90 @@ func (a *App) stopEngineLogTailer() {
 	}
 }
 
+// engineLogPathAt — путь engine-лога для tailer'а. Пакетная переменная:
+// тесты подменяют на временную директорию (герметичность от AppData).
+var engineLogPathAt = engineFileLogPath
+
+// tailerState — межоткрытное состояние tailer'а: на какую позицию файла
+// дочитали и какую строку последней доставили (гварды повторов).
+type tailerState struct {
+	offset int64
+	last   string
+}
+
+// readNewEngineLines — прочитать строки с позиции st.offset, продвинуть
+// оффсет. Частичная строка (ядро ещё пишет) НЕ доставляется и оффсет НЕ
+// двигает — дописанный хвост дочитается целиком следующим циклом.
+// Файл стал КОРОЧЕ прочитанного (ротация/усечение на рестарте движка,
+// V2-046 per-session) = НОВЫЙ файл: оффсет и last-гвард сбрасываются —
+// строки новой сессии обязаны дойти, даже если текст совпадает со старой
+// (усечение «спрятало бы» перезапуск движка — недопустимо). Честное
+// ограничение: перезапись файла той же или большей длины без усечения
+// детектом не покрывается (не реальный сценарий записи лога).
+// Подряд идущие дубликаты уже доставленного гасятся last-гвардом (штатный
+// повтор строки самим ядром при деградации — одна строка, а не шторм).
+func readNewEngineLines(path string, st *tailerState) []engineLogMsg {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil // лог ещё не создан/недоступен — честное «новых нет»
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err == nil && fi.Size() < st.offset {
+		st.offset = 0
+		st.last = ""
+	}
+	if _, err := f.Seek(st.offset, io.SeekStart); err != nil {
+		return nil
+	}
+	var out []engineLogMsg
+	deliver := func(line string) {
+		trimmed := strings.TrimRight(line, "\r\n")
+		if trimmed == "" || trimmed == st.last {
+			return
+		}
+		if lv := classifyEngineLine(trimmed); lv != "" {
+			out = append(out, engineLogMsg{level: lv, text: "движок " + trimmed})
+		}
+		st.last = trimmed
+	}
+	r := bufio.NewReaderSize(f, 64*1024)
+	for {
+		line, rerr := r.ReadString('\n')
+		if rerr != nil {
+			// ReadString: err != nil ⟺ строка не кончается '\n' — это
+			// частичная запись ядра; держим оффсет на её начале.
+			break
+		}
+		st.offset += int64(len(line))
+		deliver(line)
+	}
+	return out
+}
+
 // startEngineLogTailer — хвостовой читатель engine.log (V2-046): sing-box
 // пишет в файл (log.output), tailer доставляет новые строки в appendLog.
 // Файл переживает рестарты движка — на старте доезжаем до конца (только
 // новые строки), при ротации (усечение) начинаем с начала.
+//
+// V2-054b (P0, найден на живой машине 2026-09-15): прежний tailer ОТКРЫВАЛ
+// файл ЗАНОВО каждые 500мс и читал его с нуля — каждое открытие повторно
+// клало в журнал ВСЮ историю (за час на busy-машине 57МБ app.log + 67МБ
+// app.log.1; одна ошибка — 240+ дублей в UI, владелец видел стену
+// «http2: client connection force closed»). Исправление: оффсет между
+// открытиями (readNewEngineLines), newReader-семантика для усечения/ротации,
+// last-гвард поглощает подряд идущие дубликаты.
 func (a *App) startEngineLogTailer() {
 	go func() {
-		path := engineFileLogPath()
-		_ = os.MkdirAll(logsDir(), 0o700)
+		st := &tailerState{}
 		for {
 			select {
 			case <-a.engineLogDone:
 				return
 			default:
 			}
-			f, err := os.Open(path)
-			if err != nil {
-				if !a.sleepTill(500 * time.Millisecond) {
-					return
-				}
-				continue
+			for _, msg := range readNewEngineLines(engineLogPathAt(), st) {
+				a.appendLog(msg.level, msg.text)
 			}
-			r := bufio.NewReader(f)
-			for {
-				line, rerr := r.ReadString('\n')
-				if line != "" {
-					lv := classifyEngineLine(line)
-					if lv != "" {
-						a.appendLog(lv, "движок "+strings.TrimRight(line, "\r\n"))
-					}
-				}
-				if rerr != nil {
-					break
-				}
-			}
-			f.Close()
 			if !a.sleepTill(500 * time.Millisecond) {
 				return
 			}

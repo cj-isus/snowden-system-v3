@@ -22,8 +22,8 @@ func TestSeedIsIdempotentAndDoesNotOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(metas) != 8 {
-		t.Fatalf("expected 8 seeded slots (V2-044: +3 канала C REALITY), got %d", len(metas))
+	if len(metas) != 10 {
+		t.Fatalf("expected 10 seeded slots (V2-044: +3 канала C REALITY; V2-051: +2 канала D ShadowTLS), got %d", len(metas))
 	}
 	// Задаём значение UUID-слоту.
 	var uuidID string
@@ -40,7 +40,7 @@ func TestSeedIsIdempotentAndDoesNotOverwrite(t *testing.T) {
 		t.Fatalf("seed 2: %v", err)
 	}
 	metas, _ = m.List()
-	if len(metas) != 8 {
+	if len(metas) != 10 {
 		t.Fatalf("seed must not duplicate slots, got %d", len(metas))
 	}
 	for _, mt := range metas {

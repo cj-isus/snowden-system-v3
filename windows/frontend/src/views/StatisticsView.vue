@@ -7,12 +7,14 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import HintBox from '../components/HintBox.vue'
+import ProbeReportView from '../components/ProbeReportView.vue'
 import { api, isBuildPhase } from '../api/backend'
 import type { MetricsView, NetStats } from '../api/contract'
 import { useBackendState, initBackendState } from '../composables/backendState'
+import { lifecycleLabels, fmtDateTime } from '../api/labels'
 
 const { state, channels } = useBackendState()
-const probe = computed<{ readonly ok: boolean; readonly steps: readonly { name: string; status: string; detail: string }[] } | null>(() => state.value?.probe ?? null)
+const probe = computed(() => state.value?.probe ?? null)
 
 const stats = ref<NetStats | null>(null)
 const loadError = ref('')
@@ -244,9 +246,10 @@ function fmtRate(bps: number): string {
       <section class="card kv-card">
         <div class="card-header"><h2>Сводка состояния</h2></div>
         <div class="rows">
-          <div class="row"><span>Состояние VPN</span><strong>{{ state ? state.state : '—' }}</strong></div>
+          <div class="row"><span>Состояние VPN</span><strong>{{ state ? (lifecycleLabels[state.state] ?? state.state) : '—' }}</strong></div>
           <div class="row"><span>Активный канал</span><strong>{{ state?.activeChannelId || '—' }}</strong></div>
           <div class="row"><span>Каналов в конфиге</span><strong>{{ channels?.length ?? '—' }}</strong></div>
+          <div class="row"><span>Последняя проверка</span><strong>{{ state?.probeLastAt ? fmtDateTime(state.probeLastAt) : '—' }}</strong></div>
           <div class="row">
             <span>Последний probe</span>
             <strong :class="probe?.ok ? 'green-value' : probe ? 'red-value' : ''">
@@ -257,21 +260,19 @@ function fmtRate(bps: number): string {
       </section>
 
       <section class="card note-card">
-        <div class="card-header"><h2>Отчёт о проверки пути</h2></div>
-        <ol v-if="probe?.steps?.length" class="steps">
-          <li v-for="(s, i) in probe.steps" :key="i" class="step" :class="s.status">
-            <span class="name">{{ s.name }}</span>
-            <span class="st">{{ s.status }}</span>
-          </li>
-        </ol>
-        <p v-else class="empty">Нет данных: probe ещё не запускался. Нажмите «Проверить сейчас» на главной.</p>
+        <div class="card-header"><h2>Отчёт о проверке пути</h2></div>
+        <ProbeReportView :report="probe" :running="state?.probeRunning ?? false" />
+        <p v-if="probe && !probe.ok && state?.blockedReason" class="empty">
+          BLOCKED — причина: {{ state.blockedReason }}
+        </p>
       </section>
     </div>
 
     <HintBox kind="info" title="Почему дельта, а не «за период»">
       Windows отдаёт накопленные счётчики адаптера. Привязать их задним числом к «1 часу /
       7 дням» невозможно без собственной истории — вместо выдуманной истории UI показывает
-      живую дельту наблюдения и абсолютные счётчики. Кнопки периодов задают шаг подписей оси.
+      живую дельту наблюдения и абсолютные счётчики. Столбики гистограммы — живые замеры
+      раз в 2 секунды, пока открыт этот раздел.
     </HintBox>
   </div>
 </template>
@@ -407,66 +408,40 @@ function fmtRate(bps: number): string {
   font-weight: 500;
 }
 
-.steps {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.step {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 5px 10px;
-  border-radius: 7px;
-  background: var(--bg-elevated);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--text-soft);
-}
-.step .st {
-  color: #55708a;
-}
-.step.pass .st {
-  color: var(--green);
-}
-.step.fail .st {
-  color: var(--red);
-}
-.step.running .st {
-  color: var(--blue-bright);
-}
 .empty {
   margin-top: 8px;
   color: #70889d;
   font-size: 11px;
 }
-</style>
-<style scoped>
+
+/* Таблица соединений ядра — палитра приложения (v3: была в чужой серой палитре) */
 .conn-table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 12px;
-  font-size: 13px;
+  font-size: 11px;
 }
 .conn-table th {
+  height: 30px;
+  padding: 0 9px;
   text-align: left;
-  color: var(--text-dim, #8a8f98);
+  color: #8298ab;
   font-weight: 500;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border, #2a2d33);
+  background: #0c2031;
+  border-bottom: 1px solid #1a344a;
 }
 .conn-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border, #23262b);
+  height: 32px;
+  padding: 0 9px;
+  color: #c6d3dd;
+  border-bottom: 1px solid #152d40;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 260px;
 }
 .conn-table tbody tr:hover {
-  background: var(--hover, #1d2025);
+  background: rgba(20, 64, 94, 0.16);
 }
 </style>
+

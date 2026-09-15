@@ -19,10 +19,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 	"golang.org/x/sys/windows/registry"
+	"golang.org/x/text/encoding/charmap"
 
 	"github.com/snowden-system/windows/backend/core"
 )
@@ -83,7 +86,7 @@ func (a *App) NetGuardStatus() (*NetGuardStatus, error) {
 		st.DoHDisabled = true
 		return st, nil // лога нет — это факт, не ошибка
 	}
-	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	lines := netguardLogLines(data)
 	st.Events = netguardEvents(lines, 12)
 	for i := len(lines) - 1; i >= 0; i-- {
 		if strings.Contains(lines[i], "RUN COMPLETE") || strings.Contains(lines[i], "skipping all heals") {
@@ -110,6 +113,57 @@ func (a *App) RunProxyHeal() (bool, error) {
 		a.appendLog("info", "proxy heal (ручной): чинить нечего (прокси валиден или не наш формат)")
 	}
 	return healed, nil
+}
+
+// netguardLogLines — декодирование байтов лога в строки. Писец — PowerShell
+// Add-Content без -Encoding: Windows PowerShell 5.1 пишет ANSI-кодировкой
+// системы (cp1251 в ru-системах), а не UTF-8 → русская кириллица в сообщениях
+// HEALING/PROBLEM приходила «бесовщиной» (������������ �⨯). Формат честно
+// определяется по факту: чистый UTF-8 — читаем как есть; иначе валидная
+// UTF-16LE (какой был бы лог, созданный на UTF-16-системе) — как UTF-16LE;
+// иначе cp1251. Старые и новые строки одного файла могут различаться — решает
+// каждая строка. ASCII (даты, маркеры HEALED/PROBLEM) не затрагивается.
+func netguardLogLines(data []byte) []string {
+	// UTF-16LE BOM или характерный чередующийся NUL — вся строка в UTF-16LE.
+	hasBOM16 := len(data) >= 2 && data[0] == 0xFF && data[1] == 0xFE
+	everySecondNul := func() bool {
+		if len(data) == 0 || len(data)%2 != 0 {
+			return false
+		}
+		nuls, samples := 0, 0
+		for i := 1; i < len(data) && i < 256; i += 2 {
+			samples++
+			if data[i] == 0 {
+				nuls++
+			}
+		}
+		return samples > 0 && nuls == samples
+	}
+	if hasBOM16 || everySecondNul() {
+		if hasBOM16 {
+			data = data[2:]
+		}
+		u16 := make([]uint16, 0, len(data)/2)
+		for i := 0; i+1 < len(data); i += 2 {
+			u16 = append(u16, uint16(data[i])|uint16(data[i+1])<<8)
+		}
+		data = []byte(string(utf16.Decode(u16)))
+	}
+	// UTF-8 BOM (PowerShell -Encoding UTF8 пишет с BOM) — снять.
+	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+		data = data[3:]
+	}
+	raw := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	out := make([]string, 0, len(raw))
+	for _, line := range raw {
+		if !utf8.ValidString(line) {
+			if dec, err := charmap.Windows1251.NewDecoder().String(line); err == nil {
+				line = dec
+			}
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 // ---------- задачи планировщика (COM, locale-independent) --------------------

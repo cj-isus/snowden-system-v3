@@ -1,16 +1,17 @@
 <script setup lang="ts">
 /**
- * Верхняя панель: бренд, поиск по настройкам (Ctrl K), уведомления,
- * кнопки управления окном (Wails runtime; вне Wails — кнопки скрыты,
- * это честное «нет окна» вместо мёртвых кнопок).
+ * Верхняя панель: бренд, поиск по настройкам (Ctrl K), уведомления.
+ * Кнопок окна (свернуть/развернуть/закрыть) здесь НЕТ сознательно: окно не
+ * frameless — системная рамка Windows уже даёт эти кнопки, дубликат рядом
+ * выглядел как «бесовщина» (V2-051). Если появится frameless-режим — вернуть
+ * контролы сюда, а не держать два набора.
  * Версия — из факта сборки (wails.json), не выдумывается.
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { WindowMinimise, WindowToggleMaximise, WindowIsMaximised, Quit } from '../../wailsjs/runtime/runtime'
-import { isBuildPhase } from '../api/backend'
 import { APP_VERSION } from '../api/contract'
 import { lifecycleLabels } from '../api/labels'
 import { useBackendState } from '../composables/backendState'
+import { uiLogLines } from '../composables/uiLog'
 import Icon from './Icon.vue'
 import type { IconName } from './Icon.vue'
 
@@ -18,32 +19,49 @@ const APP_VERSION_LABEL = `v${APP_VERSION}`
 
 const { lifecycle } = useBackendState()
 
+/* Точка-индикатор — факт: есть непрочитанные события журнала UI. Пропадает,
+   когда журнал пуст, и возвращается при новых событиях (не «вечный зелёный»). */
+const logLines = uiLogLines()
+const unreadEvents = ref(false)
+let seenCount = 0
+let logWatchTimer: number | undefined
+
+function syncUnread(): void {
+  unreadEvents.value = logLines.value.length > seenCount
+}
+
+function markEventsSeen(): void {
+  seenCount = logLines.value.length
+  syncUnread()
+}
+
 const emit = defineEmits<{
   openSearch: []
   openNotifications: []
 }>()
 
-const inWails = ref(false)
-const maximised = ref(false)
 const clock = ref('')
 let clockTimer: number | undefined
 
-onMounted(async () => {
-  inWails.value = !isBuildPhase()
-  if (inWails.value) {
-    try {
-      maximised.value = await WindowIsMaximised()
-    } catch {
-      maximised.value = false
-    }
-  }
+onMounted(() => {
   const tick = (): void => {
     clock.value = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
   tick()
   clockTimer = window.setInterval(tick, 1000)
+  // uiLogLines — общий ref, реактивность отслеживаем лёгким таймером.
+  syncUnread()
+  logWatchTimer = window.setInterval(syncUnread, 1000)
 })
-onUnmounted(() => window.clearInterval(clockTimer))
+onUnmounted(() => {
+  window.clearInterval(clockTimer)
+  window.clearInterval(logWatchTimer)
+})
+
+function onNotifications(): void {
+  markEventsSeen()
+  emit('openNotifications')
+}
 
 const stateLabel = computed(() => {
   const s = lifecycle.value
@@ -65,29 +83,6 @@ const statusIcon = computed<IconName>(() => {
   if (s === 'starting' || s === 'stopping' || s === 'reloading') return 'refresh'
   return 'shield-warn'
 })
-
-async function onMinimise(): Promise<void> {
-  try {
-    WindowMinimise()
-  } catch {
-    /* вне Wails кнопки скрыты — сюда не дойдёт */
-  }
-}
-async function onMaximise(): Promise<void> {
-  try {
-    WindowToggleMaximise()
-    maximised.value = await WindowIsMaximised()
-  } catch {
-    /* вне Wails */
-  }
-}
-async function onClose(): Promise<void> {
-  try {
-    Quit()
-  } catch {
-    /* вне Wails */
-  }
-}
 </script>
 
 <template>
@@ -115,21 +110,15 @@ async function onClose(): Promise<void> {
 
     <div class="header-actions">
       <button class="settings-search" title="Поиск по настройкам (Ctrl K)" @click="emit('openSearch')">
-        <span class="search-icon"><Icon name="dashboard" :size="13" /></span>
+        <span class="search-icon"><Icon name="search" :size="13" /></span>
         <span>Поиск по настройкам…</span>
         <kbd>Ctrl K</kbd>
       </button>
 
-      <button class="notification-button" aria-label="Уведомления" title="Уведомления" @click="emit('openNotifications')">
-        <Icon name="pulse" :size="18" />
-        <span class="notification-dot"></span>
+      <button class="notification-button" aria-label="Уведомления" title="События журнала" @click="onNotifications">
+        <Icon name="bell" :size="17" />
+        <span v-if="unreadEvents" class="notification-dot"></span>
       </button>
-
-      <div v-if="inWails" class="window-controls">
-        <button aria-label="Свернуть" @click="onMinimise">—</button>
-        <button aria-label="Развернуть" @click="onMaximise">{{ maximised ? '❐' : '□' }}</button>
-        <button aria-label="Закрыть" class="close" @click="onClose">×</button>
-      </div>
     </div>
   </header>
 </template>
@@ -281,40 +270,13 @@ async function onClose(): Promise<void> {
 }
 .notification-dot {
   position: absolute;
-  top: 10px;
-  right: 8px;
-  width: 5px;
-  height: 5px;
+  top: 9px;
+  right: 9px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 7px rgba(37, 227, 160, 0.8);
-}
-
-.window-controls {
-  height: 30px;
-  display: flex;
-  align-items: center;
-  margin-left: 7px;
-  padding-left: 10px;
-  border-left: 1px solid #1a3449;
-}
-.window-controls button {
-  width: 30px;
-  height: 30px;
-  border: 0;
-  background: transparent;
-  color: #91a4b6;
-  font-size: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.window-controls button:hover {
-  color: #fff;
-  background: rgba(20, 58, 88, 0.45);
-}
-.window-controls button.close:hover {
-  color: #fff;
-  background: rgba(255, 79, 89, 0.35);
+  background: var(--blue-bright);
+  border: 1.5px solid #0a1c2c;
+  box-shadow: 0 0 7px rgba(66, 179, 255, 0.8);
 }
 </style>

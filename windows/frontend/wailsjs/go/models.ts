@@ -138,6 +138,8 @@ export namespace main {
 	    error: string;
 	    coreReady: boolean;
 	    coreBlockMsg: string;
+	    nextRetryAt: string;
+	    retryAttempt: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppState(source);
@@ -156,6 +158,8 @@ export namespace main {
 	        this.error = source["error"];
 	        this.coreReady = source["coreReady"];
 	        this.coreBlockMsg = source["coreBlockMsg"];
+	        this.nextRetryAt = source["nextRetryAt"];
+	        this.retryAttempt = source["retryAttempt"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -430,6 +434,7 @@ export namespace main {
 	    country: string;
 	    countryOrigin: string;
 	    dnsViaTunnel: boolean;
+	    netClass: string;
 	    checkedAt: string;
 	
 	    static createFrom(source: any = {}) {
@@ -446,6 +451,7 @@ export namespace main {
 	        this.country = source["country"];
 	        this.countryOrigin = source["countryOrigin"];
 	        this.dnsViaTunnel = source["dnsViaTunnel"];
+	        this.netClass = source["netClass"];
 	        this.checkedAt = source["checkedAt"];
 	    }
 	}

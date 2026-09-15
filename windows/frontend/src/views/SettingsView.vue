@@ -10,7 +10,10 @@ import { api, isBuildPhase } from '../api/backend'
 import { APP_VERSION } from '../api/contract'
 import type { DeliveryProfile, OnboardingPreview, UpdatePreview } from '../api/contract'
 import { useSecretsStore } from '../composables/secretsStore'
+import { useNav } from '../composables/nav'
 import { fmtDateTime } from '../api/labels'
+
+const { navTo } = useNav()
 
 const profile = ref<DeliveryProfile | null>(null)
 const profileError = ref('')
@@ -217,9 +220,16 @@ async function updApply(): Promise<void> {
         <div class="rows">
           <div class="row">
             <span>Автозапуск с системой</span>
-            <button class="btn" :disabled="autostartBusy" @click="toggleAutostart">
-              {{ autostart ? 'Включён — выключить' : 'Выключен — включить' }}
-            </button>
+            <button
+              class="switch"
+              :class="{ on: autostart }"
+              role="switch"
+              :aria-checked="autostart"
+              :aria-label="'Автозапуск с системой: ' + (autostart ? 'включён' : 'выключен')"
+              :disabled="autostartBusy"
+              :title="autostart ? 'Выключить автозапуск' : 'Включить автозапуск (HKCU Run, без UAC)'"
+              @click="toggleAutostart"
+            ></button>
           </div>
         </div>
         <p v-if="autostartError" class="profile-error">{{ autostartError }}</p>
@@ -234,7 +244,7 @@ async function updApply(): Promise<void> {
       <section class="card secrets">
         <div class="card-header">
           <h2>Секреты</h2>
-          <button class="btn" @click="$emit('navigate', 'secrets')">Управление секретами ›</button>
+          <button class="btn" @click="navTo('secrets')">Управление секретами ›</button>
         </div>
 
         <div v-if="items === null" class="empty-block">Список секретов недоступен: источник данных не отвечает.</div>
@@ -404,10 +414,6 @@ async function updApply(): Promise<void> {
     </section>
   </div>
 </template>
-
-<script lang="ts">
-export default { emits: ['navigate'] }
-</script>
 
 <style scoped>
 .view {

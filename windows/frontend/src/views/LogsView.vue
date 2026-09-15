@@ -70,7 +70,7 @@ watch(
 <template>
   <div class="view">
     <header class="head">
-      <h1>Журнал</h1>
+      <h2>Журнал</h2>
       <p class="sub">
         Диагностика без секретов: события backend помечены [backend], локальные — без метки,
         строки ядра sing-box — меткой «движок [канал]». Уровни: info/warn/error.
@@ -97,7 +97,7 @@ watch(
         <button :class="{ on: level === 'error' }" @click="level = 'error'">error</button>
       </div>
       <div class="search">
-        <Icon name="dashboard" :size="13" />
+        <Icon name="search" :size="13" />
         <input v-model="query" type="text" placeholder="поиск по тексту…" spellcheck="false" />
         <button v-if="query" class="clear" aria-label="Очистить поиск" @click="query = ''">×</button>
       </div>
@@ -140,13 +140,10 @@ watch(
   height: 100%;
 }
 
-.head h1 {
-  font-size: 20px;
-}
 .sub {
-  margin: 4px 0 0;
-  color: var(--text-dim);
-  font-size: 12.5px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
 }
 
 .toolbar {
@@ -221,22 +218,6 @@ watch(
 
 .spacer {
   flex: 1;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text);
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.btn:hover {
-  background: var(--bg-hover);
 }
 
 .loglist {

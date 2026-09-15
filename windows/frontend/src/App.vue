@@ -8,9 +8,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import TopBar from './components/TopBar.vue'
 import NavRail from './components/NavRail.vue'
 import type { NavId } from './components/NavRail.vue'
+import { provideNav } from './composables/nav'
 import ToastHost from './components/ToastHost.vue'
 import Icon from './components/Icon.vue'
 import type { IconName } from './components/Icon.vue'
+import { MOCK_ACTIVE } from './api/mock'
 import DashboardView from './views/DashboardView.vue'
 import ChannelsPageView from './views/ChannelsPageView.vue'
 import AutoProtectView from './views/AutoProtectView.vue'
@@ -34,6 +36,10 @@ function nav(id: NavId): void {
   active.value = id
 }
 
+// UI-план v3: единственный механизм навигации для всех вложенных компонентов.
+// Дефект v2: views эмитили 'navigate' в пустоту — App.vue не слушал.
+provideNav(nav)
+
 // ---------- палитра поиска (Ctrl K) ----------
 
 type SearchEntry = { label: string; hint: string; icon: IconName; target: NavId }
@@ -43,7 +49,7 @@ const searchEntries: SearchEntry[] = [
   { label: 'Каналы', hint: 'Таблица каналов, фильтры, переключение', icon: 'server', target: 'channels' },
   { label: 'Автозащита', hint: 'Сторож, правила авто-переключения, инциденты', icon: 'shield', target: 'autoprotect' },
   { label: 'Сеть', hint: 'Сетевая информация, NetGuard, диагностика', icon: 'pulse', target: 'network' },
-  { label: 'Статистика', hint: 'Трафик по периодам, счётчики', icon: 'flask', target: 'statistics' },
+  { label: 'Статистика', hint: 'Трафик по периодам, счётчики', icon: 'stats', target: 'statistics' },
   { label: 'Логи', hint: 'Журнал приложения и ядра', icon: 'logs', target: 'logs' },
   { label: 'Настройки — секреты', hint: 'Хранилище значений, fingerprint, аудит', icon: 'key', target: 'settings' },
   { label: 'Тестирование', hint: 'Проверки окружения и защищённого пути', icon: 'flask', target: 'tests' },
@@ -125,6 +131,7 @@ function levelIcon(level: string): IconName {
 
 <template>
   <div class="app">
+    <div v-if="MOCK_ACTIVE" class="mock-banner">DEV-MOCK: данные вымышлены для визуального теста (npm run dev ?mock=1)</div>
     <TopBar @open-search="openSearch" @open-notifications="toggleNotifications" />
 
     <div class="app-body">
@@ -148,7 +155,7 @@ function levelIcon(level: string): IconName {
     <div v-if="searchOpen" class="overlay" @click.self="closeSearch">
       <div class="palette card" role="dialog" aria-label="Поиск по настройкам">
         <div class="palette-input">
-          <Icon name="logs" :size="14" />
+          <Icon name="search" :size="14" />
           <input
             v-model="searchQuery"
             placeholder="Раздел или действие…"
@@ -204,6 +211,22 @@ function levelIcon(level: string): IconName {
   flex-direction: column;
   overflow: hidden;
   background: var(--app-glow);
+}
+
+.mock-banner {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  padding: 4px 14px;
+  border-radius: 0 0 8px 8px;
+  background: rgba(244, 189, 53, 0.92);
+  color: #1c1500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  pointer-events: none;
 }
 
 .app::before {

@@ -40,7 +40,7 @@ onMounted(() => {
 <template>
   <div class="view">
     <header class="head">
-      <h1>Тестирование</h1>
+      <h2>Тестирование</h2>
       <p class="sub">
         Каждая проверка возвращает факт («пройдено/не пройдено/нет данных») — без «зелёных галочек наугад».
       </p>
@@ -106,61 +106,8 @@ onMounted(() => {
   gap: 16px;
 }
 
-.head h1 {
-  font-size: 20px;
-}
-.sub {
-  margin: 4px 0 0;
-  color: var(--text-dim);
-  font-size: 12.5px;
-}
-
-.actions-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0b1020;
-  font-weight: 600;
-}
-
 .probe-flag {
   color: var(--accent);
-  font-size: 12.5px;
-}
-
-.empty-block {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  color: var(--text-dim);
   font-size: 12.5px;
 }
 

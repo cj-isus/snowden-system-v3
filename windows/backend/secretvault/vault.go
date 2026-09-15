@@ -45,12 +45,19 @@ const (
 	KindVlessUUIDC      Kind = "vless-uuid-c"
 	KindRealityPubKeyC  Kind = "reality-public-key-c"
 	KindRealityShortIDC Kind = "reality-short-id-c"
+
+	// Слоты канала D (VLESS over ShadowTLS v3 на том же VPS, V2-051).
+	// Роль ссылок generic по протоколу-надстройке: будущие shadowtls-каналы
+	// переиспользуют те же Kind'ы; конкретный канал задаёт дескриптор.
+	KindVlessUUIDD   Kind = "vless-uuid-d"
+	KindShadowTLSPwD Kind = "shadowtls-password-d"
 )
 
 // AllKinds — список допустимых типов.
 func AllKinds() []Kind {
 	return []Kind{KindVlessUUID, KindHy2Password, KindHy2ObfsPasword, KindVpsSSHKey, KindCfApiToken, KindCustom,
-		KindVlessUUIDC, KindRealityPubKeyC, KindRealityShortIDC}
+		KindVlessUUIDC, KindRealityPubKeyC, KindRealityShortIDC,
+		KindVlessUUIDD, KindShadowTLSPwD}
 }
 
 var (
@@ -213,6 +220,8 @@ func (m *Manager) Seed() error {
 		{KindVlessUUIDC, "UUID VLESS — канал C (REALITY)", "Идентификатор пользователя VLESS на REALITY-инбаунде. Совпадает с серверным; в чат и скриншоты не вставлять."},
 		{KindRealityPubKeyC, "Публичный ключ REALITY (канал C)", "X25519 public key REALITY (43 симв. base64url). Публичный по природе, но хранится тут для целостности набора."},
 		{KindRealityShortIDC, "Short ID REALITY (канал C)", "hex до 16 символов; должен совпадать с серверным списком short_id."},
+		{KindVlessUUIDD, "UUID VLESS — канал D (ShadowTLS)", "Идентификатор пользователя VLESS во внутреннем инбаунде за ShadowTLS. Совпадает с серверным; в чат и скриншоты не вставлять."},
+		{KindShadowTLSPwD, "Пароль ShadowTLS (канал D)", "base64 от 16 байт (24 симв.) — ключ аутентификации ShadowTLS v3. Должен совпадать с серверным; в чат и скриншоты не вставлять."},
 	}
 	changed := false
 	for _, s := range seeds {
@@ -530,7 +539,7 @@ func (m *Manager) metaOf(id string, it storedEntry, a audit) Meta {
 // validateKind — правила локальной проверки формата (по типу).
 func validateKind(k Kind, v string) error {
 	switch k {
-	case KindVlessUUID, KindVlessUUIDC:
+	case KindVlessUUID, KindVlessUUIDC, KindVlessUUIDD:
 		return validateUUID(v)
 	case KindRealityPubKeyC:
 		// X25519 в base64.RawURLEncoding: ровно 43 символа без пэйдинга
@@ -550,6 +559,15 @@ func validateKind(k Kind, v string) error {
 	case KindHy2Password, KindHy2ObfsPasword:
 		if len(v) < 8 {
 			return fmt.Errorf("слишком короткий пароль (%d символов; минимум 8)", len(v))
+		}
+	case KindShadowTLSPwD:
+		// ShadowTLS v3 user password: base64 (Std, с пэйдингом) от 16 байт —
+		// 24 символа. Формат-гвард до старта движка (как X25519-гвард у REALITY).
+		if len(v) != 24 {
+			return fmt.Errorf("ожидался base64 от 16 байт (24 симв.), получено %d симв.", len(v))
+		}
+		if _, err := base64.StdEncoding.DecodeString(v); err != nil {
+			return fmt.Errorf("значение не разбирается как base64: %w", err)
 		}
 	case KindVpsSSHKey:
 		if !strings.Contains(v, "PRIVATE KEY-----") {

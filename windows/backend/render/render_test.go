@@ -35,6 +35,10 @@ func testSecrets(withPin bool) *fakeSecrets {
 			"vless-uuid-c":         "00000000-0000-4000-8000-00000000000c",
 			"reality-public-key-c": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"reality-short-id-c":   "0123456c",
+			// Канал D (ShadowTLS v3, V2-051): тестовые значения требуемого формата
+			// (UUID; base64 от 16 байт = 24 симв.).
+			"vless-uuid-d":         "a468b418-0f94-4533-9dae-bae634b4842e",
+			"shadowtls-password-d": "FsAQBjjhfc4q0ShK3w2xzg==",
 		},
 		pins: map[string]string{},
 	}
@@ -72,8 +76,8 @@ func TestLoadDescriptorsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("descriptors must be valid: %v", err)
 	}
-	if len(channels) != 3 {
-		t.Fatalf("want 3 channels (V2-044: +REALITY), got %d", len(channels))
+	if len(channels) != 4 {
+		t.Fatalf("want 4 channels (V2-044: +REALITY; V2-051: +ShadowTLS), got %d", len(channels))
 	}
 	byID := map[string]ChannelDescriptor{}
 	for _, ch := range channels {
@@ -96,10 +100,11 @@ func TestLoadDescriptorsValid(t *testing.T) {
 func TestSelectableExcludesUnverified(t *testing.T) {
 	channels, _ := LoadDescriptors()
 	sel := Selectable(channels)
-	// VLESS — live-verified; HY2 — live-verified (A1.3); REALITY — configured+enabled
-	// (допуск B1: селектор собирает и configured, probe при переключении — гейт).
-	if len(sel) != 3 {
-		t.Fatalf("vless + hy2 + reality must be selectable, got %+v", sel)
+	// VLESS — live-verified; HY2 — live-verified (A1.3); REALITY/ShadowTLS —
+	// configured+enabled (допуск B1: селектор собирает и configured, probe
+	// при переключении — гейт).
+	if len(sel) != 4 {
+		t.Fatalf("vless + hy2 + reality + shadowtls must be selectable, got %+v", sel)
 	}
 	if sel[0].ID != "channel-a-vless" {
 		t.Fatalf("first candidate must be vless (default), got %+v", sel[0].ID)
@@ -248,8 +253,8 @@ func TestRenderHY2WithPinAndVerifiedEnters(t *testing.T) {
 		t.Fatal(err)
 	}
 	sel := cfg.ProtectedSelector()
-	if len(sel) != 3 || sel[0] != "channel-a-vless" || sel[1] != "channel-a-hy2" || sel[2] != "channel-a-reality" {
-		t.Fatalf("selector must be [vless hy2 reality], got %v", sel)
+	if len(sel) != 4 || sel[0] != "channel-a-vless" || sel[1] != "channel-a-hy2" || sel[2] != "channel-a-reality" || sel[3] != "channel-a-shadowtls" {
+		t.Fatalf("selector must be [vless hy2 reality shadowtls], got %v", sel)
 	}
 	// Валидированный конфиг должен пройти и через sing-box-уровень типов
 	// (config.Parse уже проверил структуру; здесь важен порядок кандидатов).

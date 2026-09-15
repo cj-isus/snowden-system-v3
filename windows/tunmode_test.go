@@ -65,6 +65,21 @@ func TestTUNFlagWiredIntoRender(t *testing.T) {
 		t.Skip("vault отсутствует — smoke на машине владельца")
 	}
 	a := &App{vault: secretvault.NewManager(vaultPath)}
+	// V2-051: канал D (ShadowTLS) в дескрипторах требует слоты vless-uuid-d /
+	// shadowtls-password-d. До их заполнения владельцем — честный skip.
+	if metas, err := a.vault.List(); err == nil {
+		need := map[string]bool{"vless-uuid-d": false, "shadowtls-password-d": false}
+		for _, m := range metas {
+			if m.StoredValue != "" {
+				need[m.Kind] = true
+			}
+		}
+		for k, ok := range need {
+			if !ok {
+				t.Skipf("слот %s не заполнен — канал D не рендерится (fail-closed)", k)
+			}
+		}
+	}
 	os.Args = []string{"app.exe", "--tun"}
 	defer func() { os.Args = []string{"app.exe"} }()
 

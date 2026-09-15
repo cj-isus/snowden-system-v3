@@ -51,6 +51,9 @@ type ChannelDescriptor struct {
 	UUIDRef             string `json:"uuid_ref,omitempty"`
 	RealityPublicKeyRef string `json:"reality_public_key_ref,omitempty"`
 	RealityShortIDRef   string `json:"reality_short_id_ref,omitempty"`
+	// Schema 2 (V2-051, VLESS over ShadowTLS v3): ссылка на ShadowTLS-пароль;
+	// UUIDRef переиспользуется для внутреннего vless-инбаунда.
+	ShadowTLSPasswordRef string `json:"shadowtls_password_ref,omitempty"`
 
 	// ---------- V2-037: живучесть/скорость (все поля optional) ----------
 
@@ -340,6 +343,23 @@ func validateChannel(ch ChannelDescriptor) error {
 	switch {
 	case ch.Protocol == "vless" && ch.Transport == "ws":
 	case ch.Protocol == "hysteria2" && ch.Transport == "quic":
+	case ch.Protocol == "vless" && ch.Transport == "shadowtls":
+		// V2-051: VLESS over ShadowTLS v3. Ровно две различные роли:
+		// uuid_ref (внутренний vless-инбаунд) + shadowtls_password_ref.
+		declared := map[string]bool{}
+		for _, r := range ch.CredentialRefs {
+			declared[r] = true
+		}
+		if ch.UUIDRef == "" || ch.ShadowTLSPasswordRef == "" ||
+			!declared[ch.UUIDRef] || !declared[ch.ShadowTLSPasswordRef] {
+			return fmt.Errorf("descriptors[%s]: shadowtls requires uuid_ref and shadowtls_password_ref, both listed in credential_refs", ch.ID)
+		}
+		if len(ch.CredentialRefs) != 2 || ch.UUIDRef == ch.ShadowTLSPasswordRef {
+			return fmt.Errorf("descriptors[%s]: credential_refs must be exactly the two distinct role refs", ch.ID)
+		}
+		if ch.Port != 443 && (ch.Port < 1024) {
+			return fmt.Errorf("descriptors[%s]: shadowtls port %d выглядит некорректно", ch.ID, ch.Port)
+		}
 	case ch.Protocol == "vless" && ch.Transport == "tcp-reality":
 		// Роли ссылок заданы явно и все три присутствуют в списке,
 		// ровно по одной (без дублей и лишних).
@@ -356,6 +376,9 @@ func validateChannel(ch ChannelDescriptor) error {
 		if len(ch.CredentialRefs) != 3 || ch.UUIDRef == ch.RealityPublicKeyRef ||
 			ch.UUIDRef == ch.RealityShortIDRef || ch.RealityPublicKeyRef == ch.RealityShortIDRef {
 			return fmt.Errorf("descriptors[%s]: credential_refs must be exactly the three distinct role refs", ch.ID)
+		}
+		if ch.ShadowTLSPasswordRef != "" {
+			return fmt.Errorf("descriptors[%s]: shadowtls_password_ref is not valid for tcp-reality", ch.ID)
 		}
 	default:
 		return fmt.Errorf("descriptors[%s]: transport %q does not match protocol %q", ch.ID, ch.Transport, ch.Protocol)
@@ -673,6 +696,46 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 					MaxConnections: 4, MinStreams: 4,
 				}
 			}
+		case ch.Protocol == "vless" && ch.Transport == "shadowtls":
+			// V2-051: VLESS over ShadowTLS v3 — ДВУХЗВЕННАЯ цепочка:
+			//   <id>-st (shadowtls, терминирует маскировку TLS на сервере)
+			//     ↑ detour
+			//   <id>   (vless на 127.0.0.1:9444 сервера — внутренний инбаунд)
+			// TLS-блок shadowtls-звена — МАСКИРОВОЧНЫЙ хендшейк к донору (SNI);
+			// внутренний vless идёт уже ВНУТРИ расшифрованного туннеля без TLS.
+			uuid, err := getOrErr(src, ch, ch.UUIDRef)
+			if err != nil {
+				return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
+			}
+			stpw, err := getOrErr(src, ch, ch.ShadowTLSPasswordRef)
+			if err != nil {
+				return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
+			}
+			if len(stpw) != 24 {
+				return nil, fmt.Errorf("channel %s: shadowtls password must be base64 of 16 bytes (24 chars), got %d", ch.ID, len(stpw))
+			}
+			stTag := tag + "-st"
+			// Звено 1: ShadowTLS v3 (маскировка под TLS к донору).
+			cfg.Outbounds = append(cfg.Outbounds, config.Outbound{
+				Type: "shadowtls", Tag: stTag,
+				Server: ch.OriginServer, ServerPort: ch.Port,
+				Version:  3,
+				Password: stpw,
+				TLS: map[string]any{
+					"enabled":     true,
+					"server_name": ch.Hostname, // SNI донора (www.samsung.com)
+					"utls":        map[string]any{"enabled": true, "fingerprint": "chrome"},
+				},
+				TCPKeepAlive:   "60s",
+				TCPKeepAliveIt: "20s",
+			})
+			// Звено 2: VLESS внутри туннеля (на loopback сервера).
+			cfg.Outbounds = append(cfg.Outbounds, config.Outbound{
+				Type: "vless", Tag: tag,
+				Server: "127.0.0.1", ServerPort: 9444,
+				UUID:   uuid,
+				Detour: stTag, // подключение через shadowtls-звено
+			})
 		case ch.Protocol == "vless":
 			uuid, err := getOrErr(src, ch, "vless-uuid")
 			if err != nil {

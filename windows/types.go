@@ -16,6 +16,11 @@ type AppState struct {
 	Error         string           `json:"error"`
 	CoreReady     bool             `json:"coreReady"`    // false = ядро ещё не подключено
 	CoreBlockMsg  string           `json:"coreBlockMsg"` // пояснение для UI (build phase ядра)
+	// V2-053: авто-повтор после fail-closed. NextRetryAt — RFC3339 (UTC)
+	// времени следующей автоматической попытки запуска; "" = не запланировано.
+	// RetryAttempt — номер этой попытки (1..); 0 = не запланировано.
+	NextRetryAt  string `json:"nextRetryAt"`
+	RetryAttempt int    `json:"retryAttempt"`
 }
 
 // ChannelView — карточка канала (FR-002, только метаданные).

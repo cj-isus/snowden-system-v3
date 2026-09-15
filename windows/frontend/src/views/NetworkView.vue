@@ -12,10 +12,12 @@ import { api, isBuildPhase, netGuardStatus } from '../api/backend'
 import type { AdaptiveStatus, NetGuardStatus } from '../api/contract'
 import { useBackendState, initBackendState } from '../composables/backendState'
 import { useInfoFacts } from '../composables/infoFacts'
+import { useNav } from '../composables/nav'
 import { fmtDateTime } from '../api/labels'
 
 const { isRunning } = useBackendState()
 const { facts, refresh: refreshFacts } = useInfoFacts()
+const { navTo } = useNav()
 
 const factsError = ref('')
 const netGuard = ref<NetGuardStatus | null>(null)
@@ -70,10 +72,24 @@ onMounted(() => {
 })
 onUnmounted(() => window.clearInterval(timer))
 
+const netClassLabel = computed(() => {
+  switch (facts.value?.netClass) {
+    case 'mobile':
+      return 'мобильная сеть (CGNAT: предпочитается QUIC/HY2)'
+    case 'wifi':
+      return 'Wi-Fi (предпочитается VLESS+WS через CDN)'
+    case 'ethernet':
+      return 'Ethernet (предпочитается VLESS+WS через CDN)'
+    default:
+      return null
+  }
+})
+
 const rows = computed<{ icon: IconName; label: string; value: string | null }[]>(() => {
   const f = facts.value
   return [
     { icon: 'pulse', label: 'Тип соединения', value: f?.connectionType || null },
+    { icon: 'pulse', label: 'Класс сети (автовыбор транспорта)', value: netClassLabel.value },
     { icon: 'pulse', label: 'Название сети', value: f?.ssid || null },
     { icon: 'server', label: 'Локальный IP', value: f?.localIP || null },
     { icon: 'key', label: 'Провайдер', value: isRunning.value ? 'Скрыт туннелем' : (f?.isp || null) },
@@ -141,7 +157,7 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
       <section class="card netguard">
         <div class="card-header">
           <h2>NetGuard</h2>
-          <button class="btn" @click="$emit('navigate', 'netguard')">Открыть раздел ›</button>
+          <button class="btn" @click="navTo('netguard')">Открыть раздел ›</button>
         </div>
 
         <template v-if="netGuard">
@@ -216,10 +232,6 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
     </HintBox>
   </div>
 </template>
-
-<script lang="ts">
-export default { emits: ['navigate'] }
-</script>
 
 <style scoped>
 .view {

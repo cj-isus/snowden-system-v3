@@ -53,6 +53,8 @@ function buildPhaseState(): AppState & { coreReady: boolean; coreBlockMsg: strin
     error: buildPhaseError,
     coreReady: false,
     coreBlockMsg: 'Приложение запущено вне Wails (предпросмотр). Запустите exe.',
+    nextRetryAt: '',
+    retryAttempt: 0,
   }
 }
 
@@ -84,6 +86,8 @@ function mapState(s: GoAppState): AppState {
     error: s.error ?? '',
     coreReady: s.coreReady,
     coreBlockMsg: s.coreBlockMsg ?? '',
+    nextRetryAt: s.nextRetryAt ?? '',
+    retryAttempt: s.retryAttempt ?? 0,
   } as AppState & { coreReady: boolean; coreBlockMsg: string }
 }
 
@@ -223,6 +227,7 @@ export const api = {
       country: f.country ?? '',
       countryOrigin: f.countryOrigin ?? '',
       dnsViaTunnel: !!f.dnsViaTunnel,
+      netClass: f.netClass ?? '',
       checkedAt: f.checkedAt ?? '',
     }
   },

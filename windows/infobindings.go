@@ -33,6 +33,7 @@ type NetworkFacts struct {
 	Country        string `json:"country"`        // страна egress (echo сервиса)
 	CountryOrigin  string `json:"countryOrigin"`  // источник факта страны
 	DNSViaTunnel   bool   `json:"dnsViaTunnel"`   // DNS/HTTP реально проходит через 127.0.0.1:1080 (socks5h)
+	NetClass       string `json:"netClass"`       // wifi | ethernet | mobile | "" (V2-054, MediaType фактом)
 	CheckedAt      string `json:"checkedAt"`      // RFC3339
 }
 
@@ -118,11 +119,18 @@ func collectFacts() (NetworkFacts, NetStats, error) {
 	switch {
 	case media == "Native802.11":
 		out.ConnectionType = "Wi-Fi"
+		out.NetClass = "wifi"
 		if ssid, err := netshShowInterfaces(); err == nil {
 			out.SSID = ssid
 		}
 	case media == "802.3":
 		out.ConnectionType = "Ethernet"
+		out.NetClass = "ethernet"
+	}
+	if out.NetClass == "" {
+		// MediaType не распознан (WWAN и прочее) — класс по общей
+		// классификации адаптера (V2-054: mobile и т.п.).
+		out.NetClass = adapterNetClass(alias)
 	}
 	out.PublicIP, out.Country, out.CountryOrigin = egressFacts()
 	out.DNSViaTunnel = dnsThroughTunnel()

@@ -78,8 +78,8 @@ func TestLoadDescriptorsWithoutEnvelopeUsesEmbedded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(channels) != 3 || channels[0].ID != "channel-a-vless" {
-		t.Fatalf("embedded set expected (3 канала, V2-044), got %+v", channels)
+	if len(channels) != 4 || channels[0].ID != "channel-a-vless" {
+		t.Fatalf("embedded set expected (4 канала: V2-044 REALITY + V2-051 ShadowTLS), got %+v", channels)
 	}
 }
 

@@ -33,7 +33,7 @@ const mainNav: Item[] = [
   { id: 'channels', label: 'Каналы', icon: 'server', hint: 'Каналы активного конфига и их статусы', main: true },
   { id: 'autoprotect', label: 'Автозащита', icon: 'shield', hint: 'Сторож защищённого пути и авто-переключение', main: true },
   { id: 'network', label: 'Сеть', icon: 'pulse', hint: 'Сетевая информация и NetGuard', main: true },
-  { id: 'statistics', label: 'Статистика', icon: 'flask', hint: 'Трафик, счётчики и тестирование', main: true },
+  { id: 'statistics', label: 'Статистика', icon: 'stats', hint: 'Трафик, счётчики и тестирование', main: true },
   { id: 'logs', label: 'Логи', icon: 'logs', hint: 'Журнал приложения и ядра', main: true },
   { id: 'settings', label: 'Настройки', icon: 'key', hint: 'Секреты, профиль доставки, о защите', main: true },
 ]

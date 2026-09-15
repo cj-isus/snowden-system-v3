@@ -24,7 +24,11 @@ $LogFile = Join-Path $LogDir 'netguard.log'
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
 function Log($msg) {
     $line = '{0} {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $msg
-    Add-Content -Path $LogFile -Value $line
+    # UTF8 (no BOM): Windows PowerShell 5.1 default is ANSI (cp1251 on ru
+    # systems) - cyrillic in the log was read as mojibake by the Go reader.
+    # PS 5.1 -Encoding utf8 writes a BOM, PS 7 does not; both are understood
+    # by netguard.go (netguardLogLines).
+    Add-Content -Path $LogFile -Value $line -Encoding utf8
     if ($UserMode) { Write-Output $line }
     if ((Test-Path $LogFile) -and (Get-Item $LogFile).Length -gt 512KB) {
         Move-Item -Force $LogFile (Join-Path $LogDir 'netguard.old.log')

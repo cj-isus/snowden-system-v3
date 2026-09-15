@@ -23,6 +23,9 @@ export function toastsRef(): typeof toasts {
 }
 
 export function toast(kind: ToastKind, text: string, ttlMs = 5000): void {
+  // Дедупликация: одинаковый видимый тост не плодим заново (частые клики по
+  // падающему действию не должны захламлять угол экрана одинаковым текстом).
+  if (toasts.value.some((t) => t.kind === kind && t.text === text)) return
   const id = nextId++
   toasts.value.push({ id, kind, text })
   if (toasts.value.length > MAX_TOASTS) toasts.value.shift()

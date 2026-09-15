@@ -41,6 +41,7 @@ async function initBackendState(): Promise<void> {
   stateLoaded.value = true
   channels.value = await api.listChannels()
   tests.value = await api.listTests()
+  void initTUNMode() // дефект v2: режим процесса (--tun) не запрашивался вовсе
 
   if (isBuildPhase()) {
     backendLog('warn', 'UI работает в build phase: backend ещё не собран; статус недоступен, это честно показано')

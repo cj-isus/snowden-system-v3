@@ -45,6 +45,12 @@ type App struct {
 	logFileDone chan struct{}
 	// engineLogDone — сигнал остановки tailer'у engine-лога sing-box (V2-046).
 	engineLogDone chan struct{}
+	// retry — планировщик авто-повтора после fail-closed (V2-053): растущий
+	// backoff 30с→10м, попытка = полный startCore с probe-гейтом. Все поля
+	// под a.mu; см. autoretry.go. retryLaunch — точка запуска попытки
+	// (nil = реальный startCore; тесты подменяют, чтобы не ходить в сеть).
+	retry       retryTimer
+	retryLaunch func()
 }
 
 // NewApp — конструктор для main.go.
@@ -107,6 +113,23 @@ func (a *App) stopLogWriter() {
 	}
 }
 
+// maxAppLogSize — предел durable-журнала: при превышении app.log ротируется
+// в app.log.1 (хранится одна предыдущая копия). Дефект v2 (V2-052): ротации
+// не было, и за несколько дней волн деградации app.log вырос до 15 ГБ —
+// риск исчерпания диска на машине агента. Оценка сверху: 2×maxAppLogSize.
+var maxAppLogSize int64 = 64 << 20 // 64 MiB
+
+// rotateAppLog — одноразовая ротация при превышении предела. Ошибки молча
+// опускаются: лог не должен ломать lifecycle.
+func rotateAppLog(dir string) {
+	path := filepath.Join(dir, "app.log")
+	st, err := os.Stat(path)
+	if err != nil || st.Size() < maxAppLogSize {
+		return
+	}
+	_ = os.Rename(path, path+".1") // прошлая .1 перезаписывается Rename'ом
+}
+
 // persistLogLines — батч-запись строк durable-журнала (одно открытие файла
 // на батч вместо трёх syscall'ов на строку). Ошибки записи молча опускаются:
 // лог не должен ломать lifecycle. Секретов в логе нет — appendLog зовётся
@@ -119,6 +142,7 @@ func persistLogLines(lines []LogLine) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return
 	}
+	rotateAppLog(dir)
 	path := filepath.Join(dir, "app.log")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
@@ -191,6 +215,10 @@ func (a *App) startup(ctx context.Context) {
 	// Системный трей (V2-048/F13): меню = lifecycle + каналы + автозапуск.
 	a.startTray()
 
+	// Наблюдатель смены сети (V2-054): up/change при живом туннеле →
+	// внеочередной probe; после fail-closed → немедленный авто-ретрай.
+	a.startNetWatch()
+
 	// Автоподключение после переключения режима (TUN⇄SOCKS): VPN работал до
 	// перезапуска — восстанавливаем состояние без второго нажатия.
 	if autoConnectRequested() {
@@ -225,12 +253,18 @@ func (a *App) Start() error {
 	if busy {
 		return fmt.Errorf("Start: операция уже выполняется (состояние %s)", a.state.State)
 	}
+	a.mu.Lock()
+	a.cancelFailClosedRetryLocked() // ручной запуск важнее автоматики (V2-053)
+	a.mu.Unlock()
 	go a.startCore()
 	return nil
 }
 
 // Stop — остановка VPN (синхронно: операция короткая).
 func (a *App) Stop() error {
+	a.mu.Lock()
+	a.cancelFailClosedRetryLocked() // ручная остановка отменяет авто-повтор (V2-053)
+	a.mu.Unlock()
 	return a.stopCore()
 }
 
@@ -347,6 +381,9 @@ func (a *App) OnBeforeClose(ctx context.Context) bool {
 	if a.closing.Swap(true) {
 		return false // уже завершаемся — не блокируем
 	}
+	a.mu.Lock()
+	a.cancelFailClosedRetryLocked() // закрытие окна — тоже ручное действие (V2-053)
+	a.mu.Unlock()
 	_ = ctx // выход идёт через a.ctx (см. requestQuit); параметр — контракт Wails
 	go func() {
 		if err := a.stopCore(); err != nil {
@@ -355,6 +392,7 @@ func (a *App) OnBeforeClose(ctx context.Context) bool {
 		// Дренировать журнал до выхода: os.Exit в requestQuit пропускает
 		// финальный флаш писателя (V2-034).
 		a.stopEngineLogTailer()
+		a.stopNetWatch()
 		a.stopLogWriter()
 		a.requestQuit(0)
 	}()
@@ -812,6 +850,21 @@ func (a *App) pushState() {
 // pushStateLocked — публикация стейта под уже удержанным a.mu (см.
 // appendLogLocked: нерекурсивный мьютекс запрещает вложенный Lock).
 func (a *App) pushStateLocked() {
+	// V2-053: поля авто-ретрая проецируются здесь — state не может разойтись
+	// с планировщиком ни на одном push. Пока attempt>0, NextRetryAt берётся
+	// из планировщика на КАЖДЫЙ push (отсчёт в UI честный даже при
+	// просроченном due — попытка вот-вот). attempt==0 → поля пустые.
+	if a.retry.attempt > 0 {
+		a.state.RetryAttempt = a.retry.attempt
+		if a.retry.due.IsZero() {
+			a.state.NextRetryAt = "" // попытка уже стреляет — расписание кончилось
+		} else {
+			a.state.NextRetryAt = a.retry.due.UTC().Format(time.RFC3339)
+		}
+	} else {
+		a.state.RetryAttempt = 0
+		a.state.NextRetryAt = ""
+	}
 	snapshot := a.state
 	ctx := a.ctx
 	if ctx != nil {

@@ -48,6 +48,21 @@
       "validation_status": "live-verified",
       "validated_at": "2026-09-12",
       "enabled": true
+    },
+    {
+      "id": "channel-a-shadowtls",
+      "protocol": "vless",
+      "transport": "shadowtls",
+      "hostname": "www.samsung.com",
+      "port": 8445,
+      "origin_server": "203.0.113.10",
+      "expected_egress": "203.0.113.10",
+      "credential_refs": ["vless-uuid-d", "shadowtls-password-d"],
+      "uuid_ref": "vless-uuid-d",
+      "shadowtls_password_ref": "shadowtls-password-d",
+      "probe_targets": ["https://api.ipify.org", "https://ifconfig.me/all.json"],
+      "validation_status": "configured",
+      "enabled": true
     }
   ]
 }

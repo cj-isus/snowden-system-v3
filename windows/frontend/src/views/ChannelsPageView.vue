@@ -49,7 +49,35 @@ const statusCounts = computed(() => {
   return m
 })
 
+/** Клик по чипу = применить/снять фильтр статуса (UI-план v3). */
+function toggleFilter(v: ValidationStatus): void {
+  statusFilter.value = statusFilter.value === v ? 'all' : v
+}
+
 const canSwitch = computed(() => isRunning.value && !isBusy.value && !switching.value)
+
+/** Честная причина недоступности переключения (UI-план v3: не «просто серая»). */
+const switchBlockReason = computed(() => {
+  if (switching.value) return 'идёт переключение…'
+  if (isBusy.value) return 'идёт старт/остановка VPN'
+  if (!isRunning.value) return 'VPN остановлен — переключение это операция работающего туннеля. Включите защиту на Главной.'
+  return ''
+})
+
+const blockedLine = computed(() => {
+  const r = state.value?.blockedReason
+  return r || null
+})
+
+const blockedHint = computed(() => {
+  const r = blockedLine.value
+  if (r === 'no_validated_channel')
+    return 'В селекторе нет ни одного канала со статусом «проверен live». Каналы «настроен» доказательств не дают: сначала live-проверка.'
+  if (r === 'probe_failed') return 'Последний protected-probe не пройден: путь до сервера жив, но не доказан. Повторите запуск.'
+  if (r === 'config_invalid') return 'Собранный конфиг не прошёл строгую валидацию ядра — это дефект конфигурации, запуск закрыт.'
+  if (r === 'all_channels_failed') return 'Авто-переключение исчерпало кандидатов: все каналы недоступны. Запуск закрыт, чтобы трафик не пошёл напрямую.'
+  return null
+})
 
 function statusClass(v: ValidationStatus): string {
   if (v === 'live-verified') return 'live'
@@ -79,7 +107,7 @@ async function onSwitch(id: string): Promise<void> {
 
     <section class="controls card">
       <div class="channel-search">
-        <Icon name="logs" :size="13" />
+        <Icon name="search" :size="13" />
         <input v-model="search" placeholder="Поиск каналов…" spellcheck="false" />
       </div>
 
@@ -95,11 +123,26 @@ async function onSwitch(id: string): Promise<void> {
       <div class="spacer"></div>
 
       <span v-if="statusCounts.size" class="status-summary">
-        <span v-for="[k, n] in statusCounts" :key="k" class="channel-status" :class="statusClass(k)">
+        <button
+          v-for="[k, n] in statusCounts"
+          :key="k"
+          class="channel-status as-filter"
+          :class="[statusClass(k), { selected: statusFilter === k }]"
+          :title="statusFilter === k ? 'Снять фильтр' : `Показать только: ${validationStatusLabels[k] ?? k}`"
+          @click="toggleFilter(k)"
+        >
           <span class="status-dot"></span>{{ validationStatusLabels[k] ?? k }}: {{ n }}
-        </span>
+        </button>
       </span>
     </section>
+
+    <div v-if="blockedLine" class="blocked-banner card">
+      <Icon name="warn" :size="16" />
+      <div>
+        <strong>Запуск заблокирован (BLOCKED — {{ blockedLine }})</strong>
+        <p>{{ blockedHint }}</p>
+      </div>
+    </div>
 
     <div v-if="channels === null" class="empty-block card">
       <Icon name="warn" :size="18" />
@@ -148,12 +191,12 @@ async function onSwitch(id: string): Promise<void> {
                   :disabled="!canSwitch"
                   :title="canSwitch
                     ? 'Переключиться: новый конфиг пройдёт защищённый probe до активации'
-                    : 'Переключение доступно при запущенном VPN'"
+                    : switchBlockReason || 'Переключение доступно при запущенном VPN'"
                   @click="onSwitch(c.id)"
                 >
                   {{ switching ? 'Переключение…' : 'Переключиться' }}
                 </button>
-                <button v-else class="table-action disabled" disabled>Выключен</button>
+                <button v-else class="table-action disabled" disabled title="Канал выключен в дескрипторе конфига (enabled: false) — он не участвует ни в селекторе, ни в авто-переключении">Выключен</button>
               </td>
             </tr>
             <tr v-if="list.length === 0">
@@ -226,6 +269,22 @@ async function onSwitch(id: string): Promise<void> {
 .channel-search input::placeholder {
   color: #5d788c;
 }
+.status-summary .as-filter { cursor: pointer; }
+.status-summary .as-filter:hover { filter: brightness(1.15); }
+.status-summary .as-filter.selected { outline: 1.5px solid var(--blue-bright); outline-offset: 1px; }
+
+.blocked-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 13px;
+  border-color: var(--red-border);
+  background: var(--red-soft);
+}
+.blocked-banner strong { color: var(--red); font-size: 12px; }
+.blocked-banner p { margin: 3px 0 0; font-size: 11.5px; color: var(--text-soft); }
+.blocked-banner svg { color: var(--red); flex: 0 0 auto; margin-top: 2px; }
+
 .status-filter {
   width: 170px;
   height: 30px;

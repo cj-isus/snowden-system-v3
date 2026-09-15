@@ -120,12 +120,17 @@ type MultiplexConfig struct {
 }
 
 type Outbound struct {
-	Type                      string           `json:"type"`
-	Tag                       string           `json:"tag"`
-	Server                    string           `json:"server,omitempty"`
-	ServerPort                uint16           `json:"server_port,omitempty"`
-	UUID                      string           `json:"uuid,omitempty"`
-	Password                  string           `json:"password,omitempty"`
+	Type       string `json:"type"`
+	Tag        string `json:"tag"`
+	Server     string `json:"server,omitempty"`
+	ServerPort uint16 `json:"server_port,omitempty"`
+	UUID       string `json:"uuid,omitempty"`
+	Password   string `json:"password,omitempty"`
+	// V2-051 (shadowtls-цепочка): соединение через другой outbound
+	// (vless-звено → shadowtls-звено). DialerOptions.detour ядра.
+	Detour string `json:"detour,omitempty"`
+	// ShadowTLS: версия протокола (v3). Остальные протоколы — не задают.
+	Version                   int              `json:"version,omitempty"`
 	Flow                      string           `json:"flow,omitempty"`
 	TLS                       map[string]any   `json:"tls,omitempty"`
 	Obfs                      map[string]any   `json:"obfs,omitempty"`
@@ -148,7 +153,7 @@ type Outbound struct {
 	// V2-045 поймал владелец: рендер с REALITY ломал ПОЛНЫЙ Start, т.к. каналы
 	// REALITY входят в общий селектор).
 	TCPFastOpen    bool   `json:"tcp_fast_open,omitempty"`
-	TCPKeepAlive   string `json:"tcp_keep_alive,omitempty"`   // duration-строка ("60s")
+	TCPKeepAlive   string `json:"tcp_keep_alive,omitempty"`          // duration-строка ("60s")
 	TCPKeepAliveIt string `json:"tcp_keep_alive_interval,omitempty"` // duration-строка ("20s")
 }
 
@@ -386,7 +391,7 @@ func validateProtectedSelector(c *Config, tags map[string]Outbound) error {
 		if !exists {
 			return fmt.Errorf("protected selector references unknown outbound: %s", cand)
 		}
-		if prot.Type != "vless" && prot.Type != "hysteria2" {
+		if !isProtectedOutboundType(prot.Type) {
 			return fmt.Errorf("protected selector candidate is not a protected protocol: %s (type %s)", cand, prot.Type)
 		}
 		if prot.Server == "" || prot.ServerPort == 0 {
@@ -395,13 +400,31 @@ func validateProtectedSelector(c *Config, tags map[string]Outbound) error {
 		if prot.UUID == "" && prot.Password == "" {
 			return fmt.Errorf("protected outbound %q lacks credentials", cand)
 		}
+		// V2-051: shadowtls-цепочка (vless-звено c detour). Сам vless-звено
+		// идёт на loopback (Server=127.0.0.1) — это не «незащищённый прямой»:
+		// транспорт уже зашифрован shadowtls-звеном. Проверяем, что detour
+		// указывает на существующий shadowtls-outbound.
+		if prot.Detour != "" {
+			up, ok := tags[prot.Detour]
+			if !ok {
+				return fmt.Errorf("protected outbound %q detours unknown outbound %q", cand, prot.Detour)
+			}
+			if up.Type != "shadowtls" {
+				return fmt.Errorf("protected outbound %q detours non-shadowtls outbound %q (%s)", cand, prot.Detour, up.Type)
+			}
+		}
 		// XTLS Vision отсутствует в pinned-ядре (V2-031): такие конфиги
 		// отвергаются до старта движка с понятной причиной.
 		if prot.Flow != "" {
 			return fmt.Errorf("protected outbound %q: xtls flow %q is not supported by the pinned core", cand, prot.Flow)
 		}
-		if err := validateProtectedTLS(prot); err != nil {
-			return fmt.Errorf("protected outbound %q: %w", cand, err)
+		// V2-051: vless-звено внутри shadowtls-цепочки НЕ имеет своего TLS
+		// (шифрование обеспечивает shadowtls-звено; внутри — расшифрованный
+		// поток). Требование «TLS обязателен» к нему неприменимо.
+		if prot.Detour == "" {
+			if err := validateProtectedTLS(prot); err != nil {
+				return fmt.Errorf("protected outbound %q: %w", cand, err)
+			}
 		}
 		if err := validateRealityTLS(prot); err != nil {
 			return fmt.Errorf("protected outbound %q: %w", cand, err)
@@ -414,6 +437,13 @@ func validateProtectedSelector(c *Config, tags map[string]Outbound) error {
 		}
 		if err := validateDialFields(prot); err != nil {
 			return fmt.Errorf("protected outbound %q: %w", cand, err)
+		}
+	}
+	// V2-051: shadowtls-звена валидируются вместе с цепочкой (не в селекторе,
+	// но обязаны быть корректны до старта движка).
+	for _, prot := range tags {
+		if err := validateShadowTLSLink(prot); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -443,7 +473,7 @@ func validateTransportExtras(o Outbound) error {
 // V2-045 не ловили, т.к. он жил в расхождении наших типов и типов ядра.
 func validateDialFields(o Outbound) error {
 	for name, v := range map[string]string{
-		"tcp_keep_alive":         o.TCPKeepAlive,
+		"tcp_keep_alive":          o.TCPKeepAlive,
 		"tcp_keep_alive_interval": o.TCPKeepAliveIt,
 	} {
 		if v == "" {
@@ -539,6 +569,32 @@ func validateRealityTLS(o Outbound) error {
 		return errors.New("tls.reality.short_id is required")
 	}
 	return nil
+}
+
+// isProtectedOutboundType — типы outbound'ов, разрешённые в защищённом
+// селекторе. shadowtls сам по себе НЕ защищает (это транспорт-туннель),
+// защищает пара shadowtls+vless — в селектор попадает vless-звено.
+func isProtectedOutboundType(t string) bool {
+	return t == "vless" || t == "hysteria2"
+}
+
+// validateShadowTLSLink — правила shadowtls-звена цепочки (V2-051):
+// v3, пароль задан, маскировочный TLS к донору обязателен. Звено не входит
+// в селектор (детурится vless-звеном), но валидируется здесь же.
+func validateShadowTLSLink(o Outbound) error {
+	if o.Type != "shadowtls" {
+		return nil
+	}
+	if o.Version != 3 {
+		return fmt.Errorf("shadowtls %q: only version 3 is allowed (got %d)", o.Tag, o.Version)
+	}
+	if o.Password == "" {
+		return fmt.Errorf("shadowtls %q: password is required", o.Tag)
+	}
+	if o.Server == "" || o.ServerPort == 0 {
+		return fmt.Errorf("shadowtls %q: server/port required", o.Tag)
+	}
+	return validateProtectedTLS(o)
 }
 
 func validateProtectedTLS(o Outbound) error {

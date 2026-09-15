@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
 // hiddenExec — запуск консольной утилиты без мигания окна (GUI-процесс).
@@ -80,6 +82,55 @@ func netshShowInterfaces() (string, error) {
 		}
 	}
 	return "", fmt.Errorf("SSID не найден в выводе netsh")
+}
+
+// adapterNetClassByIndex — класс сети адаптера по индексу интерфейса:
+// мгновенный системный вызов GetIfEntry2Ex (MIB_IF_ROW2: Type + MediaType),
+// без PowerShell. Живёт на цикле опроса netwatch (каждый переход) и на пути
+// startCore (transportpref) — процесс-спавн здесь = секунды на поллинг.
+// Классификация — общая точка netwatch.classifyNetClass.
+func adapterNetClassByIndex(idx int) string {
+	if idx <= 0 {
+		return ""
+	}
+	row := &windows.MibIfRow2{}
+	row.InterfaceIndex = uint32(idx)
+	if err := windows.GetIfEntry2Ex(windows.MibIfTableNormal, row); err != nil {
+		return "" // факт недоступен — класс неизвестен, не «wifi по умолчанию»
+	}
+	return classifyNetClass(row.Type, row.MediaType)
+}
+
+// adapterNetClass — класс сети по имени адаптера (общая точка с Windows-
+// сборщиком фактов GetInfo; оставлена для имени — классификация та же).
+func adapterNetClass(alias string) string {
+	if alias == "" {
+		return ""
+	}
+	const script = `
+$a = Get-NetAdapter | Where-Object { $_.Name -eq $args[0] } | Select-Object -First 1
+if (-not $a) { Write-Output 'NO_ADAPTER'; exit 0 }
+Write-Output ($a.MediaType)
+Write-Output ($a.InterfaceType)
+`
+	out, err := hiddenExec("powershell", "-NoProfile", "-NonInteractive", "-Command", script, alias)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n") {
+		t := strings.TrimSpace(line)
+		switch t {
+		case "", "NO_ADAPTER":
+			continue
+		case "Native802.11":
+			return "wifi"
+		case "802.3":
+			return "ethernet"
+		case "Wireless WAN":
+			return "mobile"
+		}
+	}
+	return ""
 }
 
 // compile-time guard: файл только для Windows.

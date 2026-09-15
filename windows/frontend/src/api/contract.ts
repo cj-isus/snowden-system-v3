@@ -64,6 +64,10 @@ export type AppState = {
   probeRunning: boolean
   probeLastAt: string | null
   error: string
+  /** V2-053: RFC3339 (UTC) следующей авто-попытки запуска; '' = не запланировано */
+  nextRetryAt: string
+  /** V2-053: номер следующей авто-попытки (1..); 0 = не запланировано */
+  retryAttempt: number
 }
 
 export type LogLine = {
@@ -193,6 +197,7 @@ export type NetworkFacts = {
   country: string
   countryOrigin: string
   dnsViaTunnel: boolean
+  netClass: string // wifi | ethernet | mobile | '' (V2-054)
   checkedAt: string
 }
 

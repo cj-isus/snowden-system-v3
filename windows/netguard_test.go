@@ -5,10 +5,14 @@ package main
 // маппингов и парсера, чтобы локаль не могла сломать статусы.
 
 import (
+	"bytes"
 	"errors"
 	"testing"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/go-ole/go-ole"
+	"golang.org/x/text/encoding/charmap"
 )
 
 func TestNetguardTaskState(t *testing.T) {
@@ -70,6 +74,67 @@ func TestAtoi32(t *testing.T) {
 		n, ok := atoi32(tc.in)
 		if ok != tc.ok || (ok && n != tc.n) {
 			t.Errorf("atoi32(%q) = %d, %v; want %d, %v", tc.in, n, ok, tc.n, tc.ok)
+		}
+	}
+}
+
+func TestNetguardLogLines(t *testing.T) {
+	// cp1251-байты слова «адаптер» — то, что Windows PowerShell 5.1 кладёт в
+	// лог по умолчанию на ru-системе (V2-051: мojibake на странице NetGuard).
+	cp1251, err := charmap.Windows1251.NewEncoder().Bytes([]byte("адаптер"))
+	if err != nil {
+		t.Fatalf("cp1251 encoder: %v", err)
+	}
+	if utf8.Valid(cp1251) {
+		t.Fatalf("cp1251-байты не должны быть валидным UTF-8")
+	}
+	utf16LE := func(s string) []byte {
+		b := []byte{0xFF, 0xFE} // BOM
+		for _, r := range utf16.Encode([]rune(s)) {
+			b = append(b, byte(r), byte(r>>8))
+		}
+		return b
+	}
+
+	cases := []struct {
+		name string
+		in   []byte
+		want []string
+	}{
+		{"utf8 as-is",
+			[]byte("2026-09-10 17:54:37 HEALING: адаптер — switching"),
+			[]string{"2026-09-10 17:54:37 HEALING: адаптер — switching"}},
+		{"cp1251 decoded",
+			append(append([]byte("2026-09-10 17:54:37 HEALING: adapter '"), cp1251...), []byte("' - switching")...),
+			[]string{"2026-09-10 17:54:37 HEALING: adapter 'адаптер' - switching"}},
+		{"mixed cp1251 + utf8 (перекатка писца)",
+			bytes.Join([][]byte{
+				append([]byte("2026-09-10 17:54:37 HEALING: '"), cp1251...),
+				[]byte("2026-09-11 09:00:00 PROBLEM: адаптер"),
+			}, []byte("\n")),
+			[]string{"2026-09-10 17:54:37 HEALING: 'адаптер", "2026-09-11 09:00:00 PROBLEM: адаптер"}},
+		{"utf8 bom stripped",
+			append([]byte{0xEF, 0xBB, 0xBF}, []byte("2026-09-10 17:54:37 PROBLEM: адаптер")...),
+			[]string{"2026-09-10 17:54:37 PROBLEM: адаптер"}},
+		{"utf16le bom",
+			utf16LE("2026-09-10 17:54:37 PROBLEM: адаптер"),
+			[]string{"2026-09-10 17:54:37 PROBLEM: адаптер"}},
+		{"crlf split",
+			[]byte("a\r\nb"),
+			[]string{"a", "b"}},
+		{"ascii untouched",
+			[]byte("2026-09-10 17:54:37 HEALED: stale proxy disabled"),
+			[]string{"2026-09-10 17:54:37 HEALED: stale proxy disabled"}},
+	}
+	for _, tc := range cases {
+		got := netguardLogLines(tc.in)
+		if len(got) != len(tc.want) {
+			t.Fatalf("%s: netguardLogLines = %q; want %q", tc.name, got, tc.want)
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s: line %d = %q; want %q", tc.name, i, got[i], tc.want[i])
+			}
 		}
 	}
 }

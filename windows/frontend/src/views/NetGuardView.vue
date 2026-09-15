@@ -132,11 +132,11 @@ function stateText(s: NetGuardTaskState): string {
   return taskStateText[s] ?? s
 }
 
-function statePill(s: NetGuardTaskState): 'live-verified' | 'degraded' | 'blocked' | '' {
-  if (s === 'ready' || s === 'running') return 'live-verified'
+function statePill(s: NetGuardTaskState): 'success' | 'warning' | 'danger' | '' {
+  if (s === 'ready' || s === 'running') return 'success'
   if (s === 'no-access') return ''
-  if (s === 'disabled') return 'degraded'
-  if (s === 'not-found' || s.startsWith('unknown')) return 'blocked'
+  if (s === 'disabled') return 'warning'
+  if (s === 'not-found' || s.startsWith('unknown')) return 'danger'
   return ''
 }
 
@@ -155,7 +155,7 @@ function kindClass(kind: string): string {
 <template>
   <div class="view">
     <header class="head">
-      <h1>NetGuard</h1>
+      <h2>NetGuard</h2>
       <p class="sub">
         Авто-починка сети (tools/netguard): устраняет зависший системный прокси после
         аварийного завершения VPN и включает DNS-over-HTTPS, если сеть блокирует порт 53.
@@ -173,7 +173,7 @@ function kindClass(kind: string): string {
       </div>
     </header>
 
-    <div v-if="status === null && !loading" class="empty-block">
+    <div v-if="status === null && !loading" class="empty-block card">
       <Icon name="warn" :size="18" />
       <p>
         Данные NetGuard недоступны: биндинг не отвечает или NetGuard не установлен
@@ -203,7 +203,7 @@ function kindClass(kind: string): string {
               <template v-if="t.status !== 'not-found' && t.status !== 'no-access'">
                 <span v-if="t.lastRun" class="task-dates">прошлый: {{ fmtDate(t.lastRun) }}</span>
                 <span v-if="t.nextRun" class="task-dates">следующий: {{ fmtDate(t.nextRun) }}</span>
-                <span v-if="t.lastCode && t.lastCode !== '0'" class="pill degraded">код {{ t.lastCode }}</span>
+                <span v-if="t.lastCode && t.lastCode !== '0'" class="pill warning">код {{ t.lastCode }}</span>
               </template>
             </span>
           </div>
@@ -215,8 +215,8 @@ function kindClass(kind: string): string {
             <span class="k">Состояние</span>
             <span class="v">
               {{ status.proxy.enabled ? 'включён' : 'выключен' }}
-              <span v-if="status.proxy.enabled && status.proxy.listenerAlive" class="pill live-verified">листенер жив</span>
-              <span v-if="staleProxy" class="pill blocked">листенер мёртв (stale)</span>
+              <span v-if="status.proxy.enabled && status.proxy.listenerAlive" class="pill success">листенер жив</span>
+              <span v-if="staleProxy" class="pill danger">листенер мёртв (stale)</span>
             </span>
             <span class="k">Адрес</span>
             <span class="v mono">{{ status.proxy.server || '—' }}</span>
@@ -248,6 +248,151 @@ function kindClass(kind: string): string {
 </template>
 
 <style scoped>
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.actions-row {
+  margin-top: 10px;
+}
+
+/* Hero-вердикт */
+.hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, rgba(11, 29, 45, 0.96), rgba(7, 20, 33, 0.96));
+  box-shadow: var(--shadow);
+}
+.hero-ico {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.hero.ok {
+  border-color: var(--green-border);
+}
+.hero.ok .hero-ico {
+  color: var(--green);
+}
+.hero.err {
+  border-color: var(--red-border);
+}
+.hero.err .hero-ico {
+  color: var(--red);
+}
+.hero.busy .hero-ico {
+  color: var(--blue-bright);
+}
+.hero.idle .hero-ico {
+  color: var(--yellow);
+}
+.hero-state {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+}
+.hero.ok .hero-state {
+  color: var(--green-bright);
+}
+.hero.err .hero-state {
+  color: #ff8a90;
+}
+.hero-sub {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 640px;
+}
+
+/* Панели */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.panel {
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, rgba(11, 29, 45, 0.96), rgba(7, 20, 33, 0.96));
+  box-shadow: var(--shadow);
+}
+.panel h2 {
+  font-size: 13.5px;
+  color: #eef4f8;
+}
+.panel + .grid,
+section.panel {
+  min-width: 0;
+}
+
+/* Ключ-значение */
+.kv {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 28px;
+  padding: 4px 0;
+  border-bottom: 1px solid #142d40;
+  font-size: 11px;
+}
+.kv:last-child {
+  border-bottom: 0;
+}
+.kv .k {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.kv .v {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #dce7ee;
+  text-align: right;
+  margin-left: auto;
+}
+
+/* События */
+.steps {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(7, 21, 34, 0.6);
+  font-size: 11px;
+}
+.step .st {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-size: 9.5px;
+}
+.step-status {
+  color: var(--text-soft);
+  word-break: break-word;
+}
+.last-at {
+  margin: 8px 0 0;
+  color: var(--muted-2);
+  font-size: 9.5px;
+}
+
 .task-row {
   margin-bottom: 8px;
 }
@@ -279,5 +424,11 @@ function kindClass(kind: string): string {
 }
 .mono {
   font-family: var(--mono);
+}
+
+@media (max-width: 1000px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

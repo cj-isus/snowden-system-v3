@@ -64,7 +64,7 @@ function onPaste(e: ClipboardEvent): void {
 <template>
   <div class="view">
     <header class="head">
-      <h1>Секреты</h1>
+      <h2>Секреты</h2>
       <p class="sub">
         Значения живут только в локальном игнорируемом хранилище. В UI виден только
         SHA256-отпечаток — сверка конфигураций идёт по хешам, не по значениям.
@@ -188,48 +188,6 @@ function onPaste(e: ClipboardEvent): void {
   gap: 16px;
 }
 
-.head h1 {
-  font-size: 20px;
-}
-.sub {
-  margin: 4px 0 0;
-  color: var(--text-dim);
-  font-size: 12.5px;
-  max-width: 640px;
-}
-
-.actions-row {
-  display: flex;
-  gap: 10px;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0b1020;
-  font-weight: 600;
-}
-
 .form {
   padding: 18px;
   border: 1px solid var(--border);
@@ -312,17 +270,6 @@ input::placeholder {
 .form-actions {
   display: flex;
   gap: 10px;
-}
-
-.empty-block {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  color: var(--text-dim);
-  font-size: 12.5px;
 }
 
 .cards {
