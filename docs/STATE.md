@@ -61,8 +61,8 @@
 
 ## Дополнительный срез GH-001
 
-По запросу владельца готовится sanitized GitHub publication с сохранением history;
-после проверки — удаление трёх явно указанных старых remote repositories.
-Подробности и результат: evidence/2026-10-21-github-publication.md. TH-01/OFF-04
-и остальные открытые обязательства выше сохраняются.
+Публикация выполнена: main dae1f3c,323 files, remote ref/tree проверены; history сохранена.
+Ни один старый repo агентом не удалён: владелец взял удаление на себя после
+GitHub sudo verification. Evidence: evidence/2026-10-21-github-publication.md.
+Следующий запрос: TH-01/OFF-04 signed HY2 pins/path safety; backlog сохраняется.
 

@@ -32,7 +32,28 @@ Gitleaks exit=1 сохранён как есть: три reviewed findings, но
 глобальный allowlist/baseline не добавлен. Scanner не доказывает отсутствие
 любого возможного секрета.
 
-Результаты публикации и удаления будут добавлены после выполнения.
+## Результат
+
+- Push в `main` выполнен: `dae1f3c2fefd1d723f803dbceb8910bbfe58202b`.
+  GitHub API подтвердил commit, parent `753500e…` и tree
+  `e64a010602678484ab276e3903b0b89f3a53542c`. История сохранена, force не применялся.
+- Remote recursive tree: 323 файла, `truncated=false`; нет путей secrets,
+  local archive, node_modules, logs, .tmp/.tools/.artifacts и приватных
+  расширений. Включены UI, backend, tests, теория V2-109 и исходный архив теории.
+- Перед commit проверены source SHA256 всех 323 выбранных files и точный staged
+  file set. В snapshot изменены 30 files при обезличивании; рабочие application
+  sources/credentials не переписаны. `dist/.gitkeep` сохраняет go:embed boundary.
+- Harness: `node scripts/harness/project.mjs check --scope harness --run` —
+  PASS, 1.7s, sourceBefore=sourceAfter. Собственные publication files проходят
+  `git diff --cached --check`; общий diff выявляет прежние whitespace в архиве
+  и generated bindings, которые в этом срезе не переформатируются.
+- Вход через git credential manager работал; устаревший gh keyring token
+  не использовался для push. Секреты авторизации не выводились/не сохранялись.
+- Ни один из трёх старых репозиториев агентом **не удалён**. GitHub запросил
+  sudo-mode verification. После отдельного согласия на три удаления владелец
+  отозвал дальнейшее выполнение: «забей, я сам». Удаление передано владельцу;
+  оно не отмечается PASS и автоматически не продолжается.
+
 Продуктовые тесты, сборка EXE, live VPN и административные проверки
 в этом срезе не запускаются. Прежние результаты V2-108 и документационная
 работа V2-109 не являются подтверждением GitHub-публикации.
