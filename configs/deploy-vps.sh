@@ -99,5 +99,13 @@ cat <<EOF
 После ручного рестарта проверь живой канал:
 
   ssh $VPS_USER@$VPS_HOST 'systemctl restart sing-box'
+  bash configs/verify-server.sh     # инварианты сервера (V2-076): route.final, листенеры, /ip, /range
   curl --proxy socks5h://127.0.0.1:1080 https://api.ipify.org   # -> $VPS_HOST
 EOF
+
+# Опциональная автоматическая верификация инвариантов (V2-076): по умолчанию
+# выключена — скрипт не должен внезапно ходить на сервер после чужого деплоя.
+if [[ "${VERIFY_AFTER_DEPLOY:-0}" == "1" ]]; then
+  echo "VERIFY_AFTER_DEPLOY=1 → запускаю configs/verify-server.sh"
+  bash "$SCRIPT_DIR/verify-server.sh"
+fi

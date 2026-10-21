@@ -39,7 +39,7 @@ func TestRetryDelayGrowth(t *testing.T) {
 
 // failClosedApp — App в форме №1 (error после исчерпания failover-on-start).
 func failClosedApp() *App {
-	a := &App{}
+	a := &App{protectionDesired: true}
 	a.state.State = "error"
 	a.state.Error = "запуск: все каналы не прошли probe — fail-closed (FR-001)"
 	return a
@@ -59,7 +59,7 @@ func TestScheduleOnlyInFailClosed(t *testing.T) {
 		{"starting", "starting", "", false},
 	}
 	for _, c := range cases {
-		a := &App{}
+		a := &App{protectionDesired: true}
 		a.state.State = c.state
 		a.state.BlockedReason = c.blocked
 		a.scheduleFailClosedRetryLocked(time.Now())
@@ -188,7 +188,7 @@ func TestCancelledTimerDoesNotFire(t *testing.T) {
 }
 
 func TestPushStateProjectsRetryFields(t *testing.T) {
-	a := &App{}
+	a := &App{protectionDesired: true}
 	a.pushStateLocked() // attempt==0 → поля пустые
 	if a.state.NextRetryAt != "" || a.state.RetryAttempt != 0 {
 		t.Fatalf("attempt==0: state не пуст: %q/%d", a.state.NextRetryAt, a.state.RetryAttempt)

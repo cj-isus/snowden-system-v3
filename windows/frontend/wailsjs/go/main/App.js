@@ -30,6 +30,10 @@ export function EnableTUN() {
   return window['go']['main']['App']['EnableTUN']();
 }
 
+export function EpochLabel() {
+  return window['go']['main']['App']['EpochLabel']();
+}
+
 export function ExportOnboarding(arg1) {
   return window['go']['main']['App']['ExportOnboarding'](arg1);
 }
@@ -46,12 +50,24 @@ export function GetAutostart() {
   return window['go']['main']['App']['GetAutostart']();
 }
 
+export function GetChannelHealth() {
+  return window['go']['main']['App']['GetChannelHealth']();
+}
+
+export function GetChannelIndependence() {
+  return window['go']['main']['App']['GetChannelIndependence']();
+}
+
 export function GetDeliveryProfile() {
   return window['go']['main']['App']['GetDeliveryProfile']();
 }
 
 export function GetFailoverStatus() {
   return window['go']['main']['App']['GetFailoverStatus']();
+}
+
+export function GetIncidents() {
+  return window['go']['main']['App']['GetIncidents']();
 }
 
 export function GetMetrics() {
@@ -64,6 +80,10 @@ export function GetNetStats() {
 
 export function GetNetworkFacts() {
   return window['go']['main']['App']['GetNetworkFacts']();
+}
+
+export function GetRuntimeInfo() {
+  return window['go']['main']['App']['GetRuntimeInfo']();
 }
 
 export function GetSplitDirect() {

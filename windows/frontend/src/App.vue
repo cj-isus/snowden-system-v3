@@ -1,18 +1,16 @@
 <script setup lang="ts">
-/**
- * Корневая оболочка (concept): topbar + боковой слайдер меню + активный раздел.
- * Ctrl K — палитра поиска по разделам и действиям. Колокольчик — журнал событий
- * UI (факты, без секретов). Правило фактов (AGENTS.md §3.6) действует везде.
- */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import TopBar from './components/TopBar.vue'
 import NavRail from './components/NavRail.vue'
-import type { NavId } from './components/NavRail.vue'
-import { provideNav } from './composables/nav'
+import SectionHeader from './components/SectionHeader.vue'
+import ContextTabs from './components/ContextTabs.vue'
 import ToastHost from './components/ToastHost.vue'
-import Icon from './components/Icon.vue'
-import type { IconName } from './components/Icon.vue'
-import { MOCK_ACTIVE } from './api/mock'
+import CommandPalette from './components/CommandPalette.vue'
+import NotificationPanel from './components/NotificationPanel.vue'
+import { MOCK_ACTIVE } from './api/preview'
+import { provideNav } from './composables/nav'
+import { useNavigation } from './composables/navigation'
+import { disposeBackendState, initBackendState } from './composables/backendState'
 import DashboardView from './views/DashboardView.vue'
 import ChannelsPageView from './views/ChannelsPageView.vue'
 import AutoProtectView from './views/AutoProtectView.vue'
@@ -23,121 +21,34 @@ import SecretsView from './views/SecretsView.vue'
 import NetGuardView from './views/NetGuardView.vue'
 import LogsView from './views/LogsView.vue'
 import SettingsView from './views/SettingsView.vue'
-import { useSecretsStore } from './composables/secretsStore'
-import { uiLogLines } from './composables/uiLog'
-import { fmtTime } from './api/labels'
 
-const active = ref<NavId>('dashboard')
-const { items } = useSecretsStore()
-
-const secretsCount = computed(() => (items.value === null ? null : items.value.length))
-
-function nav(id: NavId): void {
-  active.value = id
-}
-
-// UI-план v3: единственный механизм навигации для всех вложенных компонентов.
-// Дефект v2: views эмитили 'navigate' в пустоту — App.vue не слушал.
-provideNav(nav)
-
-// ---------- палитра поиска (Ctrl K) ----------
-
-type SearchEntry = { label: string; hint: string; icon: IconName; target: NavId }
-
-const searchEntries: SearchEntry[] = [
-  { label: 'Главная — состояние защиты', hint: 'Power-кнопка, текущий канал, карта маршрута', icon: 'dashboard', target: 'dashboard' },
-  { label: 'Каналы', hint: 'Таблица каналов, фильтры, переключение', icon: 'server', target: 'channels' },
-  { label: 'Автозащита', hint: 'Сторож, правила авто-переключения, инциденты', icon: 'shield', target: 'autoprotect' },
-  { label: 'Сеть', hint: 'Сетевая информация, NetGuard, диагностика', icon: 'pulse', target: 'network' },
-  { label: 'Статистика', hint: 'Трафик по периодам, счётчики', icon: 'stats', target: 'statistics' },
-  { label: 'Логи', hint: 'Журнал приложения и ядра', icon: 'logs', target: 'logs' },
-  { label: 'Настройки — секреты', hint: 'Хранилище значений, fingerprint, аудит', icon: 'key', target: 'settings' },
-  { label: 'Тестирование', hint: 'Проверки окружения и защищённого пути', icon: 'flask', target: 'tests' },
-  { label: 'Секреты', hint: 'Карточки значений, проверка, живой тест', icon: 'key', target: 'secrets' },
-  { label: 'NetGuard', hint: 'Авто-починка прокси и DNS', icon: 'pulse', target: 'netguard' },
-]
-
+const { active, section, navigate, openSection } = useNavigation()
+provideNav(navigate)
 const searchOpen = ref(false)
-const searchQuery = ref('')
-const searchIndex = ref(0)
-
-const searchResults = computed<SearchEntry[]>(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return searchEntries
-  return searchEntries.filter((e) => (e.label + ' ' + e.hint).toLowerCase().includes(q))
-})
-
-function openSearch(): void {
-  searchOpen.value = true
-  searchQuery.value = ''
-  searchIndex.value = 0
-}
-
-function closeSearch(): void {
-  searchOpen.value = false
-}
-
-function onSearchKey(e: KeyboardEvent): void {
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    searchIndex.value = Math.min(searchIndex.value + 1, searchResults.value.length - 1)
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    searchIndex.value = Math.max(searchIndex.value - 1, 0)
-  } else if (e.key === 'Enter') {
-    const hit = searchResults.value[searchIndex.value]
-    if (hit) {
-      nav(hit.target)
-      closeSearch()
-    }
-  } else if (e.key === 'Escape') {
-    closeSearch()
-  }
-}
-
-function onGlobalKey(e: KeyboardEvent): void {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault()
-    if (searchOpen.value) closeSearch()
-    else openSearch()
-  } else if (e.key === 'Escape' && searchOpen.value) {
-    closeSearch()
-  }
-}
-
-onMounted(() => window.addEventListener('keydown', onGlobalKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
-
-// ---------- уведомления (последние события журнала UI) ----------
-
 const notificationsOpen = ref(false)
-const logLines = uiLogLines()
-const recentNotifications = computed(() => logLines.value.slice(-8).reverse())
-
-function toggleNotifications(): void {
-  notificationsOpen.value = !notificationsOpen.value
+function openSearch() { notificationsOpen.value = false; searchOpen.value = true }
+function openNotifications() { searchOpen.value = false; notificationsOpen.value = true }
+function onKey(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    if (searchOpen.value) searchOpen.value = false
+    else openSearch()
+  }
 }
-function closeNotifications(): void {
-  notificationsOpen.value = false
-}
-
-function levelIcon(level: string): IconName {
-  if (level === 'error') return 'error'
-  if (level === 'warn') return 'warn'
-  if (level === 'info') return 'info'
-  return 'info'
-}
+onMounted(() => { void initBackendState(); window.addEventListener('keydown', onKey) })
+onUnmounted(() => { disposeBackendState(); window.removeEventListener('keydown', onKey) })
 </script>
-
 <template>
   <div class="app">
-    <div v-if="MOCK_ACTIVE" class="mock-banner">DEV-MOCK: данные вымышлены для визуального теста (npm run dev ?mock=1)</div>
-    <TopBar @open-search="openSearch" @open-notifications="toggleNotifications" />
-
+    <a href="#workspace" class="skip-link">К содержимому</a>
+    <div v-if="MOCK_ACTIVE" class="mock-banner" role="status">Демонстрация · данные вымышлены · VPN не подключён</div>
+    <TopBar @open-search="openSearch" @open-notifications="openNotifications" />
     <div class="app-body">
-      <NavRail :active="active" :secrets-count="secretsCount" @navigate="nav" />
-
-      <main class="main-content">
+      <NavRail :active="section" @navigate="openSection" />
+      <main id="workspace" class="main-content" tabindex="-1">
+        <SectionHeader :section="section" />
+        <ContextTabs :active="active" :section="section" @navigate="navigate" />
+        <div :id="'page-' + active" class="page-content" :role="['network', 'settings'].includes(section) ? 'tabpanel' : undefined" :aria-labelledby="['network', 'settings'].includes(section) ? 'tab-' + active : undefined">
         <DashboardView v-if="active === 'dashboard'" />
         <ChannelsPageView v-else-if="active === 'channels'" />
         <AutoProtectView v-else-if="active === 'autoprotect'" />
@@ -148,246 +59,22 @@ function levelIcon(level: string): IconName {
         <NetGuardView v-else-if="active === 'netguard'" />
         <LogsView v-else-if="active === 'logs'" />
         <SettingsView v-else />
+        </div>
       </main>
     </div>
-
-    <!-- Палитра поиска -->
-    <div v-if="searchOpen" class="overlay" @click.self="closeSearch">
-      <div class="palette card" role="dialog" aria-label="Поиск по настройкам">
-        <div class="palette-input">
-          <Icon name="search" :size="14" />
-          <input
-            v-model="searchQuery"
-            placeholder="Раздел или действие…"
-            autofocus
-            @keydown="onSearchKey"
-          />
-          <kbd>Esc</kbd>
-        </div>
-        <div class="palette-list">
-          <button
-            v-for="(e, i) in searchResults"
-            :key="e.target"
-            class="palette-item"
-            :class="{ sel: i === searchIndex }"
-            @mouseenter="searchIndex = i"
-            @click="nav(e.target); closeSearch()"
-          >
-            <Icon :name="e.icon" :size="14" />
-            <span class="pi-label">{{ e.label }}</span>
-            <span class="pi-hint">{{ e.hint }}</span>
-          </button>
-          <div v-if="searchResults.length === 0" class="palette-empty">Ничего не найдено</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Уведомления: последние строки журнала UI (факты) -->
-    <div v-if="notificationsOpen" class="overlay" @click.self="closeNotifications">
-      <div class="notif-popover card" role="dialog" aria-label="Уведомления">
-        <div class="notif-head">
-          <strong>События</strong>
-          <button class="notif-close" @click="closeNotifications">×</button>
-        </div>
-        <div v-if="recentNotifications.length === 0" class="notif-empty">
-          Событий пока нет — это норма до первых действий.
-        </div>
-        <div v-for="(l, i) in recentNotifications" :key="i" class="notif-row" :class="l.level">
-          <Icon :name="levelIcon(l.level)" :size="13" />
-          <span class="notif-time mono">{{ fmtTime(l.t) }}</span>
-          <span class="notif-text">{{ l.text }}</span>
-        </div>
-      </div>
-    </div>
-
+    <CommandPalette v-if="searchOpen" @close="searchOpen = false" @navigate="navigate" />
+    <NotificationPanel v-if="notificationsOpen" @close="notificationsOpen = false" />
     <ToastHost />
   </div>
 </template>
-
 <style scoped>
-.app {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--app-glow);
-}
-
-.mock-banner {
-  position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 200;
-  padding: 4px 14px;
-  border-radius: 0 0 8px 8px;
-  background: rgba(244, 189, 53, 0.92);
-  color: #1c1500;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  pointer-events: none;
-}
-
-.app::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.23;
-  background: linear-gradient(120deg, transparent 0 55%, rgba(38, 97, 137, 0.1) 55.1%, transparent 70%);
-}
-
-.app-body {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-}
-
-.main-content {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 14px 16px 22px 16px;
-  background: radial-gradient(ellipse 600px 300px at 42% 8%, rgba(11, 53, 82, 0.12), transparent 70%);
-}
-
-/* Палитра поиска */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(3, 9, 16, 0.6);
-  z-index: 90;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 12vh;
-}
-
-.palette {
-  width: 480px;
-  max-width: 92vw;
-  overflow: hidden;
-  background: linear-gradient(145deg, rgba(10, 26, 40, 0.99), rgba(7, 19, 31, 0.99));
-}
-.palette-input {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 11px 13px;
-  border-bottom: 1px solid var(--border);
-  color: #c0d2e0;
-}
-.palette-input input {
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  outline: none;
-}
-.palette-input kbd {
-  padding: 2px 5px;
-  border: 1px solid #294359;
-  border-radius: 4px;
-  color: #8299ad;
-  font-size: 9px;
-  background: #0c1d2c;
-}
-.palette-list {
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 6px;
-}
-.palette-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #c6d3dd;
-  font-size: 12px;
-  text-align: left;
-}
-.palette-item.sel {
-  background: rgba(20, 58, 88, 0.55);
-  color: #eef4f8;
-}
-.pi-label {
-  flex: 0 0 auto;
-}
-.pi-hint {
-  margin-left: auto;
-  color: #6d8497;
-  font-size: 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.palette-empty {
-  padding: 14px;
-  color: #6d8497;
-  font-size: 12px;
-  text-align: center;
-}
-
-/* Уведомления */
-.notif-popover {
-  position: fixed;
-  top: 62px;
-  right: 20px;
-  width: 360px;
-  max-height: 50vh;
-  overflow-y: auto;
-  padding: 10px;
-  background: linear-gradient(145deg, rgba(10, 26, 40, 0.99), rgba(7, 19, 31, 0.99));
-  z-index: 95;
-}
-.notif-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #eef4f8;
-  padding: 2px 4px 8px;
-}
-.notif-close {
-  border: 0;
-  background: transparent;
-  color: #8299ad;
-  font-size: 15px;
-}
-.notif-close:hover {
-  color: #fff;
-}
-.notif-empty {
-  padding: 10px;
-  color: #70889d;
-  font-size: 11px;
-}
-.notif-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 7px 6px;
-  border-top: 1px solid #14293c;
-  font-size: 11px;
-  color: #a4b6c5;
-}
-.notif-row.error {
-  color: #ff8a90;
-}
-.notif-row.warn {
-  color: #ffd479;
-}
-.notif-time {
-  color: #6d8497;
-  flex: 0 0 auto;
-}
-.notif-text {
-  word-break: break-word;
-}
+.app { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.app-body { flex: 1; display: flex; min-height: 0; }
+.main-content { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px 48px; background: radial-gradient(ellipse at 90% 0, #ff622608, transparent 45%); }
+.page-content { width: min(1280px, 100%); margin: auto; min-width: 0; }
+.mock-banner { flex-shrink: 0; padding: 4px 12px; text-align: center; background: #312419; color: #ffcb9e; font-size: 11px; border-bottom: 1px solid #66432c; }
+.skip-link { position: absolute; left: 12px; top: -80px; z-index: 200; padding: 12px; background: var(--panel-2); }
+.skip-link:focus { top: 12px; }
+@media(max-width: 1180px) { .main-content { padding: 20px 20px 36px; } }
+@media(max-width: 700px) { .app-body { flex-direction: column; } .main-content { padding: 16px 12px 30px; } }
 </style>

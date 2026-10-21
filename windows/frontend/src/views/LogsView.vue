@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeading from '../components/PageHeading.vue'
 /**
  * Журнал: backend-события и локальный лог UI. Фильтры: источник (все/backend/
  * UI/движок), уровень, поиск по подстроке. Автопрокрутка с честной паузой:
@@ -41,10 +42,14 @@ function onClear(): void {
   clearUiLog()
 }
 
-function onCopy(): void {
+async function onCopy(): Promise<void> {
   const text = filtered.value.map((l) => `${fmtTime(l.t)} [${l.level}] ${l.text}`).join('\n')
-  void navigator.clipboard.writeText(text)
-  toast('info', `Скопировано строк: ${filtered.value.length} (журнал не содержит секретов)`)
+  try {
+    await navigator.clipboard.writeText(text)
+    toast('info', `Скопировано строк: ${filtered.value.length}`)
+  } catch {
+    toast('error', 'Не удалось записать журнал в буфер обмена')
+  }
 }
 
 /** Держим низ списка, только если пользователь и так внизу (честная пауза). */
@@ -69,13 +74,7 @@ watch(
 
 <template>
   <div class="view">
-    <header class="head">
-      <h2>Журнал</h2>
-      <p class="sub">
-        Диагностика без секретов: события backend помечены [backend], локальные — без метки,
-        строки ядра sing-box — меткой «движок [канал]». Уровни: info/warn/error.
-      </p>
-    </header>
+    <PageHeading title="События" description="Отфильтруйте журнал по источнику, уровню или тексту. Копируется только выбранная выборка." ></PageHeading>
 
     <div class="toolbar">
       <div class="seg">
@@ -98,7 +97,7 @@ watch(
       </div>
       <div class="search">
         <Icon name="search" :size="13" />
-        <input v-model="query" type="text" placeholder="поиск по тексту…" spellcheck="false" />
+        <input v-model="query" aria-label="Поиск в журнале" type="text" placeholder="поиск по тексту…" spellcheck="false" />
         <button v-if="query" class="clear" aria-label="Очистить поиск" @click="query = ''">×</button>
       </div>
       <label class="chk">
@@ -117,7 +116,7 @@ watch(
     </div>
 
     <div ref="listEl" class="loglist" @scroll="onScroll">
-      <div v-if="filtered.length === 0" class="empty">Пока пусто — это норма до первого действия.</div>
+      <div v-if="filtered.length === 0" class="empty">{{ lines.length ? 'Нет событий по выбранным фильтрам.' : 'Событий пока нет.' }}</div>
       <div v-for="(l, i) in filtered" :key="i" class="line" :class="levelClass(l.level)">
         <span class="t mono">{{ fmtTime(l.t) }}</span>
         <span class="lv mono">{{ l.level }}</span>

@@ -21,10 +21,7 @@ import (
 
 // App — composition root UI↔backend (PLAN.md §4.1).
 //
-// Статус Phase A2: секреты-хранилище реализовано (DPAPI), lifecycle VPN —
-// ещё нет (Manager/Engine не написаны). Соответственно Start/Stop/RunProbe
-// возвращают честную ошибку fail-closed, а не имитируют работу: UI показывает
-// ошибку, состояние остаётся stopped.
+// Намерение защиты независимо от состояния engine; сбой не равен Disconnect.
 type App struct {
 	ctx     context.Context
 	vault   *secretvault.Manager
@@ -37,6 +34,7 @@ type App struct {
 	tlast   map[string]time.Time
 	closing atomic.Bool     // true = идёт контролируемое завершение (окно закрыто)
 	fpol    *failoverPolicy // A4: автоматическое переключение каналов (failover.go)
+	sm      controllerSM    // C1: машина состояний адаптивного цикла (controller.go, V2-060)
 	// logFileCh — асинхронный durable-писатель (V2-034): appendLog под a.mu
 	// больше не делает файловый I/O (MkdirAll+Open+write на КАЖДУЮ строку —
 	// на всплеске 224 строк это сотни syscall'ов под мьютексом, тормозящих
@@ -51,6 +49,15 @@ type App struct {
 	// (nil = реальный startCore; тесты подменяют, чтобы не ходить в сеть).
 	retry       retryTimer
 	retryLaunch func()
+	// operationMu serializes prepare/apply/publication. Other operation fields
+	// are protected by a.mu. Stop cancels before waiting for operationMu.
+	operationMu       sync.Mutex
+	onboardingCommit  importCommitFn
+	operationCancel   context.CancelFunc
+	operationID       uint64
+	protectionDesired bool
+	policy            protectionPolicy // nil: production WFP; tests inject no OS effects
+	probeFactory      func(*render.ClientConfig) core.Probe
 }
 
 // NewApp — конструктор для main.go.
@@ -161,29 +168,24 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.closing.Store(false)
 
-	// Режим dead-man helper kill switch (V2-038): процесс запущен с
-	// --killswitch-expire родительским TUN-процессом. Он НЕ GUI: спит expire,
-	// снимает блок-политику и выходит — ДО любого другого lifecycle.
-	if secs, ok := killSwitchExpireRequested(); ok {
-		code := runKillSwitchExpire(time.Duration(secs) * time.Second)
-		os.Exit(code)
-	}
-
 	// Асинхронный durable-писатель журнала (V2-034) — до любых appendLog.
 	a.startLogWriter()
 
 	// Tailer engine-лога sing-box (V2-046) — до первого Start ядра.
 	a.startEngineLogTailer()
 
-	// Одноразовый перенос хранилища из build/bin (стирался ребилдом) в AppData.
-	migrateLegacyVault()
-
 	vaultPath := filepath.Join(vaultDir(), "vault.v1.json")
 	a.vault = secretvault.NewManager(vaultPath)
+	profileErr := a.recoverOnboardingImport()
 	// Предзаполняем типовые слоты (без значений). Ошибка не фатальна:
 	// UI покажет список пустым, а конкретная ошибка уйдёт в журнал.
-	if err := a.vault.Seed(); err != nil {
-		a.appendLog("warn", "seed: "+err.Error())
+	if profileErr != nil {
+		a.appendLog("warn", "onboarding recovery: "+profileErr.Error())
+	} else {
+		migrateLegacyVault()
+		if err := a.vault.Seed(); err != nil {
+			a.appendLog("warn", "seed: "+err.Error())
+		}
 	}
 
 	// Startup self-heal: если прошлый процесс погиб, не восстановив системный
@@ -195,10 +197,8 @@ func (a *App) startup(ctx context.Context) {
 		a.appendLog("info", "proxy self-heal: устранён зависший системный прокси после аварийного завершения")
 	}
 
-	// Остатки kill switch прошлого сбоя (V2-038): state-файл есть, политика
-	// могла остаться (helper умер раньше expire). Снимаем до любого lifecycle;
-	// expire-helper прошлого запуска — страховка, если и здесь не выйдет.
-	cleanupStaleKillSwitch(a.appendLog)
+	// Startup never releases a retained policy, including legacy/unknown state.
+	reportRetainedKillSwitch(a.appendLog)
 
 	a.state = AppState{
 		State:        "stopped",
@@ -207,7 +207,18 @@ func (a *App) startup(ctx context.Context) {
 		Probe:        nil,
 		Error:        "",
 		CoreReady:    false,
-		CoreBlockMsg: "Ядро VPN не подключено к Wails. Start/Probe недоступны: это fail-closed, не ошибка UI.",
+		CoreBlockMsg: "Ядро не запущено; подключение проходит обязательную проверку защищённого пути.",
+	}
+	if strictProtectionRetained() {
+		a.protectionDesired = true
+		a.state.State = "error"
+		a.state.BlockedReason = "protection_retained"
+		a.state.Error = "Сохранено состояние системной защиты. Strict WFP допускает повторное подключение; устаревшее или повреждённое состояние сначала требует явного отключения с правами администратора."
+	}
+	if profileErr != nil {
+		a.state.State = "error"
+		a.state.BlockedReason = "profile_recovery_required"
+		a.state.Error = "Импорт профиля не завершён; восстановление данных не удалось. Подключение заблокировано до восстановления профиля."
 	}
 	a.appendLog("info", "vault: "+vaultPath)
 	a.pushState()
@@ -218,12 +229,18 @@ func (a *App) startup(ctx context.Context) {
 	// Наблюдатель смены сети (V2-054): up/change при живом туннеле →
 	// внеочередной probe; после fail-closed → немедленный авто-ретрай.
 	a.startNetWatch()
+	// Фоновые probe неактивных каналов (D1, V2-063): бюджетная картина
+	// «скорее жив / скорее мёртв» для порядка кандидатов failover; решения
+	// по-прежнему принимает только probe на переключении (инвариант V2-037).
+	a.startBgProbes()
+	// Сетевые эпохи (V2-057, PLAN A0): журнал эпох живёт на App.
+	globalAppForEpoch = a
 
 	// Автоподключение после переключения режима (TUN⇄SOCKS): VPN работал до
 	// перезапуска — восстанавливаем состояние без второго нажатия.
-	if autoConnectRequested() {
+	if profileErr == nil && autoConnectRequested() {
 		a.appendLog("info", "автоподключение после переключения режима")
-		go a.startCore() // startCore сам запускает сторож (ensureWatchdog)
+		_ = a.Start()
 		return
 	}
 	// Наблюдение за туннелем: на каждом тике повторный protected probe;
@@ -248,24 +265,26 @@ func (a *App) GetState() AppState {
 // protected probe). Асинхронно: UI наблюдает переходы через события state.
 func (a *App) Start() error {
 	a.mu.Lock()
+	defer a.mu.Unlock()
 	busy := a.state.State == "starting" || a.state.State == "running" || a.state.State == "stopping"
-	a.mu.Unlock()
 	if busy {
 		return fmt.Errorf("Start: операция уже выполняется (состояние %s)", a.state.State)
 	}
-	a.mu.Lock()
+	if a.closing.Load() {
+		return fmt.Errorf("Start: приложение закрывается")
+	}
+	a.protectionDesired = true
+	a.operationID++
+	id := a.operationID
+	a.state.State = "starting"
 	a.cancelFailClosedRetryLocked() // ручной запуск важнее автоматики (V2-053)
-	a.mu.Unlock()
-	go a.startCore()
+	go a.startCoreGeneration(id)
 	return nil
 }
 
 // Stop — остановка VPN (синхронно: операция короткая).
 func (a *App) Stop() error {
-	a.mu.Lock()
-	a.cancelFailClosedRetryLocked() // ручная остановка отменяет авто-повтор (V2-053)
-	a.mu.Unlock()
-	return a.stopCore()
+	return a.stopCoreFor(stopDisconnect)
 }
 
 // RunProbe — повторный protected probe по работающему туннелю.
@@ -289,8 +308,6 @@ func (a *App) OpenLogsDir() error {
 // выход. Новый процесс стартует уже в нужном режиме; владелец нажимает
 // «Подключить» (или состояние восстанавливается через автозапуск позже).
 
-// EnableTUN — включить TUN-режим (системный трафик через snowden0).
-// Останавливает VPN, перезапускает exe elevated с --tun, завершает процесс.
 func (a *App) EnableTUN() error {
 	return a.switchMode(true)
 }
@@ -308,18 +325,20 @@ func (a *App) switchMode(enable bool) error {
 	if enable == tunRequested() {
 		return fmt.Errorf("режим уже %s", map[bool]string{true: "TUN", false: "SOCKS"}[enable])
 	}
+	// Capture intent before Stop changes the lifecycle state to stopped.
+	a.mu.Lock()
+	wasRunning := a.state.State == "running"
+	a.mu.Unlock()
 	// 1. Остановить работающий туннель (если был) — два экземпляра на одном
 	// SOCKS-порте недопустимы.
-	if err := a.stopCore(); err != nil {
+	if err := a.stopCoreFor(stopRestart); err != nil {
 		a.appendLog("warn", "переключение режима: остановка: "+err.Error())
+		return err
 	}
 	// 2. Перезапуск: TUN требует elevation (UAC), SOCKS — обычный запуск.
 	// --auto-connect добавляется только если VPN был запущен до переключения
 	// (иначе новый процесс честно остаётся stopped — дефект V2-019:
 	// старый код ALWAYS добавлял флаг и молча автоподключался «из ниоткуда»).
-	a.mu.Lock()
-	wasRunning := a.state.State == "running"
-	a.mu.Unlock()
 	args := modeSwitchArgs(enable, wasRunning)
 	if err := restartWithArgs(enable, args...); err != nil {
 		a.appendLog("error", "переключение режима: "+err.Error())
@@ -358,7 +377,9 @@ func autoConnectRequested() bool {
 
 // modeSwitchArgs — аргументы перезапуска при переключении режима (чистая
 // функция для юнит-тестов): [--tun, если включаем] + [--auto-connect, если
-// VPN был запущен — состояние восстанавливается без второго нажатия].
+// VPN был запущен — состояние восстанавливается без второго нажатия] +
+// [--await-previous — новый процесс обязан дождаться выхода старого:
+// иначе Wails SingleInstance молча убивает его (V2-080)].
 func modeSwitchArgs(enable, wasRunning bool) []string {
 	args := []string{}
 	if enable {
@@ -367,6 +388,7 @@ func modeSwitchArgs(enable, wasRunning bool) []string {
 	if wasRunning {
 		args = append(args, autoConnectFlag)
 	}
+	args = append(args, modeSwitchAwaitFlag)
 	return args
 }
 
@@ -386,13 +408,14 @@ func (a *App) OnBeforeClose(ctx context.Context) bool {
 	a.mu.Unlock()
 	_ = ctx // выход идёт через a.ctx (см. requestQuit); параметр — контракт Wails
 	go func() {
-		if err := a.stopCore(); err != nil {
+		if err := a.stopCoreFor(stopQuit); err != nil {
 			a.appendLog("warn", "закрытие: остановка туннеля: "+err.Error())
 		}
 		// Дренировать журнал до выхода: os.Exit в requestQuit пропускает
 		// финальный флаш писателя (V2-034).
 		a.stopEngineLogTailer()
 		a.stopNetWatch()
+		a.stopBgProbes()
 		a.stopLogWriter()
 		a.requestQuit(0)
 	}()
@@ -438,6 +461,7 @@ func testIDs() []struct {
 		{"hy2-reachability", "UDP-пакеты до канала HY2 (8444/udp) не глохнут на пути. Требует заданный пароль HY2."},
 		{"vless-config-present", "Слоты секретов VLESS/HY2 заполнены (значения заданы и проверены локально)."},
 		{"elevated-process", "Процесс запущен с правами администратора (нужно для TUN-режима)."},
+		{"freeze-check", "Диагностика 16КБ-заморозки ТСПУ: скачивание контролируемых объёмов через живой туннель и напрямую. Требует запущенный VPN."},
 		{"core-wired", "Ядро VPN (backend/core) подключено к Wails и готово к запуску."},
 	}
 }
@@ -483,6 +507,8 @@ func (a *App) runTest(id string) TestResultView {
 		ok, detail = a.testSecretsPresent()
 	case "elevated-process":
 		ok, detail = testElevated()
+	case "freeze-check":
+		ok, detail, steps = a.testFreezeCheck()
 	case "core-wired":
 		a.mu.Lock()
 		ok = a.state.CoreReady

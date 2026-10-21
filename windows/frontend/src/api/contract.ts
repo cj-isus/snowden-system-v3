@@ -11,19 +11,14 @@
 
 export const APP_BINDING_VERSION = 1
 
-/** Версия приложения — единственный источник факта версии.
- *  Должна совпадать с info.productVersion в windows/wails.json (проверяет package.ps1).
- *  UI не выдумывает версию: эта константа — та же, что кладёт установщик. */
-export const APP_VERSION = '2.0.0'
-
 /** Фактические lifecycle-состояния backend. `reloading` — идёт
  *  переключение канала (Reload+probe): ручного (SelectChannel) или
  *  автоматического (failover-сторож, A4). */
 export type LifecycleState = 'stopped' | 'starting' | 'running' | 'stopping' | 'reloading' | 'error'
 
-export type BlockedReason = 'no_validated_channel' | 'probe_failed' | 'config_invalid' | 'all_channels_failed'
+export type BlockedReason = 'no_validated_channel' | 'probe_failed' | 'config_invalid' | 'all_channels_failed' | 'protection_retained'
 
-export type ProbeStepStatus = 'pending' | 'running' | 'pass' | 'fail' | 'skipped'
+export type ProbeStepStatus = 'pending' | 'running' | 'pass' | 'fail' | 'skipped' | 'unavailable' | 'leak'
 
 export type ProbeStep = {
   name: string
@@ -64,6 +59,9 @@ export type AppState = {
   probeRunning: boolean
   probeLastAt: string | null
   error: string
+  /** Engine readiness from Go; distinct from the outcome of the path probe. */
+  coreReady: boolean
+  coreBlockMsg: string
   /** V2-053: RFC3339 (UTC) следующей авто-попытки запуска; '' = не запланировано */
   nextRetryAt: string
   /** V2-053: номер следующей авто-попытки (1..); 0 = не запланировано */
@@ -194,11 +192,22 @@ export type NetworkFacts = {
   localIP: string
   isp: string
   publicIP: string
+  tunnelIP: string
   country: string
   countryOrigin: string
   dnsViaTunnel: boolean
   netClass: string // wifi | ethernet | mobile | '' (V2-054)
   checkedAt: string
+}
+
+/** Факты о конкретном запущенном EXE; version задаётся production ldflags. */
+export type RuntimeInfo = {
+  version: string
+  os: string
+  arch: string
+  pid: number
+  coreVersion: string
+  shellVersion: string
 }
 
 /** Счётчики адаптера маршрута по умолчанию (факт ОС). */
@@ -227,6 +236,59 @@ export type FailoverStatus = {
   switches: number
   lastError: string
   nextCheckIn: number
+  smState: string // C1 (V2-060): машина состояний адаптивного цикла; "" = цикл не активен (нет туннеля)
+  smSince: string // RFC3339: с какого момента в этом состоянии ("" = нет)
+  smClass: string // код THEORY последнего классифицированного отказа ("" = не было)
+}
+
+/** Здоровье канала в текущей сетевой эпохе (PLAN-V3 A0, V2-057). */
+export type ChannelHealthEntry = {
+  id: string
+  transport: string // из дескриптора ("vless+ws", "hysteria2+quic", …), "" = не найден
+  ok: number
+  fail: number
+  lastOkAt: string
+  lastFailAt: string
+  lastClass: string // класс отказа из failclass.go ("" = не было)
+  verdict: 'no_data' | 'healthy' | 'failing'
+  // D2 (V2-064): производное состояние восстановления — выводится из фактов
+  // (защищённый probe = сильные, фон D1 = слабые), не хранится и не решает.
+  d2State: 'HEALTHY' | 'PROBATION' | 'RECOVERING' | 'QUARANTINED' | ''
+  d2Note: string // человекочитаемое основание ("" = нет)
+}
+
+export type ChannelHealth = {
+  epoch: number // 0 = факта сети ещё не было (наблюдатель не видел сеть)
+  started: string // момент начала эпохи (RFC3339, "" = нет)
+  netClass: string
+  now: string
+  channels: ChannelHealthEntry[]
+}
+
+/** Независимость пары каналов по failure domains (B2 V2-059 + V2-073).
+ *  `score` — результат policy-модели (не физика и не измерение магистрали);
+ *  `sharedFdoms` — человекочитаемые ОБЩИЕ известные домены ("" = общих
+ *  известных нет); `belowLimit` — пара ниже порога 0.35, т.е. общий домен
+ *  отказа делает выбор между этими каналами небезопасным. */
+export type ChannelIndependenceInfo = {
+  a: string
+  b: string
+  score: number
+  sharedFdoms: string
+  belowLimit: boolean
+}
+
+/** Волна отказов D3 (V2-065): кластер подтверждённых отказов текущей эпохи. */
+export type IncidentCluster = {
+  since: string // момент первого отказа волны (RFC3339)
+  until: string // момент последнего отказа волны (RFC3339)
+  channels: string[] // уникальные id каналов (порядок первого отказа)
+  count: number // событий в волне (может быть > числа каналов)
+  classes: string[] // уникальные классы отказов (failclass)
+  netClasses: string[] // snapshot типов сети событий
+  isps: string[] // snapshot операторов, если collector успел получить факт
+  isWave: boolean // склеено ли в волну (false = одиночный инцидент)
+  clusterId: string // детерминированный id (для ссылок)
 }
 
 /** Класс ответа одного сайта через живой туннель (адаптивный слой, V2-041). */

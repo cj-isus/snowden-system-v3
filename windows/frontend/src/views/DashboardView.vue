@@ -14,14 +14,12 @@ import { useInfoFacts } from '../composables/infoFacts'
 import { useNav } from '../composables/nav'
 import { validationStatusLabels, lifecycleLabels, blockedReasonLabels, fmtDateTime } from '../api/labels'
 import { netGuardStatus } from '../api/backend'
-import type { NetGuardStatus } from '../api/contract'
-import { uiLogLines } from '../composables/uiLog'
+import { usePolling } from '../composables/polling'
 
-const { state, stateLoaded, isRunning, isBusy, primaryAction, channels, tunMode, tunBusy, setTUNMode } = useBackendState()
+const { state, stateLoaded, isRunning, isBusy, primaryAction, tunMode, tunBusy, setTUNMode } = useBackendState()
 const { start, stop, runProbe } = useLifecycle()
-const { facts, failover } = useInfoFacts()
+const { facts } = useInfoFacts()
 const { navTo } = useNav()
-const logLines = uiLogLines()
 
 onMounted(() => {
   void initBackendState()
@@ -56,9 +54,16 @@ const blockedLine = computed(() => {
 
 const heroDescription = computed(() => {
   if (blockedLine.value) return `${blockedLine.value}: запуск остаётся закрытым (fail-closed).`
-  if (isRunning.value) return 'Трафик проходит через защищённый канал.'
+  if (isRunning.value) return tunMode.value
+    ? 'TUN работает; защищённый путь прошёл проверку.'
+    : 'Защищённый канал работает для приложений, использующих системный прокси.'
   if (state.value?.error) return state.value.error
   return 'Соединение не установлено. Запуск — строго после успешного protected-probe.'
+})
+
+const canReleaseProtection = computed(() => {
+  const s = state.value
+  return !!s && (s.state === 'error' || s.state === 'starting' || s.state === 'reloading' || !!s.blockedReason)
 })
 
 // ---------- fail-closed баннер (V2-053) ----------
@@ -193,6 +198,7 @@ const routeServerLabel = computed(() => activeChannel.value?.id ?? '')
 const routeServerHint = computed(() => activeChannel.value?.server ?? '')
 const localIP = computed(() => facts.value?.localIP || null)
 const directEgress = computed(() => facts.value?.publicIP || null)
+const tunnelEgress = computed(() => facts.value?.tunnelIP || null)
 
 // ---------- режим маршрутизации: факт + честное переключение ----------
 
@@ -211,66 +217,8 @@ function onToggleTUN(): void {
   void setTUNMode(!tunMode.value)
 }
 
-// ---------- сводка каналов (вместо копии таблицы v2) ----------
+const { data: netGuard } = usePolling(netGuardStatus, 10000)
 
-const statusCounts = computed(() => {
-  const arr = channels.value ?? []
-  const m = new Map<string, number>()
-  for (const c of arr) m.set(c.validation, (m.get(c.validation) ?? 0) + 1)
-  return [...m.entries()]
-})
-
-function statusClass(v: string): string {
-  if (v === 'live-verified') return 'live'
-  if (v === 'degraded') return 'degraded'
-  if (v === 'blocked') return 'blocked'
-  if (v === 'retired' || v === 'planned') return 'neutral'
-  return 'configured'
-}
-
-// ---------- автозащита (ссылка, не копия раздела) ----------
-
-const watchdogLabel = computed(() => {
-  const f = failover.value
-  if (!f) return 'нет данных сторожа'
-  if (!f.enabled) return 'сторож запустится вместе с VPN'
-  if (f.state === 'closed') return 'сторож активен'
-  if (f.state === 'half-open') return 'идёт автопопытка'
-  if (f.state === 'open') return 'cooldown после сбоя'
-  return f.state
-})
-
-const failoverBadgeClass = computed(() => {
-  const f = failover.value
-  if (!f || !f.enabled) return 'neutral'
-  if (f.state === 'closed') return 'success'
-  if (f.state === 'open') return 'danger'
-  return 'warning'
-})
-
-const nextCheckLabel = computed(() => {
-  const f = failover.value
-  if (!f || !f.enabled) return '—'
-  return f.nextCheckIn <= 0 ? 'сейчас' : `≈ через ${f.nextCheckIn} с`
-})
-
-// ---------- события ----------
-
-const netGuard = ref<NetGuardStatus | null>(null)
-onMounted(async () => {
-  try {
-    netGuard.value = await netGuardStatus()
-  } catch {
-    netGuard.value = null
-  }
-})
-
-const incidentLines = computed(() =>
-  logLines.value
-    .filter((l) => /failover|переключ|BLOCKED|heal|probe/i.test(l.text))
-    .slice(-3)
-    .reverse(),
-)
 </script>
 
 <template>
@@ -282,6 +230,7 @@ const incidentLines = computed(() =>
           class="protection-button"
           :class="heroTone"
           :disabled="primaryAction.disabled"
+          :aria-label="primaryAction.label"
           :title="isRunning ? 'Остановить защиту' : 'Подключить (probe перед активацией — обязателен)'"
           @click="onPrimary"
         >
@@ -293,6 +242,21 @@ const incidentLines = computed(() =>
           <span>{{ heroHeading.toUpperCase() }}</span>
         </div>
 
+        <div class="control-facts" aria-label="Краткие факты подключения">
+          <div class="control-fact">
+            <span>Режим</span>
+            <strong>{{ routingMode ?? 'нет данных' }}</strong>
+          </div>
+          <div class="control-fact">
+            <span>Канал</span>
+            <strong>{{ activeChannel?.id ?? 'не выбран' }}</strong>
+          </div>
+          <div class="control-fact">
+            <span>Проверено</span>
+            <strong>{{ state?.probeLastAt ? fmtDateTime(state.probeLastAt) : 'нет данных' }}</strong>
+          </div>
+        </div>
+
         <button class="disconnect-button" :disabled="primaryAction.disabled" @click="onPrimary">
           {{ primaryAction.label }}
         </button>
@@ -301,6 +265,12 @@ const incidentLines = computed(() =>
       <div class="protection-information">
         <div class="protection-heading" :class="heroTone">{{ heroHeading }}</div>
         <div class="protection-description">{{ heroDescription }}</div>
+        <button
+          v-if="canReleaseProtection"
+          class="release-protection"
+          :disabled="state?.state === 'stopping'"
+          @click="stop"
+        >Отключить защиту и автоповтор</button>
 
         <!-- Fail-closed: все каналы исчерпаны (failover-on-start или сторож) -->
         <div v-if="failClosed" class="failclosed-banner" role="alert">
@@ -427,7 +397,7 @@ const incidentLines = computed(() =>
         <li v-for="(s, i) in probeSteps" :key="i" class="probe-step" :class="s.status" :title="s.detail">
           <span class="ps-name">{{ s.name }}</span>
           <span class="ps-status">{{
-            s.status === 'pass' ? 'пройдено' : s.status === 'fail' ? 'провалено' : s.status === 'running' ? 'выполняется' : s.status === 'skipped' ? 'пропущено' : 'ожидает'
+            s.status === 'pass' ? 'пройдено' : s.status === 'fail' ? 'провалено' : s.status === 'leak' ? 'обнаружена утечка' : s.status === 'unavailable' ? 'нет доказательства' : s.status === 'running' ? 'выполняется' : s.status === 'skipped' ? 'пропущено' : 'ожидает'
           }}</span>
         </li>
       </ol>
@@ -461,7 +431,7 @@ const incidentLines = computed(() =>
           <div class="information-label">Режим маршрутизации</div>
           <div class="information-value">{{ routingMode ?? 'Нет данных' }}</div>
           <div class="information-description">
-            <button class="mode-switch" :disabled="tunBusy || !stateLoaded" :title="tunMode ? 'Перезапуск приложения в SOCKS-режиме (без UAC)' : 'Перезапуск приложения в TUN-режиме: Wintun требует права администратора (UAC). VPN будет остановлен и запущен заново.'" @click="onToggleTUN">
+            <button class="mode-switch" :disabled="tunBusy || !stateLoaded" :title="tunMode ? 'Перезапуск приложения в SOCKS-режиме' : 'Перезапуск с правами администратора и WFP kill switch'" @click="onToggleTUN">
               {{ tunSwitchLabel }}
             </button>
           </div>
@@ -491,70 +461,16 @@ const incidentLines = computed(() =>
       <article class="information-card card">
         <div class="information-icon"><Icon name="shield" :size="20" /></div>
         <div class="information-content">
-          <div class="information-label">Публичный IP (egress)</div>
-          <div class="information-value">{{ isRunning ? 'Скрыт туннелем' : (directEgress ?? 'Нет данных') }}</div>
+          <div class="information-label">Публичный IP защищённого пути</div>
+          <div class="information-value">{{ isRunning ? (tunnelEgress ?? 'Нет данных') : (directEgress ?? 'Нет данных') }}</div>
           <div class="information-description">
-            {{ isRunning ? 'трафик идёт через канал' : facts?.country ? `страна egress: ${facts.country}` : 'подключение не установлено' }}
+            {{ isRunning ? (tunnelEgress ? 'измерен через SOCKS5h' : 'туннельный egress не подтверждён') : facts?.country ? `прямой egress · ${facts.country}` : 'подключение не установлено' }}
           </div>
         </div>
       </article>
     </section>
 
     <!-- ================= КАНАЛЫ + АВТОЗАЩИТА (сводки со ссылками) ================= -->
-    <section class="digest-grid">
-      <section class="card digest-card">
-        <div class="card-header">
-          <h2>Каналы</h2>
-          <span class="count-badge">{{ channels ? channels.length : '—' }}</span>
-          <button class="digest-link" @click="navTo('channels')">Все каналы ›</button>
-        </div>
-        <div v-if="channels === null" class="digest-empty">Список каналов недоступен: backend не отвечает.</div>
-        <div v-else-if="channels.length === 0" class="digest-empty">В конфиге нет каналов — запуск останется заблокированным (fail-closed).</div>
-        <div v-else class="digest-chips">
-          <span v-for="[v, n] in statusCounts" :key="v" class="channel-status" :class="statusClass(v)">
-            <span class="status-dot"></span>{{ validationStatusLabels[v as keyof typeof validationStatusLabels] ?? v }}: {{ n }}
-          </span>
-        </div>
-        <p class="digest-note">
-          Активный: <strong>{{ state?.activeChannelId ?? '—' }}</strong>. В protected selector попадают только каналы
-          «проверен live»; переключение проходит обязательный probe (fail-closed).
-        </p>
-      </section>
-
-      <section class="card digest-card">
-        <div class="card-header">
-          <h2>Автозащита</h2>
-          <span class="status-badge" :class="failoverBadgeClass"><span class="status-dot"></span>{{ watchdogLabel }}</span>
-          <button class="digest-link" @click="navTo('autoprotect')">Подробнее ›</button>
-        </div>
-        <div class="digest-rows">
-          <div class="digest-row"><span>Следующая проверка</span><strong>{{ nextCheckLabel }}</strong></div>
-          <div class="digest-row"><span>Последний probe</span><strong>{{ state?.probeLastAt ? fmtDateTime(state.probeLastAt) : '—' }}</strong></div>
-          <div class="digest-row"><span>Авто-переключений</span><strong>{{ failover ? String(failover.switches) : '—' }}</strong></div>
-        </div>
-        <div v-if="incidentLines.length" class="auto-incidents">
-          <div v-for="(l, i) in incidentLines" :key="i" class="auto-incident" :class="l.level">
-            <span class="ai-dot"></span>
-            <span class="ai-text">{{ l.text }}</span>
-          </div>
-        </div>
-      </section>
-    </section>
-
-    <!-- ================= СОБЫТИЯ ================= -->
-    <section class="events-section card">
-      <div class="events-header">
-        <h2>История событий</h2>
-        <button class="show-more-button" @click="navTo('logs')">Показать больше →</button>
-      </div>
-      <div v-if="logLines.length" class="events-list">
-        <div v-for="(l, i) in logLines.slice(-4).reverse()" :key="i" class="event-line" :class="l.level">
-          <span class="event-time mono">{{ fmtDateTime(l.t) }}</span>
-          <span class="event-text">{{ l.text }}</span>
-        </div>
-      </div>
-      <div v-else class="events-empty">Событий пока нет — журнал наполнится при первом действии.</div>
-    </section>
   </div>
 </template>
 
@@ -653,7 +569,7 @@ const incidentLines = computed(() =>
   font-size: 13.5px;
 }
 .fc-badge {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 3px 8px;
@@ -804,7 +720,7 @@ const incidentLines = computed(() =>
 }
 .current-channel-header h2 {
   margin: 0;
-  font-size: 10.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
@@ -835,7 +751,7 @@ const incidentLines = computed(() =>
   min-width: 0;
 }
 .detail-label {
-  font-size: 9.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--muted-2);
@@ -917,10 +833,10 @@ const incidentLines = computed(() =>
 }
 .route-location { display: flex; flex-direction: column; gap: 1px; }
 .route-location strong { font-size: 11.5px; font-family: var(--mono); }
-.route-location small { font-size: 10px; color: var(--muted-2); }
+.route-location small { font-size: 12px; color: var(--muted-2); }
 
 .egress-fact {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted-2);
 }
 
@@ -937,7 +853,7 @@ const incidentLines = computed(() =>
   border-radius: 7px;
   border: 1px solid var(--border);
   background: rgba(7, 21, 34, 0.65);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-soft);
   min-width: 0;
 }
@@ -971,6 +887,8 @@ const incidentLines = computed(() =>
 .probe-step .ps-status { flex: 0 0 auto; }
 .probe-step.pass .ps-status { color: var(--ok); }
 .probe-step.fail .ps-status { color: var(--danger); }
+.probe-step.leak .ps-status { color: var(--danger); }
+.probe-step.unavailable .ps-status { color: var(--text-faint); }
 .probe-step.running .ps-status { color: var(--accent); }
 .probe-step.skipped .ps-status { color: var(--text-faint); }
 .probe-empty { color: var(--text-faint); font-size: 12px; margin: 0; }
@@ -991,7 +909,7 @@ const incidentLines = computed(() =>
 }
 .verification-column strong { font-size: 12px; }
 .verification-label {
-  font-size: 9.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--muted-2);
@@ -1038,7 +956,7 @@ const incidentLines = computed(() =>
 }
 .information-content { min-width: 0; }
 .information-label {
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted-2);
@@ -1052,7 +970,7 @@ const incidentLines = computed(() =>
   text-overflow: ellipsis;
 }
 .information-description {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted-2);
   min-height: 24px;
   display: flex;
@@ -1065,7 +983,7 @@ const incidentLines = computed(() =>
   border: 1px solid var(--blue-border);
   background: var(--blue-soft);
   color: var(--blue-bright);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .mode-switch:hover:not(:disabled) { background: rgba(20, 140, 255, 0.22); }
 .mode-switch:disabled { opacity: 0.5; cursor: wait; }
@@ -1093,7 +1011,7 @@ const incidentLines = computed(() =>
   border-radius: 9px;
   background: var(--gray-soft);
   border: 1px solid var(--gray-border);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-soft);
 }
 .digest-link {
@@ -1107,7 +1025,7 @@ const incidentLines = computed(() =>
 .digest-link:hover { text-decoration: underline; }
 .digest-empty { color: var(--muted); font-size: 11.5px; }
 .digest-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.digest-note { margin: 0; font-size: 10.5px; color: var(--muted-2); }
+.digest-note { margin: 0; font-size: 12px; color: var(--muted-2); }
 .digest-note strong { font-family: var(--mono); color: var(--text-soft); }
 .digest-rows { display: flex; flex-direction: column; gap: 5px; }
 .digest-row {
@@ -1123,7 +1041,7 @@ const incidentLines = computed(() =>
   display: flex;
   align-items: baseline;
   gap: 7px;
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 5px 8px;
   border-radius: 6px;
   background: rgba(7, 21, 34, 0.6);
@@ -1154,7 +1072,7 @@ const incidentLines = computed(() =>
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 5px 8px;
   border-radius: 6px;
   background: rgba(7, 21, 34, 0.6);
@@ -1172,7 +1090,7 @@ const incidentLines = computed(() =>
   gap: 5px;
   padding: 3px 9px;
   border-radius: 20px;
-  font-size: 10px;
+  font-size: 12px;
   border: 1px solid;
 }
 .channel-status .status-dot { width: 6px; height: 6px; border-radius: 50%; }
@@ -1193,7 +1111,7 @@ const incidentLines = computed(() =>
   gap: 5px;
   padding: 3px 9px;
   border-radius: 20px;
-  font-size: 10px;
+  font-size: 12px;
   border: 1px solid var(--gray-border);
   background: var(--gray-soft);
   color: var(--muted);
@@ -1214,5 +1132,256 @@ const incidentLines = computed(() =>
   .dashboard > .events-section { grid-column: 1; }
   .quick-information { grid-template-columns: repeat(2, 1fr); }
   .connection-summary { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---------- command center visual system ---------- */
+.dashboard {
+  width: min(1280px, 100%);
+  margin: 0 auto;
+  grid-template-columns: minmax(0, 1.55fr) minmax(310px, .8fr);
+  gap: 16px;
+}
+
+.dashboard :deep(.card),
+.protection-hero,
+.security-check-card,
+.digest-card,
+.events-section,
+.information-card {
+  border-color: rgba(42, 62, 77, .82);
+  background: linear-gradient(145deg, rgba(8, 17, 24, .94), rgba(4, 10, 15, .97));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .2);
+}
+
+.protection-hero {
+  min-height: 350px;
+  grid-template-columns: 210px minmax(0, 1fr);
+  border-radius: 2px 16px 2px 16px;
+  clip-path: polygon(0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+}
+
+.protection-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-top: 1px solid rgba(255, 98, 38, .48);
+  background: linear-gradient(90deg, rgba(255, 98, 38, .08), transparent 25%);
+}
+
+.protection-control {
+  border-right: 1px solid rgba(42, 62, 77, .65);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 98, 38, .1), transparent 46%),
+    repeating-radial-gradient(circle at 50% 48%, transparent 0 38px, rgba(255,255,255,.018) 39px 40px);
+}
+
+.protection-button,
+.protection-button.running,
+.protection-button.stopped,
+.protection-button.busy {
+  width: 124px;
+  height: 124px;
+  border: 2px solid #ff6226;
+  color: #ff7c49;
+  background: radial-gradient(circle, rgba(255, 98, 38, .16), rgba(6, 13, 19, .96) 67%);
+  box-shadow:
+    0 0 0 1px rgba(255, 98, 38, .15),
+    0 0 38px rgba(255, 98, 38, .19),
+    inset 0 0 32px rgba(255, 98, 38, .1);
+}
+
+.protection-button::before,
+.protection-button::after {
+  content: '';
+  position: absolute;
+  inset: -11px;
+  border: 1px solid rgba(255, 98, 38, .16);
+  border-radius: 50%;
+  clip-path: polygon(0 0, 42% 0, 42% 100%, 0 100%);
+}
+
+.protection-button::after {
+  inset: -18px;
+  transform: rotate(180deg);
+  opacity: .55;
+}
+
+.power-symbol { font-size: 48px; }
+.protection-state.running .state-dot { background: #ff6226; box-shadow: 0 0 10px #ff6226; }
+.protection-state.running { color: #ff9c76; }
+.disconnect-button { display: none; }
+.release-protection {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.release-protection:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.release-protection:disabled { opacity: .55; cursor: wait; }
+
+.control-facts {
+  width: min(210px, 100%);
+  margin-top: 10px;
+  border-top: 1px solid #1b2b37;
+}
+.control-fact {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 9px;
+  padding: 8px 2px;
+  border-bottom: 1px solid #15242f;
+  text-align: left;
+}
+.control-fact span {
+  color: #607385;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.control-fact strong {
+  color: #aebdca;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.protection-information { padding: 28px 28px 22px 26px; gap: 14px; }
+.protection-heading { font-size: clamp(25px, 2.6vw, 34px); letter-spacing: -.045em; }
+.protection-heading.running { color: #fff; }
+.protection-description { font-size: 13px; }
+
+.current-channel-card,
+.route-visualization {
+  border-radius: 2px 12px 2px 12px;
+  background: rgba(4, 11, 16, .62);
+}
+.current-channel-card { padding: 15px 17px; }
+.current-channel-header h2 { color: #ff8657; letter-spacing: .16em; }
+.current-channel-name { margin: 8px 0 12px; font-size: 18px; }
+.channel-arrow { color: #ff6226; }
+.channel-detail { border-radius: 2px; background: rgba(12, 23, 31, .72); }
+.change-channel-button {
+  height: 34px;
+  border-radius: 2px 8px 2px 8px;
+  border-color: rgba(255, 98, 38, .35);
+  background: rgba(255, 98, 38, .1);
+  color: #ff9b73;
+}
+.change-channel-button:hover { background: rgba(255, 98, 38, .18); }
+
+.route-visualization { height: 104px; }
+.route-visualization.active .route-line path { stroke: #ff6226; }
+.route-visualization.active .route-point .point { background: #ff6226; box-shadow: 0 0 12px #ff6226; }
+
+.connection-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.connection-summary-item { border-radius: 2px 8px 2px 8px; }
+
+.security-check-card,
+.events-section,
+.digest-card,
+.information-card {
+  border-radius: 2px 12px 2px 12px;
+}
+.security-check-card { padding: 18px; gap: 14px; }
+.security-check-card .card-header h2,
+.events-header h2,
+.digest-card .card-header h2 { font-size: 15px; }
+.probe-step { border-radius: 2px; background: rgba(13, 24, 33, .74); padding: 8px 10px; }
+.secondary-button { border-radius: 2px 8px 2px 8px; }
+
+.quick-information { gap: 12px; }
+.quick-information {
+  padding: 0;
+  gap: 0;
+  border: 1px solid rgba(42, 62, 77, .82);
+  border-radius: 2px 12px 2px 12px;
+  background: rgba(5, 12, 18, .82);
+  overflow: hidden;
+}
+.information-card {
+  padding: 17px;
+  border: 0 !important;
+  border-right: 1px solid #1a2a36 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.information-card:last-child { border-right: 0 !important; }
+.information-icon {
+  border-radius: 2px 9px 2px 9px;
+  color: #ff7f4c;
+  background: rgba(255, 98, 38, .1);
+  border-color: rgba(255, 98, 38, .26);
+}
+.information-icon.blue { color: #ff7f4c; background: rgba(255, 98, 38, .1); border-color: rgba(255, 98, 38, .26); }
+.mode-switch { border-radius: 2px 7px 2px 7px; }
+
+.channel-status.live,
+.status-badge.success {
+  color: var(--green-bright);
+  border-color: var(--green-border);
+  background: var(--green-soft);
+}
+.events-section { padding: 17px; }
+.event-line, .auto-incident { border-radius: 2px; }
+
+/* Детальные данные доступны через контекстные вкладки. Главная остаётся
+   рабочей сводкой: состояние, маршрут, probe и четыре факта среды. */
+.digest-grid,
+.events-section { display: none; }
+
+@media (max-width: 1180px) {
+  .dashboard { grid-template-columns: 1fr; }
+  .protection-hero { grid-template-columns: 250px minmax(0, 1fr); }
+}
+
+@media (max-width: 980px) {
+  .protection-hero { grid-template-columns: 1fr; }
+  .protection-control {
+    min-height: 158px;
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    justify-content: center;
+    gap: 28px;
+  }
+  .protection-button,
+  .protection-button.running,
+  .protection-button.stopped,
+  .protection-button.busy {
+    width: 112px;
+    height: 112px;
+  }
+  .power-symbol { font-size: 38px; }
+  .protection-information { padding: 22px 18px 18px; }
+  .control-facts { display: none; }
+  .current-channel-details, .verification-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .quick-information { grid-template-columns: repeat(2, 1fr); }
+  .quick-information { display: grid; }
+  .information-card { border-right: 0 !important; border-bottom: 1px solid #1a2a36 !important; }
+  .connection-summary { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 620px) {
+  .protection-control { min-height: 132px; gap: 18px; }
+  .protection-button,
+  .protection-button.running,
+  .protection-button.stopped,
+  .protection-button.busy { width: 92px; height: 92px; }
+  .power-symbol { font-size: 32px; }
+  .protection-heading { font-size: 24px; }
+  .current-channel-details { grid-template-columns: 1fr 1fr; }
+  .current-channel-details .channel-detail:last-child { grid-column: 1 / -1; }
+  .verification-columns { grid-template-columns: 1fr; }
+  .quick-information { grid-template-columns: 1fr; }
+  .connection-summary { grid-template-columns: 1fr; }
+  .route-visualization { height: 92px; }
 }
 </style>

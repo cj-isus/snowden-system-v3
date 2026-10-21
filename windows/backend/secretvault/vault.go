@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/snowden-system/windows/backend/filetxn"
 	"os"
 	"path/filepath"
 	"sort"
@@ -112,8 +113,9 @@ type Meta struct {
 
 // Manager — владелец файла хранилища и всех операций.
 type Manager struct {
-	path string
-	mu   sync.Mutex // сериализация load→mutate→save; файл читают из нескольких горутин (UI + render)
+	path          string
+	mu            sync.Mutex // сериализация load→mutate→save; файл читают из нескольких горутин (UI + render)
+	importJournal string
 }
 
 func NewManager(path string) *Manager {
@@ -126,6 +128,9 @@ func (m *Manager) Path() string { return m.path }
 // ---------- загрузка/сохранение ----------
 
 func (m *Manager) load() (*fileFormat, error) {
+	if err := filetxn.Check(m.importJournal); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(m.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -353,7 +358,10 @@ func (m *Manager) AddSave(kind, title, value, hint string) (Meta, error) {
 		return Meta{}, err
 	}
 	// Для типовых kinds — повторно используем существующий слот.
-	id := findKind(f, k)
+	id, err := uniqueKind(f, k)
+	if err != nil {
+		return Meta{}, err
+	}
 	if id == "" {
 		id = newID()
 		f.Items[id] = storedEntry{Kind: kind}
@@ -492,14 +500,7 @@ func (m *Manager) Value(id string) (string, error) {
 	if !ok {
 		return "", ErrNotFound
 	}
-	if it.CipherB64 == "" {
-		return "", ErrNotSet
-	}
-	plain, err := m.decryptEntry(it)
-	if err != nil {
-		return "", err
-	}
-	return string(plain), nil
+	return m.entryValue(it)
 }
 
 func (m *Manager) decryptEntry(it storedEntry) ([]byte, error) {

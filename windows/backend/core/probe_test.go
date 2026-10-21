@@ -94,7 +94,7 @@ func TestDirectLeakSemanticsPerMode(t *testing.T) {
 		{"socks: differ = ok", false, "5.6.7.8", []string{"1.2.3.4"}, true},
 		{"tun: equal = ok (весь трафик в туннеле)", true, "1.2.3.4", []string{"1.2.3.4"}, true},
 		{"tun: differ = leak мимо туннеля", true, "5.6.7.8", []string{"1.2.3.4"}, false},
-		{"tun: no tunnel egress = info", true, "5.6.7.8", nil, true},
+		{"tun: no tunnel egress = unavailable", true, "5.6.7.8", nil, false},
 	}
 	for _, tc := range cases {
 		r := directLeakResult(tc.tunMode, okStep(tc.direct), tc.direct, tc.tunnel)
@@ -102,12 +102,16 @@ func TestDirectLeakSemanticsPerMode(t *testing.T) {
 			t.Fatalf("%s: passed=%v, want %v (detail: %s)", tc.name, r.Passed, tc.wantPass, r.Detail)
 		}
 	}
-	// Недоступный direct — не провал в обоих режимах, но с честной пометкой.
+	// Недоступный direct не является отрицательным доказательством утечки.
 	for _, tunMode := range []bool{false, true} {
 		r := directLeakResult(tunMode, ProbeResult{Passed: false, Detail: "timeout"}, "", []string{"1.2.3.4"})
-		if !r.Passed {
-			t.Fatalf("unavailable direct must not fail probe (tun=%v)", tunMode)
+		if r.Passed || r.Status != "unavailable" {
+			t.Fatalf("unavailable direct must not pass probe (tun=%v): %+v", tunMode, r)
 		}
+	}
+	leak := directLeakResult(false, okStep("1.2.3.4"), "1.2.3.4", []string{"1.2.3.4"})
+	if leak.Passed || leak.Status != "leak" {
+		t.Fatalf("совпавший SOCKS egress обязан быть структурной leak: %+v", leak)
 	}
 }
 

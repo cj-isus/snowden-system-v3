@@ -2,7 +2,13 @@
  * Словарь фактических состояний (RU). Никаких синонимов «подключено/соединено»:
  * слова должны совпадать со states контракта 1:1 (AGENTS.md §3.6).
  */
-import type { BlockedReason, LifecycleState, ProbeStepStatus, SecretKind, SecretBackend, ValidationStatus } from './contract'
+import type { BlockedReason, LifecycleState, ProbeStepStatus, SecretKind, SecretBackend, ValidationStatus, TestResult } from './contract'
+
+/** An inapplicable batch item may have ok=true without proving the property. */
+export function isSkippedTest(test: TestResult): boolean {
+  return test.ok !== false && !!test.steps?.length &&
+    test.steps.every(step => step.status === 'skipped')
+}
 
 export const lifecycleLabels: Record<LifecycleState, string> = {
   stopped: 'Остановлен',
@@ -18,6 +24,7 @@ export const blockedReasonLabels: Record<BlockedReason, string> = {
   probe_failed: 'probe не пройден',
   config_invalid: 'конфиг невалиден',
   all_channels_failed: 'все каналы недоступны (failover исчерпан)',
+  protection_retained: 'сохранён запрос системной защиты; состояние требует проверки',
 }
 
 export const probeStepStatusLabels: Record<ProbeStepStatus, string> = {
@@ -26,6 +33,8 @@ export const probeStepStatusLabels: Record<ProbeStepStatus, string> = {
   pass: 'пройдено',
   fail: 'провалено',
   skipped: 'пропущено',
+  unavailable: 'нет доказательства',
+  leak: 'обнаружена утечка',
 }
 
 export const validationStatusLabels: Record<ValidationStatus, string> = {

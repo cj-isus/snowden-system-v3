@@ -36,12 +36,14 @@ const (
 type ProbeResult struct {
 	Name   string `json:"name"`
 	Passed bool   `json:"passed"`
+	Status string `json:"status,omitempty"` // pass | fail | unavailable | leak
 	Detail string `json:"detail"`
 }
 
 type ProbeReport struct {
-	AllPassed bool          `json:"all_passed"`
-	Results   []ProbeResult `json:"results"`
+	AllPassed     bool          `json:"all_passed"`
+	LeakConfirmed bool          `json:"leak_confirmed"`
+	Results       []ProbeResult `json:"results"`
 }
 
 // Summary — однострочный redacted-итог для логов/ошибок.
@@ -133,7 +135,9 @@ func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
 	}
 
 	tunnelClient := pp.tunnelClient()
-	directClient := &http.Client{Timeout: pp.Timeout}
+	// The control must ignore HTTP_PROXY/HTTPS_PROXY; routing in TUN is still
+	// governed by the OS, which is why TUN evidence is evaluated separately.
+	directClient := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: pp.Timeout}
 
 	// Один слот результата на каждый сетевой шаг; индексы фиксированы.
 	nTargets := len(pp.Targets)
@@ -227,6 +231,7 @@ func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
 	if !pp.AllowDirectEgress {
 		r := directLeakResult(pp.DirectLeakThroughTunnel, steps[leakSlot].res, steps[leakSlot].ip, tunnelIPs)
 		report.Results = append(report.Results, r)
+		report.LeakConfirmed = r.Status == "leak"
 		if !r.Passed {
 			failed++
 		}
@@ -309,27 +314,32 @@ func (pp *ProtectedProbe) checkDNS(ctx context.Context, client *http.Client) Pro
 //	TUN   (tunMode=true):  auto_route заворачивает весь трафик ОС в туннель;
 //	расхождение = трафик утёк мимо туннеля на сетевом уровне.
 //
-// Недоступный direct — не провал (политика сети / strict_route), но и не
-// доказательство отсутствия утечки: шаг проходит с пометкой об ограничении.
+// Недоступный direct не доказывает отсутствие утечки. Отдельный статус
+// unavailable позволяет отличить нехватку evidence от подтверждённой leak.
 func directLeakResult(tunMode bool, r ProbeResult, directIP string, tunnelIPs []string) ProbeResult {
 	tunnelIP := firstOr(tunnelIPs, "")
 	switch {
 	case !r.Passed:
-		r.Passed = true
+		r.Status = "unavailable"
 		if tunMode {
-			r.Detail = "direct-путь недоступен (strict_route?) — в TUN-режиме это безопасно, но не доказательство (" + r.Detail + ")"
+			r.Detail = "direct-путь недоступен (strict_route?) — отсутствие утечки не доказано (" + r.Detail + ")"
 		} else {
 			r.Detail = "direct-проверка недоступна из этой сети (" + r.Detail + "); leak-контроль ограничен"
 		}
 	case directIP == "" || tunnelIP == "":
+		r.Passed = false
+		r.Status = "unavailable"
 		r.Detail = "direct egress получен, туннельного нет — сопоставление невозможно"
 	case tunMode && directIP != tunnelIP:
 		r.Passed = false
+		r.Status = "leak"
 		r.Detail = fmt.Sprintf("direct egress %s отличается от туннельного %s — в TUN-режиме трафик утёк мимо туннеля", directIP, tunnelIP)
 	case !tunMode && directIP == tunnelIP:
 		r.Passed = false
+		r.Status = "leak"
 		r.Detail = fmt.Sprintf("direct egress %s совпадает с туннельным — трафик НЕ идёт через туннель", directIP)
 	default:
+		r.Status = "pass"
 		if tunMode {
 			r.Detail = fmt.Sprintf("direct egress %s идёт через туннель (TUN-режим: совпадение — норма)", directIP)
 		} else {

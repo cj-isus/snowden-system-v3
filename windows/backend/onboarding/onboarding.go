@@ -14,29 +14,18 @@
 package onboarding
 
 import (
-	"bytes"
-	"compress/gzip"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"strings"
 	"time"
-
-	"golang.org/x/crypto/scrypt"
 )
 
 const (
 	// Magic "SNOB" + версия формата бандла.
 	magic = "SNOB"
-	// scrypt параметры: на mid-range CPU ~1-2 c в Go (десктоп, не мобильный).
+	// Export defaults stay stable; imported costs are checked in kdf.go.
 	scryptN  = 1 << 15
 	scryptR  = 8
 	scryptP  = 1
@@ -98,140 +87,12 @@ type sealedFormat struct {
 // Seal — зашифровать payload парольной фразой в transport-строку
 // (то, что кодируется в QR / пишется в файл).
 func Seal(payload *BundlePayload, passphrase string) (string, error) {
-	if payload == nil {
-		return "", errors.New("onboarding: payload nil")
-	}
-	if payload.Schema == 0 {
-		payload.Schema = 1
-	}
-	plain, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("onboarding: marshal payload: %w", err)
-	}
-	var gz bytes.Buffer
-	zw, _ := gzip.NewWriterLevel(&gz, gzip.BestCompression)
-	if _, err := zw.Write(plain); err != nil {
-		return "", fmt.Errorf("onboarding: gzip: %w", err)
-	}
-	if err := zw.Close(); err != nil {
-		return "", fmt.Errorf("onboarding: gzip close: %w", err)
-	}
-
-	salt := make([]byte, saltLen)
-	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("onboarding: salt: %w", err)
-	}
-	key, err := scrypt.Key([]byte(passphrase), salt, scryptN, scryptR, scryptP, keyLen)
-	if err != nil {
-		return "", fmt.Errorf("onboarding: scrypt: %w", err)
-	}
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", fmt.Errorf("onboarding: aes: %w", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("onboarding: gcm: %w", err)
-	}
-	nonce := make([]byte, nonceLen)
-	if _, err := rand.Read(nonce); err != nil {
-		return "", fmt.Errorf("onboarding: nonce: %w", err)
-	}
-	// Дополнительные данные: magic+version+params — подделка параметров
-	// (например, подмена N на ослабляющий) рвёт расшифровку.
-	aad := aadFor(1, scryptN, scryptR, scryptP, salt)
-	ct := gcm.Seal(nil, nonce, gz.Bytes(), aad)
-
-	sealed := sealedFormat{
-		Magic: magic, Version: 1,
-		N: scryptN, R: scryptR, P: scryptP,
-		SaltB64:  base64.StdEncoding.EncodeToString(salt),
-		NonceB64: base64.StdEncoding.EncodeToString(nonce),
-		DataB64:  base64.StdEncoding.EncodeToString(ct),
-	}
-	raw, err := json.Marshal(sealed)
-	if err != nil {
-		return "", err
-	}
-	var out bytes.Buffer
-	out.WriteString(magic + "1.")
-	out.WriteString(base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(raw))
-	return out.String(), nil
+	return (bundleCodec{kdf: defaultKDF}).seal(payload, passphrase)
 }
 
-// Open расшифровывает transport-строку. Неверная фраза/повреждение —
-// ErrWrongPassphrase (GCM tag), мусор — ErrBadFormat.
-func Open(transport string, passphrase string) (*BundlePayload, error) {
-	transport = strings.TrimSpace(transport)
-	if len(transport) > MaxBundleSize {
-		return nil, ErrTooLarge
-	}
-	dot := strings.IndexByte(transport, '.')
-	if dot <= 0 || transport[:dot] != magic+"1" {
-		return nil, ErrBadFormat
-	}
-	raw, err := base64.URLEncoding.WithPadding(base64.NoPadding).DecodeString(transport[dot+1:])
-	if err != nil {
-		return nil, ErrBadFormat
-	}
-	var sealed sealedFormat
-	if err := json.Unmarshal(raw, &sealed); err != nil {
-		return nil, ErrBadFormat
-	}
-	if sealed.Magic != magic || sealed.Version != 1 {
-		return nil, ErrBadFormat
-	}
-	// Параметры KDF принимаются из бандла, но с границами снизу
-	// (слабые параметры отвергаем — не даём врагу их ослабить).
-	if sealed.N < 1<<14 || sealed.R < 8 || sealed.P < 1 || sealed.N > 1<<21 {
-		return nil, ErrBadFormat
-	}
-	salt, err := base64.StdEncoding.DecodeString(sealed.SaltB64)
-	if err != nil || len(salt) < 16 {
-		return nil, ErrBadFormat
-	}
-	nonce, err := base64.StdEncoding.DecodeString(sealed.NonceB64)
-	if err != nil || len(nonce) != nonceLen {
-		return nil, ErrBadFormat
-	}
-	ct, err := base64.StdEncoding.DecodeString(sealed.DataB64)
-	if err != nil || len(ct) == 0 {
-		return nil, ErrBadFormat
-	}
-	key, err := scrypt.Key([]byte(passphrase), salt, sealed.N, sealed.R, sealed.P, keyLen)
-	if err != nil {
-		return nil, ErrBadFormat
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, ErrBadFormat
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, ErrBadFormat
-	}
-	aad := aadFor(sealed.Version, sealed.N, sealed.R, sealed.P, salt)
-	plain, err := gcm.Open(nil, nonce, ct, aad)
-	if err != nil {
-		return nil, ErrWrongPassphrase
-	}
-	zr, err := gzip.NewReader(bytes.NewReader(plain))
-	if err != nil {
-		return nil, ErrBadFormat
-	}
-	payloadJSON, err := io.ReadAll(io.LimitReader(zr, MaxBundleSize))
-	if err != nil {
-		return nil, ErrBadFormat
-	}
-	var payload BundlePayload
-	if err := json.Unmarshal(payloadJSON, &payload); err != nil {
-		return nil, ErrBadFormat
-	}
-	if payload.Schema != 1 {
-		return nil, ErrBadFormat
-	}
-	return &payload, nil
+// Open validates bounded container inputs and derives through the shared gate.
+func Open(transport, passphrase string) (*BundlePayload, error) {
+	return (bundleCodec{kdf: defaultKDF}).open(transport, passphrase)
 }
 
 // aadFor — AAD для GCM: связывает заголовок с шифротекстом.

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 )
 
 // appDataDir — корень данных приложения в профиле пользователя.
@@ -11,7 +14,58 @@ import (
 // Урок V2-017 (P0): хранилище секретов и логи НЕ ДОЛЖНЫ жить рядом с exe:
 // wails build очищает build/bin, и каждый ребилд молча уничтожал secrets/.
 // Данные — в %AppData%\snowden-system; exe остаётся одноразовым артефактом.
+//
+// V2-081 (аудит гигиены): в go test appDataDir резолвится в реальный %AppData%
+// пользователя → тесты (NewApp, hardening, planv3) пишут в ПРОДАКШН-журнал
+// %AppData%\snowden-system\logs\app.log — загрязнение прод-логов и рост до ГБ.
+// Исправление: подменяемая точка (переменная уровня пакета) — тесты подменяют
+// через t.TempDir(). Продуктовый путь не меняется.
+var appDataDirOverride = func() string { return "" }
+
+// testDataDir — единый изолированный каталог данных на процесс `go test`:
+// создаётся лениво, живёт до конца процесса (ОС уберёт %TEMP% при очистке).
+var (
+	testDataDirOnce sync.Once
+	testDataDirPath string
+)
+
+// runningUnderGoTest — true, когда процесс запущен как тестовый бинарник
+// (`go test` ставит флаг test.v и имя *.test[.exe]). Проверка нужна ТОЛЬКО
+// для изоляции данных (V2-081) и не влияет на продуктовое поведение.
+func runningUnderGoTest() bool {
+	if flag.Lookup("test.v") != nil {
+		return true
+	}
+	exe := strings.ToLower(os.Args[0])
+	return strings.HasSuffix(exe, ".test") || strings.HasSuffix(exe, ".test.exe")
+}
+
+// testIsolatedDataDir — temp-каталог для тестового процесса ("" = не удался).
+func testIsolatedDataDir() string {
+	testDataDirOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "snowden-test-data-")
+		if err == nil {
+			testDataDirPath = dir
+		}
+	})
+	return testDataDirPath
+}
+
 func appDataDir() string {
+	if override := appDataDirOverride(); override != "" {
+		return override
+	}
+	// V2-081: в тестах прод-каталог пользователя НЕ используется — иначе
+	// NewApp()/стойкие тесты писали в реальный app.log (загрязнение прод-журнала
+	// и рост файла). Явный override (t.TempDir) сильнее авто-изоляции.
+	// Live tests may explicitly opt into the real profile. The opt-in is
+	// deliberately verbose and never inferred from build tags: ordinary tests
+	// must remain isolated even when a developer accidentally compiles `live`.
+	if runningUnderGoTest() && os.Getenv("SNOWDEN_LIVE_USE_PROFILE") != "1" {
+		if dir := testIsolatedDataDir(); dir != "" {
+			return dir
+		}
+	}
 	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
 		return filepath.Join(dir, "snowden-system")
 	}

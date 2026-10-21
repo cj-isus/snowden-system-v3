@@ -19,8 +19,8 @@ import (
 // ProxyEnable=1 на 127.0.0.1:1080 без листенера).
 //
 // Правила (fail-safe, консервативно):
-//   - чиним ТОЛЬКО loopback-прокси вида "socks=127.0.0.1:<port>" или
-//     "127.0.0.1:<port>" (формат, который пишет ProxyManager.SetProxy);
+//   - чиним ТОЛЬКО loopback-прокси Snowden System на фиксированном порту
+//     1080: "socks=127.0.0.1:1080" или "127.0.0.1:1080";
 //   - перед отключением проверяем TCP-соединением, что на порту НЕТ
 //     листенера: живой туннель не трогаем никогда;
 //   - PAC (AutoConfigURL) и внешние (не-loopback) прокси не трогаем.
@@ -66,8 +66,9 @@ func HealStaleSystemProxy() (bool, error) {
 	return true, nil
 }
 
-// LoopbackProxyPort разбирает "socks=127.0.0.1:<port>" / "127.0.0.1:<port>".
-// Прочие форматы ("http=...;https=...", хосты не-loopback) — не наша запись.
+// LoopbackProxyPort распознаёт только значение, которое пишет Snowden System.
+// Другие loopback-порты могут принадлежать стороннему VPN/proxy и не должны
+// отключаться даже при отсутствии листенера.
 func LoopbackProxyPort(server string) (int, bool) {
 	re := regexp.MustCompile(`^(?:socks=)?127\.0\.0\.1:(\d+)$`)
 	m := re.FindStringSubmatch(server)
@@ -76,6 +77,9 @@ func LoopbackProxyPort(server string) (int, bool) {
 	}
 	port, err := strconv.Atoi(m[1])
 	if err != nil || port <= 0 || port > 65535 {
+		return 0, false
+	}
+	if port != 1080 {
 		return 0, false
 	}
 	return port, true
@@ -91,8 +95,6 @@ func LoopbackAlive(port int) bool {
 	return true
 }
 
-// clearSystemProxy — ProxyEnable=0 + уведомление WinINET (тот же путь,
-// что и Restore, но без снапшота: снапшот к мёртвому состоянию не нужен).
 // clearSystemProxy — ProxyEnable=0 + уведомление WinINET (тот же путь,
 // что и Restore, но без снапшота: снапшот к мёртвому состоянию не нужен).
 func clearSystemProxy() error {

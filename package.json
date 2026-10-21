@@ -1,0 +1,10 @@
+{
+  "name": "snowden-system-workspace",
+  "private": true,
+  "description": "Workspace boundary for Node tooling; application dependencies live in windows/frontend.",
+  "scripts": {
+    "test:ui": "npm --prefix windows/frontend test",
+    "check:ui": "npm --prefix windows/frontend run check",
+    "test:backend": "node scripts/harness/project.mjs check --scope backend --run"
+  }
+}

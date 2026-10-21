@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	box "github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/protocol/group"
@@ -25,11 +26,26 @@ var (
 	ErrEngineNotConfigured  = errors.New("sing-box engine is not configured")
 	ErrEngineAlreadyRunning = errors.New("sing-box engine is already running")
 	ErrEngineNotRunning     = errors.New("sing-box engine is not running")
+	// A rejected update did not replace the live instance.
+	ErrReloadRejected = errors.New("reload rejected before engine replacement")
+	// Restoring configuration is not proof of the old path; only Manager may
+	// upgrade this internal result to ErrSwitchRolledBack after a fresh probe.
+	errEngineReloadRolledBack = errors.New("previous engine configuration restored")
+	// Box.Close cannot retry child cleanup after it closes its done channel.
+	// Keep this error sticky: only process isolation/restart can retire the owner.
+	ErrEngineCleanupFailed = errors.New("engine cleanup incomplete; process restart required")
 	// ErrSelectorSwitchUnavailable — seamless-переключение невозможно в текущем
 	// конфиге (нет outbound-группы/тега). Вызывающий обязан откатиться на путь
 	// Reload (Engine.Reload), а не считать это отказом канала.
 	ErrSelectorSwitchUnavailable = errors.New("selector switch unavailable")
 )
+
+// boxInstance is the sing-box boundary used for local lifecycle fault injection.
+type boxInstance interface {
+	Start() error
+	Close() error
+	Outbound() adapter.OutboundManager
+}
 
 // Engine — владелец экземпляра sing-box. Потокобезопасен; каждый вызов
 // проверяет контекст перед входом (FR-004: отмена операции не должна
@@ -40,11 +56,15 @@ var (
 // После успешного Start менеджер закрывает operationCtx — это НЕ должно
 // убивать туннель: соединения sing-box привязаны к контексту бокса.
 type Engine struct {
-	mu        sync.Mutex
-	box       *box.Box
-	rawJSON   []byte
-	runCtx    context.Context
-	runCancel context.CancelFunc
+	mu         sync.Mutex
+	box        boxInstance
+	rawJSON    []byte
+	runCtx     context.Context
+	runCancel  context.CancelFunc
+	cleanupErr error
+	// Optional per-engine factory for deterministic lifecycle fault injection.
+	// Production uses newSingBox; it is not a shared/global test hook.
+	newBox func(context.Context, []byte) (boxInstance, error)
 }
 
 // NewEngine создаёт движок с нормализованным (провалидированным выше по
@@ -63,6 +83,9 @@ func (e *Engine) Start(ctx context.Context) error {
 	if err := contextError(ctx); err != nil {
 		return err
 	}
+	if e.cleanupErr != nil {
+		return e.cleanupErr
+	}
 	if e.box != nil {
 		return ErrEngineAlreadyRunning
 	}
@@ -70,24 +93,35 @@ func (e *Engine) Start(ctx context.Context) error {
 		return ErrEngineNotConfigured
 	}
 	// Собственный контекст времени жизни: только Stop/Reload закрывают его.
-	e.runCtx, e.runCancel = context.WithCancel(context.Background())
-	return e.startBox(e.runCtx)
+	return e.startForOperation(ctx)
 }
 
 // Stop останавливает бокс (идемпотентно) и закрывает контекст времени жизни.
 func (e *Engine) Stop() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.box == nil {
-		return nil
-	}
-	err := e.box.Close()
-	e.box = nil
+	return e.closeBoxLocked()
+}
+
+// Caller holds mu. Never forget an owner whose cleanup did not succeed.
+func (e *Engine) closeBoxLocked() error {
 	if e.runCancel != nil {
 		e.runCancel()
-		e.runCtx, e.runCancel = nil, nil
 	}
-	return err
+	if e.cleanupErr != nil {
+		return e.cleanupErr
+	}
+	if e.box == nil {
+		e.runCtx, e.runCancel = nil, nil
+		return nil
+	}
+	if err := cleanupCall("engine close", e.box.Close); err != nil {
+		e.cleanupErr = errors.Join(ErrEngineCleanupFailed, err)
+		return e.cleanupErr
+	}
+	e.box = nil
+	e.runCtx, e.runCancel = nil, nil
+	return nil
 }
 
 // Reload заменяет конфиг на лету. Новый конфиг парсится sing-box ДО закрытия
@@ -98,10 +132,10 @@ func (e *Engine) Reload(ctx context.Context, rawJSON []byte) error {
 		return err
 	}
 	if len(rawJSON) == 0 {
-		return errors.New("reload: empty config")
+		return errors.Join(ErrReloadRejected, errors.New("reload: empty config"))
 	}
 	if err := validateOptions(ctx, rawJSON); err != nil {
-		return err
+		return errors.Join(ErrReloadRejected, err)
 	}
 
 	e.mu.Lock()
@@ -109,35 +143,71 @@ func (e *Engine) Reload(ctx context.Context, rawJSON []byte) error {
 	if err := contextError(ctx); err != nil {
 		return err
 	}
+	if e.cleanupErr != nil {
+		return e.cleanupErr
+	}
 	if e.box == nil {
 		return ErrEngineNotRunning
 	}
 
 	oldJSON := append([]byte(nil), e.rawJSON...)
-	if err := e.box.Close(); err != nil {
-		e.box = nil
+	if err := e.closeBoxLocked(); err != nil {
 		return fmt.Errorf("reload: close old box: %w", err)
 	}
-	if e.runCancel != nil {
-		e.runCancel()
-	}
 	e.rawJSON = append([]byte(nil), rawJSON...)
-	e.runCtx, e.runCancel = context.WithCancel(context.Background())
-	if err := e.startBox(e.runCtx); err != nil {
+	if err := e.startForOperation(ctx); err != nil {
+		if contextError(ctx) != nil || e.cleanupErr != nil {
+			return err // canceled or unretired candidate must never resurrect the old box
+		}
 		// Rollback: вернуть прежний рабочий конфиг, чтобы защищённый канал жил.
 		e.rawJSON = oldJSON
-		if restartErr := e.startBox(e.runCtx); restartErr != nil {
+		if restartErr := e.startForOperation(ctx); restartErr != nil {
 			return errors.Join(err, restartErr)
 		}
-		return fmt.Errorf("reload: %w (previous config restored)", err)
+		return errors.Join(errEngineReloadRolledBack, fmt.Errorf("reload: %w", err))
 	}
 	return nil
 }
 
-// Status — "running" | "stopped".
+// Copy the applied bytes while Manager owns the lifecycle operation. Never
+// rebuild rollback configuration from descriptors or current secret values.
+func (e *Engine) rawSnapshot() []byte {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]byte(nil), e.rawJSON...)
+}
+
+// Cancellation during Start reaches the box's lifetime context. A successful
+// operation detaches the callback: its later timeout cannot kill the tunnel.
+// This is cooperative cancellation, not a hard bound on third-party Close.
+func (e *Engine) startForOperation(ctx context.Context) (err error) {
+	if err := contextError(ctx); err != nil {
+		return err
+	}
+	e.runCtx, e.runCancel = context.WithCancel(context.Background())
+	stopCancellation := context.AfterFunc(ctx, e.runCancel)
+	defer func() {
+		detached := stopCancellation()
+		if recovered := recover(); recovered != nil {
+			err = errors.Join(err, fmt.Errorf("engine start panic: %v", recovered))
+		}
+		if !detached || contextError(ctx) != nil {
+			err = errors.Join(err, ctx.Err())
+		}
+		if err != nil {
+			err = errors.Join(err, e.closeBoxLocked())
+		}
+	}()
+	return e.startBox(e.runCtx)
+}
+
+// Status — "running" | "stopped" | "error" (cleanup has not been proved).
 func (e *Engine) Status() string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.cleanupErr != nil {
+		return "error"
+	}
 	if e.box != nil {
 		return "running"
 	}
@@ -159,6 +229,9 @@ func (e *Engine) Status() string {
 func (e *Engine) SwitchDefault(selectorTag, tag string) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.cleanupErr != nil {
+		return "", e.cleanupErr
+	}
 	if e.box == nil {
 		return "", ErrEngineNotRunning
 	}
@@ -190,6 +263,9 @@ func (e *Engine) SwitchDefault(selectorTag, tag string) (string, error) {
 func (e *Engine) CurrentDefault(selectorTag string) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.cleanupErr != nil {
+		return "", e.cleanupErr
+	}
 	if e.box == nil {
 		return "", ErrEngineNotRunning
 	}
@@ -258,21 +334,33 @@ func (e *Engine) rewriteSelectorDefault(selectorTag, tag string) error {
 }
 
 func (e *Engine) startBox(ctx context.Context) error {
-	boxCtx := include.Context(ctx)
-	var options option.Options
-	if err := options.UnmarshalJSONContext(boxCtx, e.rawJSON); err != nil {
-		return err
+	factory := e.newBox
+	if factory == nil {
+		factory = newSingBox
 	}
-	b, err := box.New(box.Options{Context: boxCtx, Options: options})
+	b, err := factory(ctx, e.rawJSON)
+	// Retain the box before Start: a partial Start or panic still owns resources.
+	e.box = b
 	if err != nil {
 		return err
 	}
-	if err := b.Start(); err != nil {
-		_ = b.Close()
-		return err
+	if b == nil {
+		return errors.New("engine factory returned no instance")
 	}
-	e.box = b
-	return nil
+	return b.Start()
+}
+
+func newSingBox(ctx context.Context, rawJSON []byte) (boxInstance, error) {
+	boxCtx := include.Context(ctx)
+	var options option.Options
+	if err := options.UnmarshalJSONContext(boxCtx, rawJSON); err != nil {
+		return nil, err
+	}
+	b, err := box.New(box.Options{Context: boxCtx, Options: options})
+	if err != nil {
+		return nil, err // do not wrap a typed nil *box.Box in boxInstance
+	}
+	return b, nil
 }
 
 // validateOptions — парсинг конфига средствами sing-box без старта.

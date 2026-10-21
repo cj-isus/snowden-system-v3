@@ -3,7 +3,7 @@
  * Карточка секрета. Значение не показывается; вместо него — fingerprint
  * (SHA256-префикс), статус проверки и число раскрытий (аудит).
  */
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import type { SecretMeta, SecretTestReport, ProbeStep } from '@/api/contract'
 import {
   secretKindLabels,
@@ -20,19 +20,24 @@ const store = useSecretsStore()
 const confirmingDelete = ref(false)
 const revealing = ref(false)
 const verifying = ref(false)
+let deleteTimer: ReturnType<typeof setTimeout> | undefined
+onUnmounted(() => clearTimeout(deleteTimer))
 
 // «Задать значение» для пустого слота (предзаполнен сеялкой без значения)
 const settingValue = ref(false)
 const newValue = ref('')
 const newConfirm = ref('')
 const showNew = ref(false)
+const saving = ref(false)
 
 const valueMismatch = computed(() => newConfirm.value.length > 0 && newValue.value !== newConfirm.value)
-const canSubmitValue = computed(() => newValue.value.trim().length > 0 && !valueMismatch.value)
+const canSubmitValue = computed(() => newValue.value.trim().length > 0 && newValue.value === newConfirm.value && !saving.value)
 
 async function onSubmitValue(): Promise<void> {
   if (!canSubmitValue.value) return
+  saving.value = true
   const ok = await store.setValue(props.secret.id, newValue.value)
+  saving.value = false
   if (ok) {
     newValue.value = ''
     newConfirm.value = ''
@@ -45,6 +50,7 @@ const kindLabel = computed(() => secretKindLabels[props.secret.kind] ?? props.se
 const backendLabel = computed(() => secretBackendLabels[props.secret.backend] ?? props.secret.backend)
 
 async function onReveal(): Promise<void> {
+  if (revealing.value) return
   revealing.value = true
   try {
     const value = await store.reveal(props.secret.id)
@@ -52,12 +58,15 @@ async function onReveal(): Promise<void> {
       await navigator.clipboard.writeText(value)
       toast('info', 'Значение скопировано в буфер обмена (не отображается на экране)')
     }
+  } catch {
+    toast('error', 'Не удалось скопировать значение. Проверьте доступ к буферу обмена.')
   } finally {
     revealing.value = false
   }
 }
 
 async function onVerify(): Promise<void> {
+  if (verifying.value) return
   verifying.value = true
   try {
     const res = await store.verify(props.secret.id)
@@ -140,7 +149,7 @@ function stepIcon(s: ProbeStep['status']): 'check' | 'cross' | 'refresh' | 'info
 async function onDelete(): Promise<void> {
   if (!confirmingDelete.value) {
     confirmingDelete.value = true
-    window.setTimeout(() => (confirmingDelete.value = false), 4000)
+    deleteTimer = setTimeout(() => (confirmingDelete.value = false), 4000)
     return
   }
   await store.remove(props.secret.id, props.secret.title)
@@ -234,7 +243,7 @@ async function onDelete(): Promise<void> {
       </button>
       <button class="btn" :disabled="revealing" @click="onReveal" title="Скопировать значение в буфер обмена">
         <Icon name="copy" :size="13" />
-        Показать
+        Копировать
       </button>
       <button class="btn" :disabled="verifying" @click="onVerify" title="Проверить формат значения (без сети)">
         <Icon name="check" :size="13" />

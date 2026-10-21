@@ -69,7 +69,8 @@ if (-not $NoInstaller) {
     $version = $wailsJson.info.productVersion
     if (-not $version) { $version = "2.0.0" }
 
-    # makensis: PATH first, then the wails local cache
+    # makensis: PATH, the Wails cache, then the repository-local portable
+    # toolchain used by repeatable builds. The latter is gitignored.
     $makensisPath = $null
     $makensis = Get-Command makensis -ErrorAction SilentlyContinue
     if ($makensis) {
@@ -82,7 +83,14 @@ if (-not $NoInstaller) {
         }
     }
     if (-not $makensisPath) {
-        Write-Warning "makensis not found (PATH / %LOCALAPPDATA%\wails). Install NSIS 3.x - the installer will build on the next run."
+        $repoToolDir = Join-Path (Split-Path -Parent $root) ".tmp\nsis"
+        if (Test-Path $repoToolDir) {
+            $found = Get-ChildItem -Path $repoToolDir -Recurse -Filter makensis.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $makensisPath = $found.FullName }
+        }
+    }
+    if (-not $makensisPath) {
+        Write-Warning "makensis not found (PATH / %LOCALAPPDATA%\wails / .tmp\nsis). Install NSIS 3.x - the installer will build on the next run."
         Write-Host "     Build finished without installer: $exe"
         exit 0
     }

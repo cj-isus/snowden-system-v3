@@ -140,16 +140,9 @@ const mockApp = {
   },
   IsTUNMode: () => Promise.resolve(state.proxyMode === 'tun'),
   EnableTUN: () => {
-    // Верная симуляция реального потока (WIN-TUN-1): backend останавливает VPN
-    // и завершает процесс (UAC) — UI видит stopped, затем начинается «новый
-    // процесс». В превью это перезагрузка страницы с флагом-режимом.
-    setState({ state: 'stopping' })
-    setTimeout(() => {
-      setState({ state: 'stopped', proxyMode: null, activeId: null, active: null, probe: null, probeLastAt: null })
-      sessionStorage.setItem('mock-tun', '1')
-      setTimeout(() => location.reload(), 700)
-    }, 1000)
-    return delay(1000, undefined)
+    sessionStorage.setItem('mock-tun', '1')
+    setTimeout(() => location.reload(), 500)
+    return delay(500, undefined)
   },
   DisableTUN: () => {
     setState({ state: 'stopping' })
@@ -224,7 +217,8 @@ const mockApp = {
 
   // ---------- факты ----------
   GetNetworkFacts: () =>
-    Promise.resolve({ connectionType: 'Wi-Fi', ssid: 'HomeNet-5G', localIP: '192.168.1.42', isp: 'МГТС', publicIP: '91.92.42.245', country: '—', countryOrigin: 'RU', dnsViaTunnel: true, netClass: 'wifi', checkedAt: now() }),
+    Promise.resolve({ connectionType: 'Wi-Fi', ssid: 'HomeNet-5G', localIP: '192.168.1.42', isp: 'МГТС', publicIP: '91.92.42.245', tunnelIP: '203.0.113.10', country: '—', countryOrigin: 'RU', dnsViaTunnel: true, netClass: 'wifi', checkedAt: now() }),
+  GetRuntimeInfo: () => Promise.resolve({ version: 'dev-mock', os: 'windows', arch: 'amd64', pid: 4242, coreVersion: 'v1.13.19', shellVersion: 'v2.13.0' }),
   GetNetStats: () =>
     Promise.resolve({ inOctets: 7_412_336_128 + Math.floor(Math.random() * 3_000_000), outOctets: 1_236_802_048 + Math.floor(Math.random() * 900_000), speedBps: 450_000_000, alias: 'Wi-Fi (wlan0)' }),
   GetAutostart: () => Promise.resolve(false),
@@ -272,7 +266,71 @@ const mockApp = {
   GetDeliveryProfile: () =>
     Promise.resolve({ present: false, version: 0, keyId: '', expiresAt: '', trustedKeys: 2, channelsApplied: 0, error: '' }),
   GetFailoverStatus: () =>
-    Promise.resolve({ enabled: state.state === 'running', state: 'closed', switches: 1, lastError: '', nextCheckIn: 18 }),
+    Promise.resolve({
+      enabled: state.state === 'running',
+      state: 'closed',
+      switches: 1,
+      lastError: '',
+      nextCheckIn: 18,
+      // Превью машины состояний C1: реалистичный инцидент из жизни (V2-060).
+      smState: 'SUSPECTED',
+      smSince: new Date(Date.now() - 45_000).toISOString(),
+      smClass: 'reset_injected',
+    }),
+  GetChannelHealth: () =>
+    Promise.resolve({
+      epoch: 42,
+      started: '2026-09-16T09:41:00Z',
+      netClass: 'wifi',
+      now: now(),
+      channels: [
+        // Активный канал: живой тик сторожа — здоров (D2: сильное ЗА, без истории).
+        { id: 'channel-a-vless', transport: 'vless+ws', ok: 12, fail: 0, lastOkAt: now(), lastFailAt: '', lastClass: '', verdict: 'healthy', d2State: 'HEALTHY', d2Note: 'живой probe подтверждает канал' },
+        // Канал с подтверждённым отказом в этой эпохе (класс из failclass): D2-карантин.
+        { id: 'channel-a-hy2', transport: 'hysteria2+quic', ok: 1, fail: 2, lastOkAt: '2026-09-16T09:42:10Z', lastFailAt: '2026-09-16T09:47:30Z', lastClass: 'reset_injected', verdict: 'failing', d2State: 'QUARANTINED', d2Note: 'защищённый probe подтвердил отказ — до успешного защищённого probe канал не считается живым' },
+        // REALITY: фон недавно видел отказы, серия сброшена, личного ответа ещё не было — RECOVERING.
+        { id: 'channel-a-reality', transport: 'vless+tcp-reality', ok: 0, fail: 0, lastOkAt: '', lastFailAt: '', lastClass: '', verdict: 'no_data', d2State: 'RECOVERING', d2Note: 'серия фоновых отказов сброшена (фон увидел живую сеть), личного ответа канала ещё не было — ждём фонового раунда' },
+        // ShadowTLS: configured и без записей.
+        { id: 'channel-a-shadowtls', transport: 'vless+shadowtls', ok: 0, fail: 0, lastOkAt: '', lastFailAt: '', lastClass: '', verdict: 'no_data', d2State: 'HEALTHY', d2Note: 'оснований для карантина нет' },
+      ],
+    }),
+  GetIncidents: () =>
+    Promise.resolve([
+      // Мок: волна из трёх каналов за полминуты (каноничный случай D3) + одиночный инцидент.
+      {
+        since: new Date(Date.now() - 47 * 1000).toISOString(),
+        until: new Date(Date.now() - 21 * 1000).toISOString(),
+        channels: ['channel-a-vless', 'channel-a-reality', 'channel-a-hy2'],
+        count: 5,
+        classes: ['reset_injected', 'port_blackholed'],
+        netClasses: ['wifi'],
+        isps: ['МГТС'],
+        isWave: true,
+        clusterId: 'wave-mock-1',
+      },
+      {
+        since: new Date(Date.now() - 9 * 60 * 1000).toISOString(),
+        until: new Date(Date.now() - 9 * 60 * 1000).toISOString(),
+        channels: ['channel-a-shadowtls'],
+        count: 1,
+        classes: ['server_unreachable'],
+        netClasses: ['wifi'],
+        isps: ['МГТС'],
+        isWave: false,
+        clusterId: 'wave-mock-2',
+      },
+    ]),
+  GetChannelIndependence: () =>
+    Promise.resolve([
+      // Мок соответствует реальному флоту V2-073: один origin (203.0.113.10)
+      // и один ASN (AS57043) → все пары ниже порога 0.35 (safety clamp).
+      { a: 'channel-a-vless', b: 'channel-a-hy2', score: 0.25, shared_fdoms: 'origin + ASN', below_limit: true },
+      { a: 'channel-a-vless', b: 'channel-a-reality', score: 0.25, shared_fdoms: 'origin + ASN + слой', below_limit: true },
+      { a: 'channel-a-vless', b: 'channel-a-shadowtls', score: 0.25, shared_fdoms: 'origin + ASN + слой', below_limit: true },
+      { a: 'channel-a-hy2', b: 'channel-a-reality', score: 0.25, shared_fdoms: 'origin + ASN', below_limit: true },
+      { a: 'channel-a-hy2', b: 'channel-a-shadowtls', score: 0.25, shared_fdoms: 'origin + ASN', below_limit: true },
+      { a: 'channel-a-reality', b: 'channel-a-shadowtls', score: 0.25, shared_fdoms: 'origin + ASN + класс порта + слой + донор REALITY', below_limit: true },
+    ]),
   RunAdaptiveCheck: () =>
     delay(4000, {
       sites: [
@@ -305,10 +363,11 @@ const mockApp = {
 
 /** Включить мок (только ?mock=1 и только вне Wails). Возвращает true, если применён. */
 export function installMockIfRequested(): boolean {
+  if (!import.meta.env.DEV) return false
   if (typeof window === 'undefined') return false
   const w = window as unknown as Record<string, unknown>
   if (w.go) return false // реальный backend — мок не нужен и запрещён
-  if (!new URLSearchParams(window.location.search).has('mock')) return false
+  if (new URLSearchParams(window.location.search).get('mock') !== '1') return false
 
   w.go = { main: { App: mockApp } }
   w.runtime = {

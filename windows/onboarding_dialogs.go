@@ -5,6 +5,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/snowden-system/windows/backend/onboarding"
+	"io"
 	"os"
 	"strings"
 
@@ -44,9 +46,36 @@ func (a *App) LoadOnboardingFile() (string, error) {
 	if err != nil || path == "" {
 		return "", nil
 	}
-	data, err := os.ReadFile(path)
+	return readOnboardingTransport(path)
+}
+
+// Bound the file read before loading it into memory or invoking the codec.
+func readOnboardingTransport(path string) (string, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("onboarding: чтение файла: %w", err)
 	}
-	return strings.TrimSpace(string(data)), nil
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !st.Mode().IsRegular() {
+		return "", onboarding.ErrBadFormat
+	}
+	if st.Size() > onboarding.MaxBundleSize {
+		return "", onboarding.ErrTooLarge
+	}
+	data, err := io.ReadAll(io.LimitReader(f, onboarding.MaxBundleSize+1))
+	if err != nil {
+		return "", fmt.Errorf("onboarding: чтение файла: %w", err)
+	}
+	if len(data) > onboarding.MaxBundleSize {
+		return "", onboarding.ErrTooLarge
+	}
+	transport := strings.TrimSpace(string(data))
+	if transport == "" {
+		return "", onboarding.ErrBadFormat
+	}
+	return transport, nil
 }

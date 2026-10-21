@@ -1,8 +1,10 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,10 +23,10 @@ func TestModeSwitchArgs(t *testing.T) {
 		wasRunning bool
 		want       []string
 	}{
-		{"enable TUN while running", true, true, []string{"--tun", "--auto-connect"}},
-		{"enable TUN while stopped", true, false, []string{"--tun"}},
-		{"back to SOCKS while running", false, true, []string{"--auto-connect"}},
-		{"back to SOCKS while stopped", false, false, []string{}},
+		{"enable TUN while running", true, true, []string{"--tun", "--auto-connect", "--await-previous"}},
+		{"enable TUN while stopped", true, false, []string{"--tun", "--await-previous"}},
+		{"back to SOCKS while running", false, true, []string{"--auto-connect", "--await-previous"}},
+		{"back to SOCKS while stopped", false, false, []string{"--await-previous"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -33,6 +35,40 @@ func TestModeSwitchArgs(t *testing.T) {
 				t.Fatalf("modeSwitchArgs(%v,%v) = %v, want %v", tt.enable, tt.wasRunning, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestAppDataDirIsolatedUnderGoTest — V2-081: в тестовом процессе данные
+// НЕ могут резолвиться в прод-каталог пользователя (иначе go test пишет
+// в реальный %AppData%\snowden-system\logs\app.log).
+func TestAppDataDirIsolatedUnderGoTest(t *testing.T) {
+	if !runningUnderGoTest() {
+		t.Fatal("тест обязан запускаться как go test-бинарник")
+	}
+	got := appDataDir()
+	if got == "" {
+		t.Fatal("appDataDir не должен быть пустым в тестах")
+	}
+	real, err := os.UserConfigDir()
+	if err == nil && real != "" {
+		prod := filepath.Join(real, "snowden-system")
+		if strings.EqualFold(got, prod) {
+			t.Fatalf("тестовый appDataDir указывает на ПРОД-каталог: %s", got)
+		}
+	}
+	if !strings.Contains(strings.ToLower(got), "snowden-test-data-") {
+		t.Fatalf("ожидался изолированный temp-каталог, получено %s", got)
+	}
+	// logsDir обязан следовать за изоляцией (иначе app.log всё ещё прод).
+	if !strings.Contains(strings.ToLower(logsDir()), "snowden-test-data-") {
+		t.Fatalf("logsDir не изолирован: %s", logsDir())
+	}
+	// Явный override сильнее авто-изоляции (используется тестами с t.TempDir).
+	prev := appDataDirOverride
+	appDataDirOverride = func() string { return `C:\tmp\explicit-override` }
+	defer func() { appDataDirOverride = prev }()
+	if got := appDataDir(); got != `C:\tmp\explicit-override` {
+		t.Fatalf("override проигнорирован: %s", got)
 	}
 }
 
@@ -103,9 +139,14 @@ func TestAppBindingMethodsDoNotSelfDeadlock(t *testing.T) {
 		_, _ = a.SaveSecret("no-such-id", "x")               // err → appendLogLocked
 		_, _ = a.AddSecret("custom", "t", "value-1234", "h") // ok/err — обе ветки
 		_ = a.DeleteSecret("no-such-id")                     // err
-		_, _ = a.VerifySecret("no-such-id")                  // err		_, _, _ = a.TestSecret("no-such-id")    // err
+		_, _ = a.VerifySecret("no-such-id")                  // err
+		_, _, _ = a.TestSecret("no-such-id")                 // err
 		_, _ = a.RevealSecret("no-such-id")                  // err
 		_ = a.runTest("core-wired")                          // appendLogLocked в конце
+		_ = a.runTest("freeze-check")                        // V2-057: новый тест-биндинг (без VPN — честный fail)
+		_ = a.GetChannelHealth()                             // V2-057: health-агрегат (a.mu внутри)
+		_ = a.EpochLabel()                                   // V2-057: метка эпохи
+		_ = a.GetChannelIndependence()                       // V2-059: FD-независимость (a.mu внутри)
 	}()
 	select {
 	case <-done:
@@ -119,14 +160,19 @@ func TestAppBindingMethodsDoNotSelfDeadlock(t *testing.T) {
 func TestStopCoreWaitsForInFlightStart(t *testing.T) {
 	a := NewApp()
 	a.vault = secretvault.NewManager(filepath.Join(t.TempDir(), "vault.v1.json"))
-	runtime_.mu.Lock()
-	runtime_.startBusy = true
-	runtime_.mu.Unlock()
+	a.protectionDesired = true
+	a.operationID = 1
+	a.operationMu.Lock()
+	ctx, cancel, ok := a.beginOperation(1)
+	if !ok {
+		t.Fatal("operation not registered")
+	}
+	released := make(chan struct{})
 	go func() {
-		time.Sleep(300 * time.Millisecond)
-		runtime_.mu.Lock()
-		runtime_.startBusy = false
-		runtime_.mu.Unlock()
+		<-ctx.Done()
+		a.endOperation(cancel)
+		close(released)
+		a.operationMu.Unlock()
 	}()
 	done := make(chan struct{})
 	go func() { _ = a.stopCore(); close(done) }()
@@ -135,11 +181,10 @@ func TestStopCoreWaitsForInFlightStart(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("stopCore не дождался startBusy за 5с")
 	}
-	runtime_.mu.Lock()
-	busy := runtime_.startBusy
-	runtime_.mu.Unlock()
-	if busy {
-		t.Fatal("stopCore завершился до снятия startBusy")
+	select {
+	case <-released:
+	default:
+		t.Fatal("Stop completed before canceled operation released ownership")
 	}
 }
 

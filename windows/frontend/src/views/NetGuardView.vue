@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeading from '../components/PageHeading.vue'
 /**
  * NetGuard: фактическое состояние авто-починки сети (tools/netguard).
  * Только факты из backend-биндинга: задачи планировщика (машинные статусы),
@@ -6,31 +7,19 @@
  * Нет данных — «нет данных». no-access — честный факт (SYSTEM-задача скрыта
  * от не-elevated процесса), а не «не найдена».
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import type { IconName } from '../components/Icon.vue'
 import { netGuardStatus, runProxyHeal } from '../api/backend'
-import type { NetGuardStatus, NetGuardTaskState } from '../api/contract'
+import type { NetGuardTaskState } from '../api/contract'
 import { toast } from '../composables/toast'
+import { usePolling } from '../composables/polling'
 
-const status = ref<NetGuardStatus | null>(null)
-const loading = ref(false)
+const { data: status, loading, error: loadError, refresh } = usePolling(netGuardStatus, 15000)
 const healing = ref(false)
-let timer: number | undefined
-
-async function refresh(): Promise<void> {
-  loading.value = true
-  try {
-    status.value = await netGuardStatus()
-  } catch (e) {
-    status.value = null
-    toast('error', `NetGuard: биндинг недоступен — ${e instanceof Error ? e.message : String(e)}`)
-  } finally {
-    loading.value = false
-  }
-}
 
 async function healNow(): Promise<void> {
+  if (healing.value) return
   healing.value = true
   try {
     const healed = await runProxyHeal()
@@ -49,11 +38,6 @@ async function healNow(): Promise<void> {
   }
 }
 
-onMounted(() => {
-  void refresh()
-  timer = window.setInterval(() => void refresh(), 15000)
-})
-onUnmounted(() => window.clearInterval(timer))
 
 const staleProxy = computed(() => status.value?.proxy.stale ?? false)
 const vpnActive = computed(() => status.value?.socksAlive ?? false)
@@ -63,7 +47,7 @@ const vpnActive = computed(() => status.value?.socksAlive ?? false)
 const hero = computed<{ icon: IconName; cls: string; state: string; sub: string }>(() => {
   const s = status.value
   if (!s) {
-    return { icon: 'refresh', cls: 'busy', state: 'Загрузка данных NetGuard…', sub: 'Биндинг опрашивается; факты появятся после ответа.' }
+    return { icon: loading.value ? 'refresh' : 'warn', cls: loading.value ? 'busy' : 'warning', state: loading.value ? 'Загрузка…' : 'Данные недоступны', sub: loadError.value || 'Откройте приложение Windows для диагностики сети.' }
   }
   const tasks = s.tasks
   const anyMissing = tasks.some((t) => t.status === 'not-found')
@@ -154,24 +138,7 @@ function kindClass(kind: string): string {
 
 <template>
   <div class="view">
-    <header class="head">
-      <h2>NetGuard</h2>
-      <p class="sub">
-        Авто-починка сети (tools/netguard): устраняет зависший системный прокси после
-        аварийного завершения VPN и включает DNS-over-HTTPS, если сеть блокирует порт 53.
-        Данные только из backend, обновление каждые 15 секунд.
-      </p>
-      <div class="actions-row">
-        <button class="btn" :disabled="loading" @click="refresh()">
-          <Icon name="refresh" :size="15" />
-          {{ loading ? 'Обновление…' : 'Обновить' }}
-        </button>
-        <button class="btn" :disabled="healing" @click="healNow()">
-          <Icon name="pulse" :size="15" />
-          {{ healing ? 'Починка…' : 'Починить прокси сейчас' }}
-        </button>
-      </div>
-    </header>
+    <PageHeading title="Восстановление сети" description="Проверка локального прокси и задач восстановления. Исправление запускается по вашему действию." ><button class="btn" :disabled="loading" @click="refresh">Обновить</button><button class="btn" :disabled="healing || loading" @click="healNow">{{ healing ? 'Восстановление…' : 'Исправить прокси' }}</button></PageHeading>
 
     <div v-if="status === null && !loading" class="empty-block card">
       <Icon name="warn" :size="18" />
@@ -211,7 +178,7 @@ function kindClass(kind: string): string {
 
         <section class="panel">
           <h2>Системный прокси</h2>
-          <div class="kv">
+          <div class="proxy-facts">
             <span class="k">Состояние</span>
             <span class="v">
               {{ status.proxy.enabled ? 'включён' : 'выключен' }}
@@ -222,7 +189,7 @@ function kindClass(kind: string): string {
             <span class="v mono">{{ status.proxy.server || '—' }}</span>
             <span class="k">SOCKS VPN :1080</span>
             <span class="v">
-              <span :class="vpnActive ? 'ok-text' : 'dim-text'">{{ vpnActive ? 'слушается (VPN активен)' : 'не слушается (VPN выключен)' }}</span>
+              <span :class="vpnActive ? 'ok-text' : 'dim-text'">{{ vpnActive ? 'локальный порт доступен' : 'локальный порт недоступен' }}</span>
             </span>
           </div>
         </section>
@@ -360,6 +327,10 @@ section.panel {
   margin-left: auto;
 }
 
+.proxy-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 20px; margin-top: 16px; font-size: 13px; }
+.proxy-facts .k { color: var(--muted); }
+.proxy-facts .v { text-align: right; overflow-wrap: anywhere; }
+
 /* События */
 .steps {
   list-style: none;
@@ -381,7 +352,7 @@ section.panel {
 .step .st {
   flex: 0 0 auto;
   color: var(--muted-2);
-  font-size: 9.5px;
+  font-size: 12px;
 }
 .step-status {
   color: var(--text-soft);
@@ -390,7 +361,7 @@ section.panel {
 .last-at {
   margin: 8px 0 0;
   color: var(--muted-2);
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 .task-row {
@@ -413,7 +384,7 @@ section.panel {
   padding: 1px 8px;
   border-radius: 999px;
   background: var(--bg-hover);
-  font-size: 10.5px;
+  font-size: 12px;
   font-family: var(--mono);
 }
 .step.pass .badge-kind {

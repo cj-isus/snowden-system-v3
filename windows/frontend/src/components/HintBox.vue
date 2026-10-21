@@ -27,11 +27,11 @@ const props = withDefaults(
   display: flex;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 12.5px;
   line-height: 1.55;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-soft);
+  background: transparent;
+  border-left: 2px solid var(--border-light);
   color: var(--text-dim);
 }
 

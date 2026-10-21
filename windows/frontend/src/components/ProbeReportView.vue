@@ -59,6 +59,12 @@ defineProps<{
 .step.fail .st {
   color: var(--danger);
 }
+.step.leak .st {
+  color: var(--danger);
+}
+.step.unavailable .st {
+  color: var(--text-faint);
+}
 .step.running .st {
   color: var(--accent);
 }

@@ -1,41 +1,41 @@
-/* snowden.system — дизайн-токены concept (docs/concept/ui.css), глобальные стили.
-   Тёмная «глубоководная» тема: панельный синий + неоновый зелёный статусов. */
+/* snowden.system — единая визуальная система.
+   Спокойная тёмная поверхность, ясная иерархия и минимум декоративного шума. */
 
 :root {
   color-scheme: dark;
 
   /* Фон и панели */
-  --bg: #06111d;
-  --bg-deep: #040d17;
-  --sidebar: #071522;
+  --bg: #070b12;
+  --bg-deep: #05080d;
+  --sidebar: #090e16;
 
-  --panel: #0a1928;
-  --panel-2: #0d1e2f;
-  --panel-3: #102437;
+  --panel: #091119;
+  --panel-2: #0c151e;
+  --panel-3: #111c27;
 
-  --border: #1a344b;
-  --border-light: #24445e;
+  --border: #1c2b38;
+  --border-light: #2b4051;
 
   /* Текст */
-  --text: #e9f1f7;
-  --text-soft: #c3d0dc;
-  --muted: #8399ad;
-  --muted-2: #61798e;
+  --text: #f4f7fa;
+  --text-soft: #cad4df;
+  --muted: #8b9aab;
+  --muted-2: #93a3b3;
 
   /* Статусные акценты */
-  --green: #25e3a0;
-  --green-bright: #43f2b1;
-  --green-dark: #0c9e70;
-  --blue: #148cff;
-  --blue-bright: #42b3ff;
+  --green: #45e4bd;
+  --green-bright: #76f0d0;
+  --green-dark: #159977;
+  --blue: #ff6226;
+  --blue-bright: #ff8b5c;
   --yellow: #f4bd35;
   --red: #ff4f59;
 
   /* Мягкие подложки статусов */
   --green-soft: rgba(37, 227, 160, 0.12);
   --green-border: rgba(37, 227, 160, 0.22);
-  --blue-soft: rgba(20, 140, 255, 0.13);
-  --blue-border: rgba(20, 140, 255, 0.25);
+  --blue-soft: rgba(255, 98, 38, 0.12);
+  --blue-border: rgba(255, 98, 38, 0.28);
   --yellow-soft: rgba(244, 189, 53, 0.12);
   --yellow-border: rgba(244, 189, 53, 0.24);
   --red-soft: rgba(255, 79, 89, 0.12);
@@ -43,32 +43,31 @@
   --gray-soft: rgba(113, 132, 154, 0.1);
   --gray-border: rgba(113, 132, 154, 0.22);
 
-  --shadow:
-    0 18px 40px rgba(0, 0, 0, 0.2),
-    inset 0 1px rgba(255, 255, 255, 0.025);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
 
   --radius: 8px;
 
   /* Фоновая подсветка приложения (радиальные пятна + диагональный блик) */
   --app-glow:
-    radial-gradient(ellipse 700px 500px at 48% 18%, rgba(13, 57, 91, 0.34), transparent 70%),
-    radial-gradient(ellipse 550px 500px at 3% 90%, rgba(16, 48, 75, 0.4), transparent 70%),
-    linear-gradient(135deg, #071522 0%, #06121f 48%, #050f1a 100%);
+    linear-gradient(rgba(7, 12, 18, 0.9), rgba(5, 9, 14, 0.96)),
+    radial-gradient(circle at 84% -8%, rgba(255, 98, 38, 0.15), transparent 32%),
+    radial-gradient(circle at 8% 100%, rgba(255, 98, 38, 0.07), transparent 28%),
+    #05090e;
 
   --mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
-  --sans: Inter, 'Segoe UI', Arial, sans-serif;
+  --sans: Inter, 'Segoe UI Variable', 'Segoe UI', Arial, sans-serif;
 
   /* Совместимость с существующими компонентами (TestCard, SecretCard, HintBox,
      ToastHost и др.): те же роли в палитре concept. */
-  --bg-elevated: #0b1e2f;
-  --bg-panel: #0a1928;
-  --bg-hover: #10283b;
-  --bg-active: #12314a;
-  --border-soft: #1a344b66;
+  --bg-elevated: #111a26;
+  --bg-panel: #0d131d;
+  --bg-hover: #162233;
+  --bg-active: #1a2a3f;
+  --border-soft: #202c3b99;
   --text-dim: #8399ad;
-  --text-faint: #61798e;
-  --accent: #148cff;
-  --accent-soft: rgba(20, 140, 255, 0.13);
+  --text-faint: #8fa0b0;
+  --accent: #ff6226;
+  --accent-soft: rgba(255, 98, 38, 0.12);
   --ok: #25e3a0;
   --ok-soft: rgba(37, 227, 160, 0.12);
   --warn: #f4bd35;
@@ -94,8 +93,8 @@ body,
 
 body {
   font-family: var(--sans);
-  font-size: 13px;
-  line-height: 1.35;
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -114,7 +113,7 @@ button {
     background 0.14s ease,
     border-color 0.14s ease,
     color 0.14s ease,
-    transform 0.08s ease,
+    transform 0.12s ease,
     filter 0.14s ease;
 }
 
@@ -128,8 +127,8 @@ a {
 }
 
 :focus-visible {
-  outline: 1px solid var(--blue-bright);
-  outline-offset: 2px;
+  outline: 2px solid rgba(255, 139, 92, 0.92);
+  outline-offset: 3px;
 }
 
 ::selection {
@@ -165,9 +164,9 @@ h4 {
 
 /* Панель-карточка общего вида */
 .card {
-  border: 1px solid var(--border);
-  background: linear-gradient(145deg, rgba(11, 29, 45, 0.96), rgba(7, 20, 33, 0.96));
-  box-shadow: var(--shadow);
+  border: 1px solid rgba(44, 61, 81, 0.72);
+  background: linear-gradient(145deg, rgba(10, 19, 27, 0.94), rgba(6, 12, 18, 0.97));
+  box-shadow: none;
   border-radius: var(--radius);
 }
 
@@ -181,7 +180,7 @@ h4 {
 .card-header h2 {
   margin: 0;
   color: #eef4f8;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 650;
 }
 
@@ -255,16 +254,16 @@ h4 {
 
 /* Кнопки */
 .btn {
-  height: 29px;
+  min-height: 38px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 0 11px;
-  border: 1px solid #28455d;
-  border-radius: 6px;
+  padding: 0 15px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
   color: #dce7ee;
-  background: #0a1d2d;
-  font-size: 10px;
+  background: #111b28;
+  font-size: 12px;
 }
 .btn:hover:not(:disabled) {
   border-color: #367091;
@@ -276,13 +275,13 @@ h4 {
 }
 
 .btn.primary {
-  height: 32px;
-  border: 1px solid #178cff;
-  border-radius: 6px;
+  min-height: 40px;
+  border: 1px solid #ff8c5c;
+  border-radius: 7px;
   color: #fff;
-  background: linear-gradient(180deg, #168fff, #0d72d6);
-  box-shadow: 0 5px 14px rgba(13, 114, 214, 0.18);
-  font-size: 11px;
+  background: linear-gradient(180deg, #c74f20, #a93b17);
+  box-shadow: 0 3px 12px #ff622612;
+  font-size: 12px;
 }
 .btn.primary:hover:not(:disabled) {
   filter: brightness(1.1);
@@ -319,30 +318,14 @@ h4 {
   letter-spacing: -0.2px;
 }
 
-/* Заголовок раздела внутри контента */
-.section-title-group {
+/* Единая геометрия внутренних разделов. Локальные scoped-стили отвечают за
+   специальные блоки, а эта база удерживает одинаковый ритм по всему продукту. */
+.view {
+  width: min(1280px, 100%);
+  margin: 0 auto;
   display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.section-title-group h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 650;
-}
-
-/* Шапка раздела (единый паттерн всех views): h1/h2 взаимозаменяемы,
-   чтобы заголовки не прыгали между разделами. */
-.head h1 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 650;
-}
-.head .sub {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 11.5px;
-  max-width: 720px;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .actions-row {
@@ -423,3 +406,29 @@ h4 {
   font-size: 11px;
   padding: 0 7px;
 }
+
+/* Workspace layout contract: responsive grids shrink; only data tables scroll. */
+.page-content { container-type: inline-size; }
+.page-content :is(.view, .dashboard, .grid, .state-grid, .card, .rows) { min-width: 0; }
+.page-content :is(.row, .network-row) { overflow-wrap: anywhere; }
+.page-content .row > strong { min-width: 0; }
+.actions-row { flex-wrap: wrap; }
+button, input, select, textarea { touch-action: manipulation; }
+.btn { min-height: 36px; }
+textarea { font: inherit; }
+.card-header { flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.card-header h2 { font-size: 15px; font-weight: 600; }
+@container(max-width: 720px) {
+  .page-content :is(.grid, .state-grid, .about-grid, .sys-grid) { grid-template-columns: minmax(0, 1fr); }
+  .page-content .row { flex-wrap: wrap; gap: 6px 16px; }
+}
+@media(prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+.view section.card { padding: 20px; }
+.table-scroll { overflow: auto; max-width: 100%; }
+.table-scroll table { min-width: 620px; }
+.page-content .grid { gap: 20px; }
+.page-content .view { gap: 20px; }
+.page-content .hint { box-shadow: none; }

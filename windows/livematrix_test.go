@@ -4,7 +4,7 @@
 // «Подключить», порт 1080 слушает). Без Start/Stop — только проверка сайтов.
 // Так тест не конкурирует с UI-кнопкой и не поднимает второй движок.
 //
-// Запуск: go test -tags "live,with_utls,with_gvisor,with_quic" -run TestLiveMultiSiteAttach -v
+// Запуск (PowerShell): $env:SNOWDEN_LIVE_USE_PROFILE='1'; go test -tags "live,with_utls,with_gvisor,with_quic" -run TestLiveMultiSiteAttach -v
 package main
 
 import (

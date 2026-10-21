@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "name": "Snowden System",
+  "mode": "offline",
+  "plan": "docs/PLAN.md",
+  "state": "docs/STATE.md",
+  "lessons": "docs/LESSONS.md",
+  "next": {
+    "id": "OFF-02",
+    "spec": "docs/PLAN.md"
+  },
+  "tags": "with_utls,with_gvisor,with_quic,with_clash_api",
+  "required": [
+    "AGENTS.md",
+    "windows/AGENTS.md",
+    "windows/frontend/AGENTS.md",
+    "configs/AGENTS.md",
+    "docs/AGENTS.md",
+    "docs/MAP.md",
+    "docs/HARNESS.md",
+    "docs/TESTING.md",
+    "docs/UI-DESIGN.md",
+    "docs/STATE.md",
+    "docs/LESSONS.md",
+    "docs/PLAN.md",
+    "docs/tasks/OFF-01.md",
+    "docs/OFFLINE-AUDIT-2026-10-18.md",
+    "windows/go.mod",
+    "windows/go.sum",
+    "windows/wails.json",
+    "windows/tools/package.ps1",
+    "windows/frontend/package.json",
+    "windows/frontend/package-lock.json",
+    "package.json",
+    "Taskfile.yml",
+    ".harness/tools.lock.json",
+    ".harness/gitleaks.toml",
+    "scripts/harness/bootstrap-tools.ps1",
+    "docs/HARNESS-REUSE-2026-10-18.md"
+  ],
+  "contextBudgets": {
+    "AGENTS.md": 200,
+    "windows/AGENTS.md": 70,
+    "windows/frontend/AGENTS.md": 70,
+    "configs/AGENTS.md": 40,
+    "docs/AGENTS.md": 140,
+    "docs/STATE.md": 80,
+    "docs/LESSONS.md": 80,
+    "docs/MAP.md": 160
+  },
+  "zones": [
+    {
+      "name": "Windows facade / lifecycle",
+      "paths": [
+        "windows/main.go",
+        "windows/app.go",
+        "windows/corebridge.go",
+        "windows/backend/core/manager.go",
+        "windows/backend/core/engine.go"
+      ]
+    },
+    {
+      "name": "Защита / доказательства пути",
+      "paths": [
+        "windows/killswitch_windows.go",
+        "windows/wfp_killswitch_windows.go",
+        "windows/backend/core/probe.go",
+        "windows/diagprobe.go"
+      ]
+    },
+    {
+      "name": "Выбор / восстановление",
+      "paths": [
+        "windows/controller.go",
+        "windows/failover.go",
+        "windows/netwatch.go",
+        "windows/autoretry.go",
+        "windows/scoring.go",
+        "windows/chanhealth.go"
+      ]
+    },
+    {
+      "name": "Профили / доверие",
+      "paths": [
+        "windows/backend/render/",
+        "windows/backend/config/",
+        "windows/backend/metadata/",
+        "windows/backend/secretvault/",
+        "windows/onboarding.go",
+        "windows/updateapp.go"
+      ]
+    },
+    {
+      "name": "Vue presentation / API / state",
+      "paths": [
+        "windows/frontend/src/App.vue",
+        "windows/frontend/src/components/",
+        "windows/frontend/src/composables/",
+        "windows/frontend/src/composables/navigation.ts",
+        "windows/frontend/src/composables/polling.ts",
+        "windows/frontend/src/api/contract.ts",
+        "windows/frontend/src/api/backend.ts",
+        "windows/frontend/src/views/",
+        "windows/frontend/src/style.css"
+      ]
+    },
+    {
+      "name": "Локальные UI регрессии / дизайн страниц",
+      "paths": [
+        "windows/frontend/tests/unit/",
+        "windows/frontend/tests/browser/",
+        "windows/frontend/vitest.config.ts",
+        "windows/frontend/playwright.config.ts",
+        "docs/TESTING.md",
+        "docs/UI-DESIGN.md"
+      ]
+    },
+    {
+      "name": "Сервер / поставка",
+      "paths": [
+        "configs/README.md",
+        "configs/singbox/",
+        "configs/deploy-vps.sh",
+        "windows/tools/package.ps1",
+        "windows/build/windows/installer.nsi"
+      ]
+    }
+  ],
+  "profiles": {
+    "harness": {
+      "inputs": [
+        "AGENTS.md",
+        ".harness/project.json",
+        ".harness/tools.lock.json",
+        ".harness/gitleaks.toml",
+        "Taskfile.yml",
+        "scripts/harness/",
+        "docs/AGENTS.md",
+        "docs/HARNESS.md",
+        "docs/MAP.md",
+        "docs/STATE.md",
+        "docs/LESSONS.md",
+        "docs/tasks/",
+        "windows/AGENTS.md",
+        "windows/frontend/AGENTS.md",
+        "configs/AGENTS.md"
+      ],
+      "commands": [
+        {
+          "id": "task-harness",
+          "exe": "$task",
+          "args": [
+            "--taskfile",
+            "Taskfile.yml",
+            "harness:check"
+          ],
+          "cwd": ".",
+          "requires": [
+            ".tools/task/task.exe"
+          ]
+        }
+      ]
+    },
+    "frontend": {
+      "inputs": [
+        "windows/frontend/src/",
+        "windows/frontend/wailsjs/",
+        "windows/frontend/index.html",
+        "windows/frontend/vite.config.ts",
+        "windows/frontend/tsconfig.json",
+        "windows/frontend/package.json",
+        "windows/frontend/package-lock.json",
+        "windows/frontend/tests/",
+        "windows/frontend/vitest.config.ts",
+        "windows/frontend/playwright.config.ts",
+        "windows/frontend/tsconfig.tests.json",
+        "package.json",
+        "Taskfile.yml"
+      ],
+      "commands": [
+        {
+          "id": "task-frontend",
+          "exe": "$task",
+          "args": [
+            "--taskfile",
+            "Taskfile.yml",
+            "frontend:check"
+          ],
+          "cwd": ".",
+          "requires": [
+            ".tools/task/task.exe",
+            "windows/frontend/node_modules/vue-tsc/bin/vue-tsc.js",
+            "windows/frontend/node_modules/vite/bin/vite.js",
+            "windows/frontend/node_modules/vitest/vitest.mjs"
+          ],
+          "onFailure": "AUD-018: проверить проектный PostCSS discovery; не править D:/package.json автоматически"
+        }
+      ]
+    },
+    "backend": {
+      "inputs": [
+        "windows/",
+        "configs/singbox/server-combined.json"
+      ],
+      "commands": [
+        {
+          "id": "task-backend",
+          "exe": "$task",
+          "args": [
+            "--taskfile",
+            "Taskfile.yml",
+            "backend:check"
+          ],
+          "cwd": ".",
+          "requires": [
+            ".tools/task/task.exe"
+          ],
+          "timeoutMs": 900000
+        }
+      ]
+    }
+  }
+}

@@ -1,9 +1,30 @@
 package main
 
 import (
+	"fmt"
+	"net"
 	"testing"
 	"time"
 )
+
+func TestMetricsPortCheckDoesNotLeakListener(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	_ = l.Close()
+	t.Setenv("SNOWDEN_CLASH_PORT", fmt.Sprint(port))
+	m := newMetricsSession()
+	if m == nil {
+		t.Fatal("metrics session unavailable")
+	}
+	l, err = net.Listen("tcp", m.port)
+	if err != nil {
+		t.Fatalf("port was retained by prepare: %v", err)
+	}
+	_ = l.Close()
+}
 
 func mkSnapshot(up, dn int64, hosts ...string) clashSnapshot {
 	s := clashSnapshot{UploadTotal: up, DownloadTotal: dn}

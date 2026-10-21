@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeading from '../components/PageHeading.vue'
 /**
  * Каналы (страница, concept): поиск, фильтр статуса, сортировка по имени,
  * сводка по статусам и таблица каналов. Данные — только из backend (FR-002):
@@ -94,24 +95,15 @@ async function onSwitch(id: string): Promise<void> {
 
 <template>
   <div class="view">
-    <header class="head">
-      <div class="section-title-group">
-        <h2>Каналы</h2>
-        <span class="count-badge">{{ channels ? channels.length : '—' }}</span>
-      </div>
-      <p class="sub">
-        Только каналы активного конфига с их фактическим статусом валидации. В protected
-        selector попадают исключительно проверенные каналы (fail-closed).
-      </p>
-    </header>
+    <PageHeading title="Реестр маршрутов" description="Выберите проверенный канал. Переключение доступно при активном подключении." :count="channels?.length"></PageHeading>
 
     <section class="controls card">
       <div class="channel-search">
         <Icon name="search" :size="13" />
-        <input v-model="search" placeholder="Поиск каналов…" spellcheck="false" />
+        <input v-model="search" aria-label="Поиск каналов" placeholder="Поиск каналов…" spellcheck="false" />
       </div>
 
-      <select v-model="statusFilter" class="status-filter">
+      <select v-model="statusFilter" aria-label="Статус канала" class="status-filter">
         <option v-for="f in filters" :key="f.id" :value="f.id">{{ f.label }}</option>
       </select>
 
@@ -169,6 +161,7 @@ async function onSwitch(id: string): Promise<void> {
             </tr>
           </thead>
           <tbody>
+            <tr v-if="list.length === 0"><td colspan="7" class="empty">По вашим фильтрам каналов нет. Измените запрос или статус.</td></tr>
             <tr v-for="c in list" :key="c.id" :class="{ 'selected-channel': c.id === state?.activeChannelId }">
               <td>
                 <span class="favorite" :class="{ active: c.id === state?.activeChannelId }">{{ c.id === state?.activeChannelId ? '★' : '☆' }}</span>
@@ -293,7 +286,7 @@ async function onSwitch(id: string): Promise<void> {
   border-radius: 6px;
   color: #dce8ef;
   background: #091a29;
-  font-size: 10.5px;
+  font-size: 12px;
   outline: none;
 }
 .sort-button {
@@ -306,7 +299,7 @@ async function onSwitch(id: string): Promise<void> {
   border-radius: 6px;
   color: #8ea4b7;
   background: #091a29;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .sort-button:hover {
   border-color: #2c4f6a;
@@ -395,7 +388,7 @@ async function onSwitch(id: string): Promise<void> {
   width: fit-content;
   border-radius: 5px;
   padding: 4px 7px;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1;
   white-space: nowrap;
 }
@@ -453,7 +446,7 @@ async function onSwitch(id: string): Promise<void> {
   border-radius: 5px;
   color: #dce7ee;
   background: #0b2031;
-  font-size: 9.5px;
+  font-size: 12px;
 }
 .table-action:hover:not(:disabled) {
   background: #102a3f;
@@ -464,5 +457,61 @@ async function onSwitch(id: string): Promise<void> {
   border-color: #1a3042;
   background: #091724;
   cursor: default;
+}
+
+/* Command-center skin: одна рабочая таблица и одна компактная панель фильтров. */
+.controls {
+  padding: 10px 12px;
+  border-radius: 2px 10px 2px 10px;
+  background: rgba(6, 14, 20, .88);
+}
+.channel-search,
+.status-filter,
+.sort-button {
+  height: 36px;
+  border-color: #263947;
+  border-radius: 2px 7px 2px 7px;
+  background: #0a151f;
+}
+.channel-search:focus-within,
+.status-filter:focus,
+.sort-button:hover { border-color: rgba(255, 98, 38, .55); }
+.table-card {
+  padding: 11px;
+  border-radius: 2px 12px 2px 12px;
+  background: rgba(5, 12, 18, .9);
+}
+.table-wrapper { border-radius: 2px 8px 2px 8px; }
+.channels-table { font-size: 11.5px; }
+.channels-table th {
+  height: 38px;
+  color: #8fa1b2;
+  background: #0b1721;
+  border-bottom-color: rgba(255, 98, 38, .24);
+}
+.channels-table td { height: 46px; border-bottom-color: #172732; }
+.channels-table tr:hover { background: rgba(255, 98, 38, .045); }
+.channels-table tr.selected-channel {
+  background: linear-gradient(90deg, rgba(255, 98, 38, .11), rgba(255, 98, 38, .02));
+  box-shadow: inset 2px 0 #ff6226;
+}
+.favorite.active { color: #ff7a45; text-shadow: 0 0 7px rgba(255, 98, 38, .45); }
+.channel-status { border-radius: 2px 6px 2px 6px; }
+.table-action {
+  height: 32px;
+  border-radius: 2px 7px 2px 7px;
+  border-color: #2a3e4d;
+  background: #0b1822;
+}
+.table-action:hover:not(:disabled) {
+  border-color: rgba(255, 98, 38, .45);
+  background: rgba(255, 98, 38, .09);
+  color: #ffae8e;
+}
+
+@media (max-width: 840px) {
+  .controls { flex-wrap: wrap; }
+  .channel-search { width: min(100%, 320px); flex: 1; }
+  .status-summary { width: 100%; }
 }
 </style>

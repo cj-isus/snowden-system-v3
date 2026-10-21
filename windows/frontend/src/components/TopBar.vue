@@ -5,17 +5,20 @@
  * frameless — системная рамка Windows уже даёт эти кнопки, дубликат рядом
  * выглядел как «бесовщина» (V2-051). Если появится frameless-режим — вернуть
  * контролы сюда, а не держать два набора.
- * Версия — из факта сборки (wails.json), не выдумывается.
+ * Версия читается из запущенного backend (production ldflags).
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { APP_VERSION } from '../api/contract'
+import { api } from '../api/backend'
+import type { RuntimeInfo } from '../api/contract'
+import { MOCK_ACTIVE } from '../api/preview'
 import { lifecycleLabels } from '../api/labels'
 import { useBackendState } from '../composables/backendState'
 import { uiLogLines } from '../composables/uiLog'
 import Icon from './Icon.vue'
 import type { IconName } from './Icon.vue'
 
-const APP_VERSION_LABEL = `v${APP_VERSION}`
+const runtimeInfo = ref<RuntimeInfo | null>(null)
+const versionLabel = computed(() => runtimeInfo.value?.version ? `v${runtimeInfo.value.version}` : MOCK_ACTIVE ? 'dev-mock' : 'версия недоступна')
 
 const { lifecycle } = useBackendState()
 
@@ -44,6 +47,7 @@ const clock = ref('')
 let clockTimer: number | undefined
 
 onMounted(() => {
+  void api.getRuntimeInfo().then((v) => (runtimeInfo.value = v)).catch(() => (runtimeInfo.value = null))
   const tick = (): void => {
     clock.value = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
@@ -96,7 +100,7 @@ const statusIcon = computed<IconName>(() => {
       </div>
       <div class="brand-info">
         <div class="brand-name">snowden.system</div>
-        <div class="brand-version">{{ APP_VERSION_LABEL }}</div>
+        <div class="brand-version">{{ versionLabel }}</div>
       </div>
     </div>
 
@@ -125,12 +129,14 @@ const statusIcon = computed<IconName>(() => {
 
 <style scoped>
 .topbar {
-  height: 58px;
-  flex: 0 0 58px;
+  height: 76px;
+  flex: 0 0 76px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #1b3449;
-  background: linear-gradient(180deg, rgba(6, 18, 30, 0.96), rgba(6, 18, 30, 0.72));
+  border-bottom: 1px solid rgba(255, 98, 38, 0.3);
+  background:
+    linear-gradient(90deg, rgba(5, 12, 18, 0.98), rgba(9, 17, 24, 0.92)),
+    repeating-linear-gradient(135deg, transparent 0 32px, rgba(255, 98, 38, 0.025) 33px 34px);
   position: relative;
   z-index: 20;
   -webkit-user-select: none;
@@ -140,23 +146,28 @@ const statusIcon = computed<IconName>(() => {
 .brand {
   display: flex;
   align-items: center;
-  padding: 0 28px;
+  width: 210px;
+  padding: 0 24px;
   height: 100%;
 }
 .brand-logo {
-  width: 25px;
-  height: 34px;
-  margin-right: 15px;
+  width: 28px;
+  height: 38px;
+  margin-right: 13px;
 }
 .brand-logo svg {
   width: 100%;
   height: 100%;
 }
 .brand-logo svg path:first-child {
-  fill: #168cff;
+  fill: transparent;
+  stroke: #f4f7fa;
+  stroke-width: 2;
 }
 .brand-logo svg path:last-child {
-  fill: #46adff;
+  fill: transparent;
+  stroke: #ff6226;
+  stroke-width: 1.5;
 }
 .brand-info {
   display: flex;
@@ -164,40 +175,44 @@ const statusIcon = computed<IconName>(() => {
   margin-top: -1px;
 }
 .brand-name {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 20px;
   font-weight: 650;
-  letter-spacing: -0.45px;
+  letter-spacing: 0.02em;
   color: #f1f5f8;
 }
 .brand-version {
   margin-top: 2px;
-  color: #8299ad;
-  font-size: 10px;
+  color: #6d7d8e;
+  font-size: 12px;
+  letter-spacing: .14em;
 }
 
 .topbar-center {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-left: 10px;
+  margin-left: 30px;
 }
 .lifecycle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 12px;
-  font-size: 10.5px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 2px;
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
   border: 1px solid var(--border);
   background: #091826;
   color: #8ea4b7;
 }
 .lifecycle.ok {
-  color: #42e8ad;
-  border-color: var(--green-border);
-  background: var(--green-soft);
+  color: #ff9b72;
+  border-color: var(--blue-border);
+  background: var(--blue-soft);
+  box-shadow: inset 2px 0 #ff6226, 0 0 22px rgba(255, 98, 38, .08);
 }
 .lifecycle.err {
   color: #ff6870;
@@ -205,39 +220,40 @@ const statusIcon = computed<IconName>(() => {
   background: var(--red-soft);
 }
 .lifecycle.busy {
-  color: #51b8ff;
+  color: #ff9b72;
   border-color: var(--blue-border);
   background: var(--blue-soft);
 }
 .clock {
-  color: #6d8497;
-  font-size: 11px;
+  color: #667789;
+  font-size: 12px;
+  letter-spacing: .08em;
 }
 
 .header-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
-  padding-right: 26px;
+  padding-right: 22px;
   height: 100%;
 }
 
 .settings-search {
-  width: 240px;
-  height: 31px;
+  width: 260px;
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 0 9px;
   color: #91a5b8;
-  background: #091826;
-  border: 1px solid #1d3850;
-  border-radius: 7px;
-  font-size: 11px;
+  background: rgba(7, 14, 21, 0.74);
+  border: 1px solid #223340;
+  border-radius: 4px;
+  font-size: 11.5px;
 }
 .settings-search:hover {
-  border-color: #2c4f6a;
-  background: #0b1c2c;
+  border-color: rgba(255, 98, 38, .48);
+  background: rgba(255, 98, 38, .05);
 }
 .search-icon {
   color: #c0d2e0;
@@ -249,7 +265,7 @@ const statusIcon = computed<IconName>(() => {
   border: 1px solid #294359;
   border-radius: 4px;
   color: #8299ad;
-  font-size: 9px;
+  font-size: 12px;
   background: #0c1d2c;
 }
 
@@ -275,8 +291,26 @@ const statusIcon = computed<IconName>(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--blue-bright);
+  background: #ff6226;
   border: 1.5px solid #0a1c2c;
-  box-shadow: 0 0 7px rgba(66, 179, 255, 0.8);
+  box-shadow: 0 0 9px rgba(255, 98, 38, 0.85);
+}
+
+@media (max-width: 1180px) {
+  .brand { width: 72px; padding: 0 20px; }
+  .brand-info { display: none; }
+  .topbar-center { margin-left: 14px; }
+  .settings-search { width: 42px; justify-content: center; }
+  .settings-search > span:not(.search-icon), .settings-search kbd { display: none; }
+}
+
+@media (max-width: 820px) {
+  .topbar { height: 62px; flex-basis: 62px; }
+  .brand { width: 58px; padding: 0 14px; }
+  .topbar-center { margin-left: 5px; }
+  .clock { display: none; }
+  .header-actions { padding-right: 8px; }
+  .notification-button { margin-left: 2px; }
+  .lifecycle { height: 30px; padding: 0 9px; font-size: 12px; }
 }
 </style>

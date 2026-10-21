@@ -12,8 +12,13 @@ package main
 //   - решается только DEFAULT (какой канал стартует первым при Start без
 //     явного выбора); failover-on-start (V2-040) в любом случае переберёт
 //     остальные validated каналы, если первый не пройдёт probe;
-//   - НИКАКИХ вмешательств в работающий туннель и в SelectChannel:
-//     явный выбор владельца и авто-failover идут прежними путями;
+//   - при смене класса сети работающий туннель сначала проходит обычный
+//     protected probe; только PASS открывает попытку перейти на предпочтительный
+//     канал, а применение идёт через switchChannelCore (Manager + обязательный
+//     probe + rollback). FAIL предпочтительного канала не трогает текущий живой
+//     путь и не считается причиной BLOCKED;
+//   - явный SelectChannel владельца не меняется этой политикой сам по себе:
+//     переоценка запускается только событием up/change сети и всегда gated probe;
 //   - канал не из списка предпочтений любого класса = дефолт pickDefault
 //     (первый live-verified из дескрипторов) — поведение без изменений;
 //   - «нет класса» (факт недоступен) = нет предпочтения — прежнее поведение.
@@ -83,6 +88,18 @@ func pickDefaultChannel(descriptors []render.ChannelDescriptor, netClass string)
 		return cands[i].index < cands[j].index
 	})
 	return cands[0].id
+}
+
+// preferredChannelForNetworkChange — чистый probe-gate policy helper
+// (V2-077): preference может предложить только другой enabled live-verified
+// канал; текущий канал возвращает no-op. Сам helper сеть не трогает и не
+// переключает движок — применение остаётся в Manager через switchChannelCore.
+func preferredChannelForNetworkChange(descriptors []render.ChannelDescriptor, currentID, netClass string) string {
+	want := pickDefaultChannel(descriptors, netClass)
+	if want == "" || want == currentID {
+		return ""
+	}
+	return want
 }
 
 // currentNetClass — класс сети сейчас (факт ОС; «» = неизвестно). Класс

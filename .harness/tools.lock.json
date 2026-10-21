@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-18",
+  "platform": "windows-amd64",
+  "downloads": [
+    {
+      "name": "task",
+      "version": "3.54.0",
+      "license": "MIT",
+      "source": "https://github.com/go-task/task",
+      "url": "https://github.com/go-task/task/releases/download/v3.54.0/task_windows_amd64.zip",
+      "sha256": "837f42f71899ea41d07a47acc81d4d6ea80cb41c68292345f915c656473efcb7",
+      "entry": "task.exe"
+    },
+    {
+      "name": "gitleaks",
+      "version": "8.30.1",
+      "license": "MIT",
+      "source": "https://github.com/gitleaks/gitleaks",
+      "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_windows_x64.zip",
+      "sha256": "d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e",
+      "entry": "gitleaks.exe",
+      "sourceFallback": { "module": "github.com/zricethezav/gitleaks/v8", "version": "v8.30.1" }
+    }
+  ],
+  "goTools": [
+    {
+      "name": "govulncheck",
+      "module": "golang.org/x/vuln/cmd/govulncheck",
+      "version": "v1.9.0",
+      "license": "BSD-3-Clause",
+      "source": "https://go.dev/doc/security/vuln/"
+    }
+  ]
+}

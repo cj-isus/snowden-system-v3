@@ -32,12 +32,12 @@ func testSecrets(withPin bool) *fakeSecrets {
 			"hy2-obfs-password": "236124c16317a5b7236124c16317a5b7",
 			// Канал C (REALITY, V2-044): тестовые значения того же формата,
 			// что требует валидатор (X25519 base64url 43 симв., hex short_id).
-			"vless-uuid-c":         "00000000-0000-4000-8000-00000000000c",
+			"vless-uuid-c":         "07e2116d-7340-445a-946a-e063b6730586",
 			"reality-public-key-c": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"reality-short-id-c":   "0123456c",
 			// Канал D (ShadowTLS v3, V2-051): тестовые значения требуемого формата
 			// (UUID; base64 от 16 байт = 24 симв.).
-			"vless-uuid-d":         "a468b418-0f94-4533-9dae-bae634b4842e",
+			"vless-uuid-d":         "00000000-0000-4000-8000-00000000000d",
 			"shadowtls-password-d": "FsAQBjjhfc4q0ShK3w2xzg==",
 		},
 		pins: map[string]string{},
@@ -527,6 +527,9 @@ func TestRenderTUNInboundAdded(t *testing.T) {
 			if !in.AutoRoute || !in.StrictRoute {
 				t.Fatal("tun inbound must have auto_route+strict_route (leak protection)")
 			}
+			if len(in.Address) != 2 || in.Address[0] != "10.203.0.1/30" || in.Address[1] != "fdfe:dcba:9876::1/126" {
+				t.Fatalf("tun inbound must carry explicit IPv4/IPv6 addresses, got %v", in.Address)
+			}
 		case "mixed":
 			foundSocks = true
 		}
@@ -663,6 +666,74 @@ func TestProbeTargetsFromDescriptorAndFallback(t *testing.T) {
 	}
 	if len(cc.ProbeTargets) != 2 || cc.ProbeTargets[0] != DefaultProbeTargets[0] {
 		t.Fatalf("fallback targets expected: %v", cc.ProbeTargets)
+	}
+}
+
+func TestPrimaryProbeTargetMustBeSelfHosted(t *testing.T) {
+	channels, _ := LoadDescriptors()
+	var reality ChannelDescriptor
+	for _, ch := range channels {
+		if ch.Transport == "tcp-reality" {
+			reality = ch
+		}
+	}
+	if reality.ID == "" {
+		t.Fatal("встроенный набор без tcp-reality-канала")
+	}
+	reality.ProbeTargets = []string{"https://api.ipify.org", "https://ifconfig.me/all.json"}
+	if err := validateChannel(reality); err == nil || !strings.Contains(err.Error(), "first probe target") {
+		t.Fatalf("третьесторонняя primary probe-цель должна быть отклонена, err=%v", err)
+	}
+	reality.ProbeTargets = []string{"https://vpn.example.com/ip", "https://api.ipify.org"}
+	reality.ProbePrimaryHost = "vpn.example.com"
+	if err := validateChannel(reality); err != nil {
+		t.Fatalf("явно заданная self-hosted primary probe-цель должна пройти: %v", err)
+	}
+}
+
+// V2-068 (аудит D1): TunnelPort — порт КАНАЛА для классификатора отказов.
+// У reality он 8443, тогда как probe-цели — https без явного порта (=> 443);
+// именно это расхождение делало диагноз port_blackholed недостижимым в проде.
+func TestTunnelPortFollowsDefaultChannel(t *testing.T) {
+	channels, _ := LoadDescriptors()
+	var reality ChannelDescriptor
+	for _, ch := range channels {
+		if ch.Transport == "tcp-reality" {
+			reality = ch
+		}
+	}
+	if reality.ID == "" {
+		t.Fatal("встроенный набор без tcp-reality-канала — тест потерял смысл")
+	}
+	if got := tunnelPortFor(channels, reality.ID); got != 8443 {
+		t.Fatalf("порт канала reality = %d, want 8443", got)
+	}
+	// Неизвестный канал → 0: классификатор обязан честно деградировать к порту
+	// probe-цели, а не выдумывать порт-класс.
+	if got := tunnelPortFor(channels, "no-such-channel"); got != 0 {
+		t.Fatalf("неизвестный канал → 0, got %d", got)
+	}
+	// Расхождение, ради которого правка сделана: probe-цель без явного порта
+	// (=> 443) при порте канала 8443.
+	if int(reality.Port) == 443 {
+		t.Fatal("порт канала reality не должен быть 443 — иначе регрессия не ловится")
+	}
+	if len(reality.ProbeTargets) == 0 || !strings.HasPrefix(reality.ProbeTargets[0], "https://") ||
+		strings.Contains(reality.ProbeTargets[0], ":443") {
+		t.Fatalf("ожидалась https-цель без явного порта, получено %v", reality.ProbeTargets)
+	}
+	// Рендер по умолчанию (vless, первый live-verified) несёт порт 443: CDN-ветка.
+	cc, err := RenderFrom(channels, testSecrets(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cc.TunnelPort != 443 {
+		t.Fatalf("TunnelPort дефолтного канала = %d, want 443 (CDN-ветка)", cc.TunnelPort)
+	}
+	// И это не порт probe-цели как таковой: у reality цели дают 443, а канал 8443
+	// (проверка смысла правки, а не совпадения значений).
+	if cc.TunnelPort == tunnelPortFor(channels, reality.ID) {
+		t.Fatal("порт дефолтного канала и reality совпали — тест перестал различать источник порта")
 	}
 }
 

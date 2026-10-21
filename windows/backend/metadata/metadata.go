@@ -23,9 +23,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/snowden-system/windows/backend/filetxn"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -50,25 +52,6 @@ type Envelope struct {
 	// Полный список заменяет предыдущий (не merge): envelope — единый источник
 	// правды метаданных. Доставed owner'ом через тот же подписанный конверт.
 	SplitDirect []string `json:"split_direct,omitempty"`
-}
-
-// Channel — дескриптор канала во встроенном формате render (schema 1/2:
-// tcp-reality несёт uuid_ref/reality_*_ref). Только ссылки на секреты.
-type Channel struct {
-	ID                  string   `json:"id"`
-	Protocol            string   `json:"protocol"`
-	Transport           string   `json:"transport"`
-	Hostname            string   `json:"hostname"`
-	Port                uint16   `json:"port"`
-	OriginServer        string   `json:"origin_server"`
-	ExpectedEgress      string   `json:"expected_egress"`
-	CredentialRefs      []string `json:"credential_refs"`
-	ValidationStatus    string   `json:"validation_status"`
-	ValidatedAt         *string  `json:"validated_at,omitempty"`
-	Enabled             bool     `json:"enabled"`
-	UUIDRef             string   `json:"uuid_ref,omitempty"`
-	RealityPublicKeyRef string   `json:"reality_public_key_ref,omitempty"`
-	RealityShortIDRef   string   `json:"reality_short_id_ref,omitempty"`
 }
 
 // Validate — fail-closed проверка envelope БЕЗ подписи (структура и семантика).
@@ -99,7 +82,6 @@ func (e *Envelope) Validate(now time.Time, minimumVersion uint64) error {
 		if p == "" || strings.ContainsAny(p, `/\`) || strings.Contains(p, " ") || filepath.Base(p) != p {
 			return fmt.Errorf("metadata: split_direct[%d]: invalid process name %q", i, e.SplitDirect[i])
 		}
-		e.SplitDirect[i] = p
 	}
 	seen := map[string]bool{}
 	revoked := map[string]bool{}
@@ -118,13 +100,13 @@ func (e *Envelope) Validate(now time.Time, minimumVersion uint64) error {
 		// — штатный механизм отзыва канала; envelope может одновременно нести
 		// и revoked-канал, и его замену. Право интерпретации — у render
 		// (applyEnvelopeOverride удаляет revoked из набора).
-		if len(c.CredentialRefs) == 0 {
-			return fmt.Errorf("metadata: channel %s: no credential refs", c.ID)
+		// Revoked records stay inert; retain the historical reference-shape gate.
+		validate := ValidateChannel
+		if revoked[c.ID] {
+			validate = validateCredentialRefs
 		}
-		for _, ref := range c.CredentialRefs {
-			if strings.ContainsAny(ref, "\r\n") || secretShaped(ref) {
-				return fmt.Errorf("metadata: channel %s: invalid credential ref %q", c.ID, ref)
-			}
+		if err := validate(c); err != nil {
+			return fmt.Errorf("metadata: channel %s: %w", c.ID, err)
 		}
 	}
 	return nil
@@ -214,7 +196,8 @@ const (
 )
 
 // KeysPath / EnvelopePath — канонические пути файлов.
-func (s *Store) KeysPath() string { return filepath.Join(s.Dir, keysFileName) }
+func (s *Store) KeysPath() string      { return filepath.Join(s.Dir, keysFileName) }
+func (s *Store) ImportJournal() string { return filepath.Join(s.Dir, "import.pending") }
 func (s *Store) EnvelopePath() string {
 	return filepath.Join(s.Dir, envelopeFileName)
 }
@@ -235,6 +218,9 @@ type trustedKey struct {
 // LoadKeys — чтение и разбор доверенных ключей. Отсутствие файла — не ошибка:
 // возвращается пустая таблица и present=false (override просто не применяется).
 func (s *Store) LoadKeys() (keys map[string]ed25519.PublicKey, present bool, err error) {
+	if err := filetxn.Check(s.ImportJournal()); err != nil {
+		return nil, false, err
+	}
 	data, err := os.ReadFile(s.KeysPath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -247,6 +233,10 @@ func (s *Store) LoadKeys() (keys map[string]ed25519.PublicKey, present bool, err
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
 		return nil, true, fmt.Errorf("metadata: parse keys: %w", err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return nil, true, errors.New("metadata: trailing keys data")
 	}
 	if f.Schema != 1 {
 		return nil, true, fmt.Errorf("metadata: keys file schema %d", f.Schema)
@@ -268,22 +258,38 @@ func (s *Store) LoadKeys() (keys map[string]ed25519.PublicKey, present bool, err
 
 // SaveKeys — атомарная запись таблицы ключей (temp + rename), права 0600.
 func (s *Store) SaveKeys(keys map[string]ed25519.PublicKey) error {
+	if err := filetxn.Check(s.ImportJournal()); err != nil {
+		return err
+	}
+	data, err := EncodeKeys(keys)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return fmt.Errorf("metadata: mkdir: %w", err)
 	}
+	return atomicWrite(s.KeysPath(), json.RawMessage(data))
+}
+
+// EncodeKeys prepares the same representation as SaveKeys without disk writes.
+func EncodeKeys(keys map[string]ed25519.PublicKey) ([]byte, error) {
 	f := trustedKeysFile{Schema: 1}
 	for id, pub := range keys {
 		if len(pub) != ed25519.PublicKeySize {
-			return fmt.Errorf("metadata: key %s: bad size", id)
+			return nil, fmt.Errorf("metadata: key %s: bad size", id)
 		}
 		f.Keys = append(f.Keys, trustedKey{KeyID: id, Public: hex.EncodeToString(pub)})
 	}
-	return atomicWrite(s.KeysPath(), f)
+	sort.Slice(f.Keys, func(i, j int) bool { return f.Keys[i].KeyID < f.Keys[j].KeyID })
+	return json.MarshalIndent(f, "", "  ")
 }
 
 // LoadEnvelope — чтение подписанного envelope с диска. Отсутствие файла —
 // не ошибка (present=false): встроенные дескрипторы продолжают действовать.
 func (s *Store) LoadEnvelope() (*Envelope, bool, error) {
+	if err := filetxn.Check(s.ImportJournal()); err != nil {
+		return nil, false, err
+	}
 	data, err := os.ReadFile(s.EnvelopePath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -300,6 +306,9 @@ func (s *Store) LoadEnvelope() (*Envelope, bool, error) {
 
 // SaveEnvelope — атомарная запись подписанного envelope (temp + rename).
 func (s *Store) SaveEnvelope(e *Envelope) error {
+	if err := filetxn.Check(s.ImportJournal()); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return fmt.Errorf("metadata: mkdir: %w", err)
 	}
@@ -337,6 +346,11 @@ func (s *Store) Apply(now time.Time, minimumVersion uint64) (*Envelope, error) {
 // secretShaped — защита от подсовывания значений вместо ссылок (контракт
 // старых contracts); ссылки вида «vless-uuid-b» этих маркеров не содержат.
 func secretShaped(value string) bool {
+	// Established credential roles, never credential values.
+	switch value {
+	case "hy2-password", "hy2-obfs-password", "shadowtls-password-d":
+		return false
+	}
 	lower := strings.ToLower(value)
 	for _, marker := range []string{"secret", "token", "password", "passwd", "private_key", "pem"} {
 		if strings.Contains(lower, marker) {

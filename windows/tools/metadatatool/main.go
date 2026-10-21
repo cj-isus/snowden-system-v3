@@ -14,6 +14,9 @@
 //
 //	metadatatool verify <envelope.json> <trusted_keys.json>
 //	  — проверка подписи + валидации против таблицы доверенных ключей.
+//
+//	metadatatool bind <source.json> <bindings.json> <@private.key> <new-output.json>
+//	  — явная миграция legacy refs, новая версия/срок/подпись, новый output.
 package main
 
 import (
@@ -36,7 +39,7 @@ func fatal(format string, args ...any) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fatal("usage: metadatatool keygen|sign|verify ...")
+		fatal("usage: metadatatool keygen|sign|verify|bind ...")
 	}
 	switch os.Args[1] {
 	case "keygen":
@@ -45,6 +48,11 @@ func main() {
 		cmdSign()
 	case "verify":
 		cmdVerify()
+	case "bind":
+		if err := runBind(os.Args[2:], time.Now()); err != nil {
+			fatal("bind: %v", err)
+		}
+		fmt.Println("binding migration written")
 	default:
 		fatal("unknown command %q", os.Args[1])
 	}

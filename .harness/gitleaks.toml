@@ -1,0 +1,7 @@
+title = "Snowden System staged source scan"
+
+[extend]
+useDefault = true
+
+# No repository-wide allowlist or baseline. Synthetic exceptions require review.
+# Default rules do not prove absence of every VPN credential format.

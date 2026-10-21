@@ -7,17 +7,21 @@ import { computed } from 'vue'
 import type { TestResult } from '@/api/contract'
 import Icon from './Icon.vue'
 import type { IconName } from './Icon.vue'
-import { fmtDateTime } from '../api/labels'
+import { fmtDateTime, isSkippedTest, probeStepStatusLabels } from '../api/labels'
 
 const props = defineProps<{
   test: TestResult
   running: boolean
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{ run: [id: string] }>()
 
+const skipped = computed(() => isSkippedTest(props.test))
+
 const statusIcon = computed<IconName>(() => {
   if (props.running) return 'refresh'
+  if (skipped.value) return 'info'
   if (props.test.ok === true) return 'check'
   if (props.test.ok === false) return 'cross'
   return 'info'
@@ -25,13 +29,15 @@ const statusIcon = computed<IconName>(() => {
 
 const statusLabel = computed(() => {
   if (props.running) return 'выполняется…'
+  if (skipped.value) return 'пропущено'
   if (props.test.ok === true) return 'пройдено'
   if (props.test.ok === false) return 'не пройдено'
-  return 'не запускался'
+  return props.test.checkedAt ? 'нет результата' : 'не запускался'
 })
 
 const statusClass = computed(() => {
   if (props.running) return 'running'
+  if (skipped.value) return 'idle'
   if (props.test.ok === true) return 'pass'
   if (props.test.ok === false) return 'fail'
   return 'idle'
@@ -45,7 +51,7 @@ const statusClass = computed(() => {
         <h3>{{ test.id }}</h3>
         <p class="desc">{{ test.detail || 'Без описания' }}</p>
       </div>
-      <button class="btn" :disabled="props.running" @click="emit('run', test.id)">
+      <button class="btn" :disabled="props.running || props.disabled" @click="emit('run', test.id)">
         <Icon :name="statusIcon" :size="14" :class="{ spin: props.running }" />
         {{ props.running ? 'Идёт…' : 'Запустить' }}
       </button>
@@ -62,7 +68,7 @@ const statusClass = computed(() => {
     <ol v-if="test.steps && test.steps.length" class="steps">
       <li v-for="(s, i) in test.steps" :key="i" class="step" :class="s.status">
         <span class="step-name">{{ s.name }}</span>
-        <span class="step-status">{{ s.status }}</span>
+        <span class="step-status">{{ probeStepStatusLabels[s.status] }}</span>
       </li>
   </ol>
   </section>

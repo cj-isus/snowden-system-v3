@@ -246,6 +246,10 @@ func (w *netWatcher) fire(kind string, fp netFingerprint) {
 	cls := netClassOf(w.last)
 	app := w.app
 	w.mu.Unlock()
+	// V2-057 (A0): up/change открывают новую сетевую эпоху (health-факты
+	// прошлой эпохи устаревают); down не бампит (сети нет — не смена). До
+	// ветвления app: событие должно бампнуть эпоху даже без живого App.
+	onNetEvent(kind, cls, time.Now())
 	if app == nil {
 		return
 	}
@@ -323,34 +327,69 @@ func (a *App) netChangeReprobe() {
 	runtime_.mu.Lock()
 	cc := runtime_.cc
 	runtime_.mu.Unlock()
-	if cc == nil || a.closing.Load() {
+	if !a.sessionCurrent(cc) {
 		return
 	}
 	probeCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	report := newAppProbe(cc).Run(probeCtx)
+	report := a.protectedProbe(cc).Run(probeCtx)
 	cancel()
-	runtime_.mu.Lock()
-	stillOurs := runtime_.manager != nil && runtime_.cc == cc
-	runtime_.mu.Unlock()
+	stillOurs := a.sessionCurrent(cc)
 	if !stillOurs {
 		return
 	}
+	if report.LeakConfirmed {
+		a.blockUnsafePath(cc, "сеть: обнаружена утечка защищённого пути", report, fcLeakConfirmed)
+		return
+	}
 	if report.AllPassed {
-		a.appendLog("info", "сеть: защищённый путь жив на новой сети — туннель не тронут")
+		// V2-077 (Этап 8): PASS текущего protected probe — обязательный гейт
+		// для переоценки transport preference. Без этого смена класса сети не
+		// имеет права трогать работающий туннель: предпочтение — policy hint,
+		// не доказательство доступности нового канала.
+		a.appendLog("info", "сеть: защищённый путь жив на новой сети — probe-гейт preference PASS")
+		a.recordProbeOutcome(true, report) // V2-057 (A0): health новой эпохи
 		a.mu.Lock()
 		a.state.Probe = toView(report)
 		a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
 		a.pushStateLocked()
 		a.mu.Unlock()
 		a.fpol.hardReset()
-		a.renewKillSwitchIfTUN()
+		a.sm.markTick(true, "", time.Now()) // C1 (V2-060): путь жив на новой сети → HEALTHY
+		if err := a.renewKillSwitchIfTUN(); err != nil {
+			a.blockUnsafePath(cc, "WFP: policy не подтверждена после смены сети", report, fcUnknown)
+			return
+		}
+		a.tryPreferredChannelOnNetworkChange(cc)
 		return
 	}
 	a.appendLog("warn", "сеть: туннель не отвечает на новой сети — подтверждаю серией быстрых репроб: "+report.Summary())
+	a.sm.markTick(false, report.Summary(), time.Now()) // C1: одиночный провал на новой сети = SUSPECTED (§23)
 	recovered, lastReport := a.fastReprobe(context.Background(), cc)
+	if !a.sessionCurrent(cc) {
+		return
+	}
+	if lastReport != nil {
+		report = lastReport
+	}
+	if report.LeakConfirmed {
+		a.blockUnsafePath(cc, "сеть: обнаружена утечка защищённого пути", report, fcLeakConfirmed)
+		return
+	}
 	if recovered {
 		a.appendLog("info", "сеть: путь восстановился (мерцание) — туннель не тронут")
 		a.fpol.hardReset()
+		a.sm.markRecovered(time.Now()) // C1: серия прервалась успехом → HEALTHY
+		a.recordProbeOutcome(true, report)
+		a.mu.Lock()
+		a.state.Probe = toView(report)
+		a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
+		a.pushStateLocked()
+		a.mu.Unlock()
+		if err := a.renewKillSwitchIfTUN(); err != nil {
+			a.blockUnsafePath(cc, "WFP: policy не подтверждена после восстановления сети", report, fcUnknown)
+			return
+		}
+		a.tryPreferredChannelOnNetworkChange(cc)
 		return
 	}
 	summary := ""
@@ -367,20 +406,82 @@ func (a *App) netChangeReprobe() {
 	if cerr != nil {
 		channels = nil
 	}
-	switched, blocked := a.tryFailover(channels, inSelector, cc.SelectorDefault)
-	if switched || !blocked {
+	fc := ClassifyFailure(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets))
+	a.sm.markClassified(fc.Code, report.Summary(), time.Now())
+	a.appendLog("error", "сеть: "+classifyFailureLogLine(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets)))
+	a.sm.markDegraded(time.Now()) // C1: классификация подтверждена → DEGRADED
+	if fc.Code == fcEgressDivergence {
+		a.blockUnsafePath(cc, "сеть: egress защищённого пути не совпадает с ожидаемым", report, fc.Code)
+		return
+	}
+	if fc.Code == fcWhitelistMode {
+		a.blockUnsafePath(cc, "сеть: признаки allowlist-ограничения; диагноз требует дополнительной проверки", report, fc.Code)
+		return
+	}
+	chanHealth.observeResult(currentChannelEpoch(), a.activeChannelIDForHealth(), false, fc.Code, time.Now())
+	switched, blocked := a.tryFailoverForClass(channels, inSelector, cc.SelectorDefault, fc.Code, cc)
+	if switched {
+		return
+	}
+	if !blocked {
+		runtime_.mu.Lock()
+		m := runtime_.manager
+		runtime_.mu.Unlock()
+		if m != nil && m.State() == "running" {
+			return
+		}
+		// A failed switch may have stopped both paths before the attempt budget
+		// is exhausted. Recovery still needs a timer.
+		a.failSession(cc, report, "сеть: защищённый путь остановлен при переключении — ожидается автоматическое восстановление", false)
 		return
 	}
 	// Кандидатов нет/исчерпаны: fail-closed как у сторожа (BLOCKED + авторетрай).
-	a.stopCore()
-	a.mu.Lock()
-	a.state.State = "stopped"
-	a.state.BlockedReason = "all_channels_failed"
-	a.state.Error = "сеть: защищённый путь недоступен на новой сети (все каналы) — туннель остановлен (BLOCKED)"
-	a.state.Probe = toView(lastReport)
-	a.scheduleFailClosedRetryLocked(time.Now())
-	a.pushStateLocked()
-	a.mu.Unlock()
+	a.failSession(cc, lastReport, "сеть: защищённый путь недоступен на новой сети (все каналы, BLOCKED)", true)
+}
+
+// tryPreferredChannelOnNetworkChange — мягкая переоценка предпочтения после
+// успешного protected probe на НОВОЙ сети (V2-077, аудит D10).
+//
+// Важная семантика:
+//  1. этот метод вызывается только после report.AllPassed; при FAIL старый
+//     путь идёт по обычной fastReprobe/failover-ветке выше;
+//  2. новый transport preference — только кандидат, не решение: switchChannelCore
+//     проходит через Manager и обязательный probe нового канала, с rollback на
+//     старый живой канал при ошибке;
+//  3. отсутствие класса/дескрипторов/предпочтения = no-op, не ошибка и не
+//     direct fallback; ручной SelectChannel не переопределяется.
+func (a *App) tryPreferredChannelOnNetworkChange(current *render.ClientConfig) {
+	if current == nil || a.closing.Load() {
+		return
+	}
+	netClass := currentNetClass()
+	if netClass == "" {
+		a.appendLog("info", "сеть: класс не определён — transport preference не применяется")
+		return
+	}
+	descs, err := render.LoadDescriptors()
+	if err != nil {
+		a.appendLog("warn", "сеть: дескрипторы preference недоступны — текущий канал не тронут: "+err.Error())
+		return
+	}
+	want := preferredChannelForNetworkChange(descs, current.SelectorDefault, netClass)
+	if want == "" {
+		a.appendLog("info", "сеть: для класса "+classLabel(netClass)+" нет нового live-verified preference — текущий канал не тронут")
+		return
+	}
+	a.appendLog("info", "сеть: probe-гейт PASS, пробую preference "+want+" для "+classLabel(netClass))
+	if err := a.switchChannelCoreFor(want, current); err != nil {
+		// switchChannelCore уже проверил новый канал и откатил живой старый
+		// (либо сделал fail-closed, если старый тоже мёртв). Здесь не запускаем
+		// второй failover и не меняем policy самостоятельно.
+		if _, verified := verifiedRollback(err); verified {
+			a.appendLog("warn", "сеть: preference "+want+" не применён; прежний путь повторно подтверждён: "+err.Error())
+		} else {
+			a.appendLog("warn", "сеть: preference "+want+" не применён: "+err.Error())
+		}
+		return
+	}
+	a.appendLog("info", "сеть: preference применён после probe-гейта: "+want)
 }
 
 // currentNetFingerprint — факт ОС: каким интерфейсом машина идёт в дефолт

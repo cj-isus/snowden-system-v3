@@ -7,6 +7,9 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 // предпросмотра, и для встраивания в Wails-бинарник (без внешних ассетов).
 export default defineConfig({
   plugins: [vue(), viteSingleFile()],
+  // This project uses plain CSS. Stop PostCSS config discovery at the project
+  // boundary instead of reading unrelated parent package.json files.
+  css: { postcss: { plugins: [] } },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -14,12 +14,17 @@ import type {
   UpdatePreview,
   AppState,
   ChannelDescriptor,
+  ChannelHealth,
+  ChannelHealthEntry,
+  ChannelIndependenceInfo,
   DeliveryProfile,
+  IncidentCluster,
   FailoverStatus,
   NetGuardStatus,
   NetGuardTaskState,
   NetStats,
   NetworkFacts,
+  RuntimeInfo,
   SecretMeta,
   SecretTestReport,
   SiteStatus,
@@ -40,7 +45,7 @@ export function isBuildPhase(): boolean {
 export const buildPhaseError =
   'Wails-биндинги недоступны: приложение запущено вне Wails (браузерный предпросмотр). Запустите exe из windows/build/bin.'
 
-function buildPhaseState(): AppState & { coreReady: boolean; coreBlockMsg: string } {
+function buildPhaseState(): AppState {
   return {
     state: 'stopped',
     blockedReason: null,
@@ -79,16 +84,16 @@ function mapState(s: GoAppState): AppState {
     proxyMode: (s.proxyMode || null) as AppState['proxyMode'],
     probe:
       s.probe ?
-        { ok: s.probe.ok, steps: s.probe.steps.map((st) => ({ name: st.name, status: st.status as 'pending', detail: st.detail })) }
+        { ok: s.probe.ok, steps: (s.probe.steps ?? []).map((st) => ({ name: st.name, status: st.status as 'pending', detail: st.detail })) }
       : null,
     probeRunning: s.probeRunning,
     probeLastAt: s.probeLastAt || null,
     error: s.error ?? '',
-    coreReady: s.coreReady,
+    coreReady: s.coreReady ?? false,
     coreBlockMsg: s.coreBlockMsg ?? '',
     nextRetryAt: s.nextRetryAt ?? '',
     retryAttempt: s.retryAttempt ?? 0,
-  } as AppState & { coreReady: boolean; coreBlockMsg: string }
+  }
 }
 
 function mapMeta(m: GoMeta): SecretMeta {
@@ -122,7 +127,7 @@ function mapTest(t: GoTest): TestResult {
 // ---------- фасад ----------
 
 export const api = {
-  async getState(): Promise<AppState & { coreReady?: boolean; coreBlockMsg?: string }> {
+  async getState(): Promise<AppState> {
     if (isBuildPhase()) return buildPhaseState()
     return mapState(await App.GetState())
   },
@@ -169,7 +174,7 @@ export const api = {
   async listChannels(): Promise<ChannelDescriptor[] | null> {
     if (isBuildPhase()) return null
     const list = await App.ListChannels()
-    return list.map((c) => ({
+    return (list ?? []).map((c) => ({
       id: c.id,
       transport: c.transport,
       server: c.server,
@@ -182,7 +187,7 @@ export const api = {
   async listTests(): Promise<TestResult[] | null> {
     if (isBuildPhase()) return null
     const list = await App.ListTests()
-    return list.map(mapTest)
+    return (list ?? []).map(mapTest)
   },
   async runTest(id: string): Promise<TestResult> {
     return mapTest(await App.RunTest(id))
@@ -191,7 +196,7 @@ export const api = {
   async listSecrets(): Promise<SecretMeta[] | null> {
     if (isBuildPhase()) return null
     const list = await App.ListSecrets()
-    return list.map(mapMeta)
+    return (list ?? []).map(mapMeta)
   },
   async saveSecret(id: string, value: string): Promise<SecretMeta> {
     return mapMeta(await App.SaveSecret(id, value))
@@ -208,7 +213,7 @@ export const api = {
   },
   async testSecret(id: string): Promise<SecretTestReport> {
     const r = await App.TestSecret(id)
-    return { ok: r.ok, steps: r.steps.map((st) => ({ name: st.name, status: st.status as 'pending', detail: st.detail })) }
+    return { ok: r.ok, steps: (r.steps ?? []).map((st) => ({ name: st.name, status: st.status as 'pending', detail: st.detail })) }
   },
   async revealSecret(id: string): Promise<{ value: string | null; error: string }> {
     const v = await App.RevealSecret(id)
@@ -224,11 +229,25 @@ export const api = {
       localIP: f.localIP ?? '',
       isp: f.isp ?? '',
       publicIP: f.publicIP ?? '',
+      tunnelIP: f.tunnelIP ?? '',
       country: f.country ?? '',
       countryOrigin: f.countryOrigin ?? '',
       dnsViaTunnel: !!f.dnsViaTunnel,
       netClass: f.netClass ?? '',
       checkedAt: f.checkedAt ?? '',
+    }
+  },
+
+  async getRuntimeInfo(): Promise<RuntimeInfo | null> {
+    if (isBuildPhase()) return null
+    const r = await App.GetRuntimeInfo()
+    return {
+      version: r.version ?? '',
+      os: r.os ?? '',
+      arch: r.arch ?? '',
+      pid: r.pid ?? 0,
+      coreVersion: r.coreVersion ?? '',
+      shellVersion: r.shellVersion ?? '',
     }
   },
 
@@ -382,7 +401,72 @@ export const api = {
       switches: f.switches ?? 0,
       lastError: f.lastError ?? '',
       nextCheckIn: f.nextCheckIn ?? 0,
+      smState: f.smState ?? '',
+      smSince: f.smSince ?? '',
+      smClass: f.smClass ?? '',
     }
+  },
+
+  async getChannelHealth(): Promise<ChannelHealth | null> {
+    if (isBuildPhase()) return null
+    const h = await App.GetChannelHealth()
+    return {
+      epoch: h.epoch ?? 0,
+      started: h.started ?? '',
+      netClass: h.netClass ?? '',
+      now: h.now ?? '',
+      channels: (h.channels ?? []).map(
+        (e): ChannelHealthEntry => ({
+          id: e.id ?? '',
+          transport: e.transport ?? '',
+          ok: e.ok ?? 0,
+          fail: e.fail ?? 0,
+          lastOkAt: e.lastOkAt ?? '',
+          lastFailAt: e.lastFailAt ?? '',
+          lastClass: e.lastClass ?? '',
+          verdict: (e.verdict as ChannelHealthEntry['verdict']) ?? 'no_data',
+          d2State: (e.d2State as ChannelHealthEntry['d2State']) ?? '',
+          d2Note: e.d2Note ?? '',
+        }),
+      ),
+    }
+  },
+
+  async getIncidents(): Promise<IncidentCluster[] | null> {
+    if (isBuildPhase()) return null
+    try {
+      const r = await App.GetIncidents()
+      return (r ?? []).map((c) => ({
+        since: c.since ?? '',
+        until: c.until ?? '',
+        channels: c.channels ?? [],
+        count: c.count ?? 0,
+        classes: c.classes ?? [],
+        netClasses: c.netClasses ?? [],
+        isps: c.isps ?? [],
+        isWave: !!c.isWave,
+        clusterId: c.clusterId ?? '',
+      }))
+    } catch {
+      // Эпоха 0 (сеть не наблюдалась) — бэкенд честно отказывается: «нет данных».
+      return null
+    }
+  },
+
+  /** V2-074 (аудит C5/D16): матрица независимости каналов по failure domains.
+   *  null = нет данных (build-phase / дескрипторы нечитаемы) — НЕ «всё
+   *  независимо»: UI обязан показать честное «нет данных». */
+  async getChannelIndependence(): Promise<ChannelIndependenceInfo[] | null> {
+    if (isBuildPhase()) return null
+    const m = await App.GetChannelIndependence()
+    if (!m || m.length === 0) return null
+    return m.map((row) => ({
+      a: row.a ?? '',
+      b: row.b ?? '',
+      score: row.score ?? 0,
+      sharedFdoms: row.shared_fdoms ?? '',
+      belowLimit: !!row.below_limit,
+    }))
   },
 
   async runAdaptiveCheck(): Promise<AdaptiveStatus | null> {

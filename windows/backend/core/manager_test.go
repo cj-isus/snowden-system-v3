@@ -10,6 +10,80 @@ import (
 
 // ---------- фейки ----------
 
+type panicProbe struct{}
+
+func (panicProbe) Run(context.Context) *ProbeReport { panic("synthetic probe panic") }
+
+type canceledPassProbe struct{ cancel context.CancelFunc }
+
+func TestManagerSameChannelStillRequiresProbe(t *testing.T) {
+	m, _ := newSelectorManager(t, passProbe())
+	if err := m.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer m.Stop(context.Background())
+	p := failProbe()
+	err := m.SwitchChannel(context.Background(), "proxy", "chan-a", p, passProbe())
+	if !errors.Is(err, ErrSwitchRolledBack) || p.calls != 1 || m.State() != StateRunning {
+		t.Fatalf("same-channel gate bypassed: err=%v calls=%d state=%s", err, p.calls, m.State())
+	}
+}
+
+func (p canceledPassProbe) Run(context.Context) *ProbeReport {
+	p.cancel()
+	return &ProbeReport{AllPassed: true}
+}
+
+func TestManagerPanicNeverReturnsSuccess(t *testing.T) {
+	for _, reload := range []bool{false, true} {
+		t.Run(map[bool]string{false: "switch", true: "reload"}[reload], func(t *testing.T) {
+			m, e := newSelectorManager(t, passProbe())
+			if err := m.Start(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			defer m.Stop(context.Background())
+			var err error
+			if reload {
+				err = m.Reload(context.Background(), []byte(protectedFixture(t)), WithReloadProbe(panicProbe{}))
+			} else {
+				err = m.SwitchChannel(context.Background(), "proxy", "chan-b", panicProbe{}, passProbe())
+			}
+			if err == nil || !stringsContains(err.Error(), "panic") {
+				t.Fatalf("panic returned success or lost reason: %v", err)
+			}
+			if m.State() != StateError || e.Status() != "stopped" {
+				t.Fatalf("state=%s engine=%s", m.State(), e.Status())
+			}
+			if m.proxy.(*fakeProxy).restore != 1 {
+				t.Fatal("proxy was not restored")
+			}
+		})
+	}
+}
+
+func TestManagerCanceledProbeCannotCommit(t *testing.T) {
+	for _, reload := range []bool{false, true} {
+		t.Run(map[bool]string{false: "switch", true: "reload"}[reload], func(t *testing.T) {
+			m, e := newSelectorManager(t, passProbe())
+			if err := m.Start(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			defer m.Stop(context.Background())
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var err error
+			if reload {
+				err = m.Reload(ctx, []byte(protectedFixture(t)), WithReloadProbe(canceledPassProbe{cancel}))
+			} else {
+				err = m.SwitchChannel(ctx, "proxy", "chan-b", canceledPassProbe{cancel}, passProbe())
+			}
+			if err == nil || m.State() != StateError || e.Status() != "stopped" {
+				t.Fatalf("canceled commit: err=%v state=%s engine=%s", err, m.State(), e.Status())
+			}
+		})
+	}
+}
+
 type fakeProbe struct {
 	mu      sync.Mutex
 	report  *ProbeReport

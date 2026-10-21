@@ -1,0 +1,21 @@
+# Replace the existing exact /ws location in each Snowden TLS server block
+# with these two locations. Keep the real document root/index already used by
+# the public site. Valid WebSocket upgrades keep their 101 response; errors
+# from sing-box are converted into the same page an ordinary visitor sees.
+location = /ws {
+    proxy_pass http://127.0.0.1:9443;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Sec-WebSocket-Protocol $http_sec_websocket_protocol;
+
+    proxy_intercept_errors on;
+    error_page 400 401 403 404 405 426 500 502 503 504 = @ws_decoy;
+}
+
+location @ws_decoy {
+    internal;
+    root /var/www/snowden;
+    try_files /index.html =404;
+}

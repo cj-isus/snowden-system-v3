@@ -51,6 +51,7 @@ type lifecycleOperation struct {
 // операция ровно одна (active != nil ⇒ переход идёт).
 type Manager struct {
 	mu          sync.RWMutex
+	generation  uint64 // increments when an operation takes lifecycle ownership
 	active      *lifecycleOperation
 	state       State
 	engine      *Engine
@@ -106,7 +107,7 @@ func (m *Manager) restoreProxy(proxy systemProxy) error {
 	if !active {
 		return nil
 	}
-	if err := proxy.Restore(); err != nil {
+	if err := cleanupCall("restore system proxy", proxy.Restore); err != nil {
 		return fmt.Errorf("restore system proxy: %w", err)
 	}
 	m.mu.Lock()
@@ -142,6 +143,7 @@ func (m *Manager) Start(ctx context.Context) (err error) {
 		return ErrInvalidState
 	}
 	m.active = op
+	m.generation++
 	m.state = StateStarting
 	engine := m.engine
 	probe := m.probe
@@ -152,23 +154,16 @@ func (m *Manager) Start(ctx context.Context) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			finalState = StateError
-			cleanupErr := error(nil)
-			if engine != nil {
-				cleanupErr = engine.Stop()
-			}
-			cleanupErr = errors.Join(cleanupErr, m.restoreProxy(proxy))
-			err = errors.Join(fmt.Errorf("start panic: %v", recovered), cleanupErr)
+			err = errors.Join(fmt.Errorf("start panic: %v", recovered), m.cleanup(engine, proxy))
 		}
 		m.finish(op, finalState)
 	}()
 
 	fail := func(err error, engineStarted bool) error {
-		var cleanupErr error
 		if engineStarted && engine != nil {
-			cleanupErr = engine.Stop()
+			return errors.Join(err, m.cleanup(engine, proxy))
 		}
-		cleanupErr = errors.Join(cleanupErr, m.restoreProxy(proxy))
-		return errors.Join(err, cleanupErr)
+		return errors.Join(err, m.restoreProxy(proxy))
 	}
 
 	if engine == nil {
@@ -198,9 +193,12 @@ func (m *Manager) Start(ctx context.Context) (err error) {
 	if err := proxy.SetProxy("127.0.0.1:1080"); err != nil {
 		return fail(fmt.Errorf("set system proxy: %w", err), true)
 	}
+	if err := contextError(operationCtx); err != nil {
+		return fail(err, true)
+	}
 
 	report := probe.Run(operationCtx)
-	if report == nil || !report.AllPassed {
+	if !probePassed(report) {
 		detail := "no report"
 		if report != nil {
 			detail = report.Summary()
@@ -217,7 +215,8 @@ func (m *Manager) Start(ctx context.Context) (err error) {
 
 // Stop: деструктивная очистка — отменяет активную операцию (если есть),
 // останавливает движок и восстанавливает прокси ДАЖЕ при отменённом
-// caller-контексте (очистка ограничена собственным таймаутом).
+// caller-контексте. Ожидание операции ограничено собственным таймаутом;
+// синхронный third-party Close пока не имеет hard bound (OFF-02).
 func (m *Manager) Stop(ctx context.Context) error {
 	if ctx == nil {
 		return errors.New("context is nil")
@@ -252,23 +251,19 @@ func (m *Manager) Stop(ctx context.Context) error {
 
 		op := &lifecycleOperation{cancel: func() {}, done: make(chan struct{})}
 		m.active = op
+		m.generation++
 		m.state = StateStopping
 		engine := m.engine
 		proxy := m.proxy
 		m.mu.Unlock()
 
-		var stopErr error
-		if engine != nil {
-			stopErr = engine.Stop()
-		}
-		restoreErr := m.restoreProxy(proxy)
-
-		if stopErr != nil || restoreErr != nil {
+		cleanupErr := m.cleanup(engine, proxy)
+		if cleanupErr != nil {
 			m.finish(op, StateError)
 		} else {
 			m.finish(op, StateStopped)
 		}
-		return errors.Join(ctx.Err(), stopErr, restoreErr)
+		return errors.Join(ctx.Err(), cleanupErr)
 	}
 }
 
@@ -287,12 +282,69 @@ func WithReloadProbe(p Probe) ReloadOption {
 	return func(o *reloadOpts) { o.probe = p }
 }
 
+// Preparation has no engine/proxy ownership. Callbacks run outside m.mu, so
+// State/Stop remain available. A panic or cancellation cannot tear down the
+// active session. The caller checks generation before committing the result.
+func prepareReload(ctx context.Context, rawJSON []byte, opts []ReloadOption) (raw []byte, ro reloadOpts, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = errors.Join(err, contextError(ctx), fmt.Errorf("reload preparation panic: %v", recovered))
+		}
+		if err != nil {
+			err = errors.Join(ErrReloadRejected, err)
+		}
+	}()
+	if err := contextError(ctx); err != nil {
+		return nil, ro, err
+	}
+	validated, err := config.Parse(rawJSON)
+	if err != nil {
+		return nil, ro, fmt.Errorf("validate reload config: %w", err)
+	}
+	raw, err = json.Marshal(validated)
+	if err != nil {
+		return nil, ro, fmt.Errorf("normalize reload config: %w", err)
+	}
+	for i, fn := range opts {
+		if err := contextError(ctx); err != nil {
+			return nil, ro, err
+		}
+		if fn == nil {
+			return nil, ro, fmt.Errorf("reload option %d is nil", i)
+		}
+		fn(&ro)
+	}
+	return raw, ro, contextError(ctx)
+}
+
 // ErrSwitchRolledBack — переключение канала не прошло probe, но защищённый
 // путь на ПРЕЖНЕМ канале подтверждён: движок жив, состояние Manager — running.
 // Вызывающий НЕ должен ронять туннель (failCore) — это не отказ канала,
 // это отказ кандидата. Старая семантика Reload рвала рабочий туннель при
 // неудачном переключении на мёртвый канал (V2-037).
 var ErrSwitchRolledBack = errors.New("channel switch failed probe: rolled back to previous channel")
+
+// VerifiedRollbackError carries the fresh evidence, not just an error label.
+// Restarted distinguishes a new lifetime of the old configuration from a live
+// selector rollback; observers and metric baselines must follow that lifetime.
+type VerifiedRollbackError struct {
+	Cause     error
+	Report    *ProbeReport
+	Restarted bool
+}
+
+func (e *VerifiedRollbackError) Error() string {
+	if e.Cause == nil {
+		return ErrSwitchRolledBack.Error()
+	}
+	return fmt.Sprintf("%s: %v", ErrSwitchRolledBack, e.Cause)
+}
+func (e *VerifiedRollbackError) Unwrap() error        { return e.Cause }
+func (e *VerifiedRollbackError) Is(target error) bool { return target == ErrSwitchRolledBack }
+
+func probePassed(report *ProbeReport) bool {
+	return report != nil && report.AllPassed && !report.LeakConfirmed
+}
 
 // SwitchChannel — бесшовное переключение активного outbound селектора на
 // живом движке (V2-037): без Stop/Reload бокса, соединения не рвутся.
@@ -310,12 +362,13 @@ var ErrSwitchRolledBack = errors.New("channel switch failed probe: rolled back t
 //	                             вызывающий откатывается на Reload;
 //	прочая ошибка              — fail-closed: движок остановлен, прокси
 //	                             восстановлен, состояние error.
-func (m *Manager) SwitchChannel(ctx context.Context, selectorTag, tag string, newProbe, rollbackProbe Probe) error {
+func (m *Manager) SwitchChannel(ctx context.Context, selectorTag, tag string, newProbe, rollbackProbe Probe) (err error) {
 	if err := contextError(ctx); err != nil {
 		return err
 	}
 	m.mu.RLock()
 	validState := m.state == StateRunning && m.active == nil
+	generation := m.generation
 	m.mu.RUnlock()
 	if !validState {
 		return ErrInvalidState
@@ -325,7 +378,7 @@ func (m *Manager) SwitchChannel(ctx context.Context, selectorTag, tag string, ne
 	op := &lifecycleOperation{cancel: cancel, done: make(chan struct{})}
 
 	m.mu.Lock()
-	if m.state != StateRunning || m.active != nil {
+	if m.state != StateRunning || m.active != nil || m.generation != generation {
 		m.mu.Unlock()
 		cancel()
 		return ErrInvalidState
@@ -338,6 +391,7 @@ func (m *Manager) SwitchChannel(ctx context.Context, selectorTag, tag string, ne
 		return ErrEngineNotConfigured
 	}
 	m.active = op
+	m.generation++
 	m.state = StateReloading
 	m.mu.Unlock()
 
@@ -345,9 +399,7 @@ func (m *Manager) SwitchChannel(ctx context.Context, selectorTag, tag string, ne
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			finalState = StateError
-			_ = engine.Stop()
-			_ = m.restoreProxy(proxy)
-			cancel()
+			err = errors.Join(fmt.Errorf("switch panic: %v", recovered), m.cleanup(engine, proxy))
 		}
 		m.finish(op, finalState)
 	}()
@@ -359,18 +411,23 @@ func (m *Manager) SwitchChannel(ctx context.Context, selectorTag, tag string, ne
 		// сама по себе не роняет туннель.
 		if engine.Status() != "running" {
 			finalState = StateError
-			_ = m.restoreProxy(proxy)
-			return err
+			return errors.Join(err, m.restoreProxy(proxy))
 		}
 		return err
 	}
-	if previous == tag {
-		cancel()
-		return nil // уже активен
-	}
-
 	report := newProbe.Run(operationCtx)
-	if report != nil && report.AllPassed {
+	if err := contextError(operationCtx); err != nil {
+		finalState = StateError
+		return errors.Join(err, m.cleanup(engine, proxy))
+	}
+	if report != nil && report.LeakConfirmed {
+		finalState = StateError
+		return errors.Join(errors.New("switch protected probe confirmed a leak"), m.cleanup(engine, proxy))
+	}
+	if probePassed(report) {
+		m.mu.Lock()
+		m.probe = newProbe
+		m.mu.Unlock()
 		cancel()
 		return nil
 	}
@@ -383,70 +440,65 @@ func (m *Manager) SwitchChannel(ctx context.Context, selectorTag, tag string, ne
 	// рестарта) и повторное подтверждение прежнего пути.
 	if _, rbErr := engine.SwitchDefault(selectorTag, previous); rbErr != nil {
 		finalState = StateError
-		stopErr := engine.Stop()
-		restoreErr := m.restoreProxy(proxy)
+		cleanupErr := m.cleanup(engine, proxy)
 		cancel()
 		return errors.Join(
 			fmt.Errorf("switch to %q failed probe (%s) and rollback failed: %w", tag, detail, rbErr),
-			stopErr, restoreErr)
+			cleanupErr)
 	}
 	if rollbackProbe != nil {
-		if rb := rollbackProbe.Run(operationCtx); rb != nil && rb.AllPassed {
+		if rb := rollbackProbe.Run(operationCtx); probePassed(rb) && contextError(operationCtx) == nil {
 			cancel()
-			return fmt.Errorf("%w: %s (откат на %q подтверждён probe)", ErrSwitchRolledBack, detail, previous)
+			return &VerifiedRollbackError{Cause: fmt.Errorf("%s (previous channel %q)", detail, previous), Report: rb}
 		}
 	}
 	// Прежний путь тоже мёртв (или rollbackProbe не задан — fail-closed):
 	// полный teardown, как у Reload при неудачном probe.
 	finalState = StateError
-	stopErr := engine.Stop()
-	restoreErr := m.restoreProxy(proxy)
+	cleanupErr := m.cleanup(engine, proxy)
 	cancel()
 	return errors.Join(
 		fmt.Errorf("switch to %q failed probe (%s); previous channel %q not confirmed either", tag, detail, previous),
-		stopErr, restoreErr)
+		cleanupErr)
 }
 
 // Reload: только из running. Новый конфиг валидируется (дважды: строгий
 // парсер + sing-box) ДО закрытия старого бокса; после подмены — обязательный
-// probe; неудача ⇒ cleanup и StateError (fail-closed: старый туннель уже
-// нельзя считать доверенным, если probe нового не прошёл).
-func (m *Manager) Reload(ctx context.Context, rawJSON []byte, opts ...ReloadOption) error {
+// probe. Неудача кандидата допускает восстановление старых applied bytes с
+// повторным старым probe. Отмена/утечка/ошибка cleanup запрещают такой откат.
+func (m *Manager) Reload(ctx context.Context, rawJSON []byte, opts ...ReloadOption) (err error) {
 	if err := contextError(ctx); err != nil {
 		return err
 	}
 	m.mu.RLock()
 	validState := m.state == StateRunning && m.active == nil
+	generation := m.generation
 	m.mu.RUnlock()
 	if !validState {
 		return ErrInvalidState
 	}
 
-	validated, err := config.Parse(rawJSON)
-	if err != nil {
-		return fmt.Errorf("validate reload config: %w", err)
-	}
-	normalizedJSON, err := json.Marshal(validated)
-	if err != nil {
-		return fmt.Errorf("normalize reload config: %w", err)
-	}
-
 	operationCtx, cancel := context.WithTimeout(ctx, lifecycleTimeout)
+	defer cancel()
+	normalizedJSON, ro, err := prepareReload(operationCtx, rawJSON, opts)
+	if err != nil {
+		return err
+	}
 	op := &lifecycleOperation{cancel: cancel, done: make(chan struct{})}
 
 	m.mu.Lock()
-	if m.state != StateRunning || m.active != nil {
+	if ctxErr := contextError(operationCtx); ctxErr != nil {
 		m.mu.Unlock()
-		cancel()
-		return ErrInvalidState
+		return errors.Join(ErrReloadRejected, ctxErr)
+	}
+	if m.state != StateRunning || m.active != nil || m.generation != generation {
+		m.mu.Unlock()
+		return errors.Join(ErrReloadRejected, fmt.Errorf("reload preparation superseded: %w", ErrInvalidState))
 	}
 	engine := m.engine
-	probe := m.probe
+	previousProbe := m.probe
+	probe := previousProbe
 	proxy := m.proxy
-	ro := reloadOpts{}
-	for _, fn := range opts {
-		fn(&ro)
-	}
 	if ro.probe != nil {
 		probe = ro.probe // ожидание egress следует за выбранным каналом (V2-032)
 	}
@@ -456,6 +508,7 @@ func (m *Manager) Reload(ctx context.Context, rawJSON []byte, opts ...ReloadOpti
 		return ErrEngineNotConfigured
 	}
 	m.active = op
+	m.generation++
 	m.state = StateReloading
 	m.mu.Unlock()
 
@@ -463,41 +516,84 @@ func (m *Manager) Reload(ctx context.Context, rawJSON []byte, opts ...ReloadOpti
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			finalState = StateError
-			_ = engine.Stop()
-			_ = m.restoreProxy(proxy)
-			err = fmt.Errorf("reload panic: %v", recovered)
+			err = errors.Join(err, fmt.Errorf("reload panic: %v", recovered), m.cleanup(engine, proxy))
 		}
 		m.finish(op, finalState)
 	}()
 
 	fail := func(err error) error {
 		finalState = StateError
-		cleanupErr := engine.Stop()
-		cleanupErr = errors.Join(cleanupErr, m.restoreProxy(proxy))
-		return errors.Join(err, cleanupErr)
+		return errors.Join(err, m.cleanup(engine, proxy))
+	}
+	previousRaw := engine.rawSnapshot()
+	verifyPrevious := func(cause error, alreadyRestored bool) error {
+		// Keep the candidate failure in the named return even if rollback
+		// panics before it can return its own result to the caller.
+		err = cause
+		if err := contextError(operationCtx); err != nil {
+			return fail(errors.Join(cause, err))
+		}
+		if !alreadyRestored {
+			if err := engine.Reload(operationCtx, previousRaw); err != nil {
+				return fail(errors.Join(cause, fmt.Errorf("restore previous config: %w", err)))
+			}
+		}
+		if err := contextError(operationCtx); err != nil {
+			return fail(errors.Join(cause, err))
+		}
+		if previousProbe == nil {
+			return fail(errors.Join(cause, errors.New("previous protected probe is required")))
+		}
+		report := previousProbe.Run(operationCtx)
+		if err := contextError(operationCtx); err != nil {
+			return fail(errors.Join(cause, err))
+		}
+		if !probePassed(report) {
+			return fail(errors.Join(cause, fmt.Errorf("previous protected path not confirmed: %s", report.Summary())))
+		}
+		m.mu.Lock()
+		m.probe = previousProbe
+		m.mu.Unlock()
+		return &VerifiedRollbackError{Cause: cause, Report: report, Restarted: true}
 	}
 
 	if probe == nil {
 		return fail(errors.New("protected probe is required"))
 	}
 	if err := engine.Reload(operationCtx, normalizedJSON); err != nil {
-		// Движок мог откатиться сам (валидный sing-box-парс, но неудачный
-		// старт нового бокса) — тогда канал жив и мы НЕ рвём состояние.
-		if engine.Status() == "stopped" {
+		if contextError(operationCtx) != nil || engine.Status() != "running" {
 			return fail(err)
 		}
-		return err
+		if errors.Is(err, ErrReloadRejected) {
+			return err // the original instance was not replaced
+		}
+		if errors.Is(err, errEngineReloadRolledBack) {
+			return verifyPrevious(err, true)
+		}
+		return fail(err) // an unknown error cannot establish which config is live
 	}
 	if err := contextError(operationCtx); err != nil {
 		return fail(err)
 	}
 	report := probe.Run(operationCtx)
-	if report == nil || !report.AllPassed {
+	if err := contextError(operationCtx); err != nil {
+		return fail(err)
+	}
+	if report != nil && report.LeakConfirmed {
+		return fail(errors.New("reload protected probe confirmed a leak"))
+	}
+	if !probePassed(report) {
 		detail := "no report"
 		if report != nil {
 			detail = report.Summary()
 		}
-		return fail(fmt.Errorf("protected probe failed: %s", detail))
+		return verifyPrevious(fmt.Errorf("protected probe failed: %s", detail), false)
 	}
+	if err := contextError(operationCtx); err != nil {
+		return fail(err)
+	}
+	m.mu.Lock()
+	m.probe = probe
+	m.mu.Unlock()
 	return nil
 }

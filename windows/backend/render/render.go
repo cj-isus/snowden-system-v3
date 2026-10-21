@@ -13,12 +13,13 @@
 package render
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,59 +27,16 @@ import (
 	"time"
 
 	"github.com/snowden-system/windows/backend/config"
+	"github.com/snowden-system/windows/backend/filetxn"
 	"github.com/snowden-system/windows/backend/metadata"
 )
 
 //go:embed descriptors.json
 var descriptorsRaw []byte
 
-// ChannelDescriptor — декларация канала (без секретов; только ссылки).
-type ChannelDescriptor struct {
-	ID               string   `json:"id"`
-	Protocol         string   `json:"protocol"`  // vless | hysteria2
-	Transport        string   `json:"transport"` // ws | quic | tcp-reality (schema 2)
-	Hostname         string   `json:"hostname"`  // edge/SNI имя (для tcp-reality — SNI донора)
-	Port             uint16   `json:"port"`      // порт на edge/сервере
-	OriginServer     string   `json:"origin_server"`
-	ExpectedEgress   string   `json:"expected_egress"`
-	CredentialRefs   []string `json:"credential_refs"`
-	ValidationStatus string   `json:"validation_status"`
-	ValidatedAt      *string  `json:"validated_at"`
-	Enabled          bool     `json:"enabled"`
-	// Schema 2 (B1/V2-031, VLESS+TCP+REALITY): роль каждой ссылки задана
-	// явно, чтобы рендер не угадывал её по имени (урок refOf: нечёткое
-	// сопоставление подставляет пароль вместо obfs-пароля).
-	UUIDRef             string `json:"uuid_ref,omitempty"`
-	RealityPublicKeyRef string `json:"reality_public_key_ref,omitempty"`
-	RealityShortIDRef   string `json:"reality_short_id_ref,omitempty"`
-	// Schema 2 (V2-051, VLESS over ShadowTLS v3): ссылка на ShadowTLS-пароль;
-	// UUIDRef переиспользуется для внутреннего vless-инбаунда.
-	ShadowTLSPasswordRef string `json:"shadowtls_password_ref,omitempty"`
-
-	// ---------- V2-037: живучесть/скорость (все поля optional) ----------
-
-	// ProbeTargets — HTTPS-эхо egress для probe этого канала (2..3).
-	// Первой целью обязан быть self-hosted эндпоинт (наш VPS за CDN) —
-	// сторонние ipify/ifconfig rate-limit'ят watchdog каждые 30с и дают
-	// ложные деградации (V2-037); вторая — независимое подтверждение.
-	// Отсутствует → дефолтная пара (сторонние эхо).
-	ProbeTargets []string `json:"probe_targets,omitempty"`
-	// ServerPorts/HopInterval — HY2 port hopping ("lo:hi", "30s"): клиент
-	// мигрирует по диапазону портов; на сервере диапазон DNAT'ится на
-	// реальный порт. Снимает точечную UDP-блокировку порта.
-	ServerPorts []string `json:"server_ports,omitempty"`
-	HopInterval string   `json:"hop_interval,omitempty"`
-	// UpMbps/DownMbps — HY2 brutal CC: фиксированная скорость вместо BBR.
-	// 0/отсутствует = BBR (честный дефолт для неизвестного линка); заданы —
-	// brutal, стабильно работающий на lossy-линках при честных значениях.
-	UpMbps   int `json:"up_mbps,omitempty"`
-	DownMbps int `json:"down_mbps,omitempty"`
-	// Multiplex — vless: h2mux+padding в одном соединении (нет TLS-хендшейка
-	// на каждое соединение пользователя; основная задержка VLESS+WS+CDN).
-	// nil = вкл по умолчанию для ws; false = явно выключен; true = вкл
-	// (для tcp-reality, где по умолчанию выключен).
-	Multiplex *bool `json:"multiplex,omitempty"`
-}
+// ChannelDescriptor uses the signed channel schema while retaining render methods.
+// A named underlying type keeps existing composite literals and package API.
+type ChannelDescriptor metadata.Channel
 
 // DefaultProbeTargets — пара по умолчанию, если дескриптор не задаёт своих.
 var DefaultProbeTargets = []string{"https://api.ipify.org", "https://ifconfig.me/all.json"}
@@ -99,6 +57,12 @@ type SecretsSource interface {
 	Get(ref string) (string, error)
 	// PinCertPath возвращает путь к pin-PEM канала ("" = нет).
 	PinCertPath(channelID string) string
+}
+
+// SecretIDSource supplies exact, type-checked values. An explicit binding may
+// never fall back to SecretsSource.Get when this capability is unavailable.
+type SecretIDSource interface {
+	GetByID(id, kind string) (string, error)
 }
 
 // LoadDescriptors читает встроенный набор дескрипторов, валидирует его и
@@ -257,6 +221,8 @@ func applyEnvelopeOverride(channels []ChannelDescriptor) ([]ChannelDescriptor, e
 	if store == nil {
 		return channels, nil
 	}
+	unlock := filetxn.Serialize(store.ImportJournal())
+	defer unlock()
 	env, err := store.Apply(time.Now(), readEnvelopeVersion(store.Dir))
 	if err != nil {
 		return nil, fmt.Errorf("metadata override: %w", err)
@@ -264,7 +230,23 @@ func applyEnvelopeOverride(channels []ChannelDescriptor) ([]ChannelDescriptor, e
 	if env == nil {
 		return channels, nil
 	}
+	out, err := DescriptorsFromEnvelope(env)
+	if err != nil {
+		return nil, err
+	}
+	splitSet = validateSplitDirect(env.SplitDirect)
+	if err := writeEnvelopeVersion(store.Dir, env.MetadataVersion); err != nil {
+		return nil, fmt.Errorf("metadata override: сохранить version: %w", err)
+	}
+	return out, nil
+}
 
+// DescriptorsFromEnvelope is the pure descriptor gate used by import preview
+// and runtime loading. It does not write version.txt or change splitSet.
+func DescriptorsFromEnvelope(env *metadata.Envelope) ([]ChannelDescriptor, error) {
+	if env == nil {
+		return nil, fmt.Errorf("metadata: missing envelope")
+	}
 	revoked := map[string]bool{}
 	for _, id := range env.Revocations {
 		revoked[id] = true
@@ -274,18 +256,7 @@ func applyEnvelopeOverride(channels []ChannelDescriptor) ([]ChannelDescriptor, e
 		if revoked[mc.ID] {
 			continue
 		}
-		ch := ChannelDescriptor{
-			ID: mc.ID, Protocol: mc.Protocol, Transport: mc.Transport,
-			Hostname: mc.Hostname, Port: mc.Port,
-			OriginServer: mc.OriginServer, ExpectedEgress: mc.ExpectedEgress,
-			CredentialRefs:   mc.CredentialRefs,
-			ValidationStatus: mc.ValidationStatus,
-			Enabled:          mc.Enabled,
-		}
-		if mc.ValidatedAt != nil {
-			va := *mc.ValidatedAt
-			ch.ValidatedAt = &va
-		}
+		ch := ChannelDescriptor(mc.Clone())
 		// Evidence-gate статуса: live-verified без validated_at понижается.
 		if ch.ValidationStatus == "live-verified" && ch.ValidatedAt == nil {
 			ch.ValidationStatus = "configured"
@@ -297,23 +268,19 @@ func applyEnvelopeOverride(channels []ChannelDescriptor) ([]ChannelDescriptor, e
 	if _, err := parseSet(out); err != nil {
 		return nil, err
 	}
-	// V2-048/F10: сплит из envelope — единый источник правды метаданных
-	// (заменяет встроенный список целиком, если конверт доставлен).
-	splitSet = env.SplitDirect
-	// version.txt коммитится ПОСЛЕ того, как весь набор прошёл строгий гейт
-	// (V2-034): иначе отказ валидации на envelope N+1 зафиксировал бы его
-	// version как «принятый» и навсегда заблокировал бы переустановку N.
-	if err := writeEnvelopeVersion(store.Dir, env.MetadataVersion); err != nil {
-		return nil, fmt.Errorf("metadata override: сохранить version: %w", err)
-	}
 	return out, nil
 }
 
 // parseDescriptors — валидация встроенного набора (точка для тестов schema 2).
 func parseDescriptors(data []byte) ([]ChannelDescriptor, error) {
 	var set descriptorSet
-	if err := json.Unmarshal(data, &set); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&set); err != nil {
 		return nil, fmt.Errorf("descriptors: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return nil, fmt.Errorf("descriptors: trailing data")
 	}
 	if set.Schema != 1 && set.Schema != 2 {
 		return nil, fmt.Errorf("descriptors: unsupported schema %d", set.Schema)
@@ -334,120 +301,9 @@ func parseDescriptors(data []byte) ([]ChannelDescriptor, error) {
 	return out, nil
 }
 
-// validateChannel — правила одного дескриптора (общие для встроенных и
-// envelope-каналов). Ошибка предваряется префиксом descriptors[%s].
+// Shared validation for embedded and signed profiles.
 func validateChannel(ch ChannelDescriptor) error {
-	if ch.Protocol != "vless" && ch.Protocol != "hysteria2" {
-		return fmt.Errorf("descriptors[%s]: unsupported protocol %q", ch.ID, ch.Protocol)
-	}
-	switch {
-	case ch.Protocol == "vless" && ch.Transport == "ws":
-	case ch.Protocol == "hysteria2" && ch.Transport == "quic":
-	case ch.Protocol == "vless" && ch.Transport == "shadowtls":
-		// V2-051: VLESS over ShadowTLS v3. Ровно две различные роли:
-		// uuid_ref (внутренний vless-инбаунд) + shadowtls_password_ref.
-		declared := map[string]bool{}
-		for _, r := range ch.CredentialRefs {
-			declared[r] = true
-		}
-		if ch.UUIDRef == "" || ch.ShadowTLSPasswordRef == "" ||
-			!declared[ch.UUIDRef] || !declared[ch.ShadowTLSPasswordRef] {
-			return fmt.Errorf("descriptors[%s]: shadowtls requires uuid_ref and shadowtls_password_ref, both listed in credential_refs", ch.ID)
-		}
-		if len(ch.CredentialRefs) != 2 || ch.UUIDRef == ch.ShadowTLSPasswordRef {
-			return fmt.Errorf("descriptors[%s]: credential_refs must be exactly the two distinct role refs", ch.ID)
-		}
-		if ch.Port != 443 && (ch.Port < 1024) {
-			return fmt.Errorf("descriptors[%s]: shadowtls port %d выглядит некорректно", ch.ID, ch.Port)
-		}
-	case ch.Protocol == "vless" && ch.Transport == "tcp-reality":
-		// Роли ссылок заданы явно и все три присутствуют в списке,
-		// ровно по одной (без дублей и лишних).
-		declared := map[string]bool{}
-		for _, r := range ch.CredentialRefs {
-			declared[r] = true
-		}
-		roleRefs := []string{ch.UUIDRef, ch.RealityPublicKeyRef, ch.RealityShortIDRef}
-		for _, r := range roleRefs {
-			if r == "" || !declared[r] {
-				return fmt.Errorf("descriptors[%s]: tcp-reality requires uuid_ref, reality_public_key_ref and reality_short_id_ref, all listed in credential_refs", ch.ID)
-			}
-		}
-		if len(ch.CredentialRefs) != 3 || ch.UUIDRef == ch.RealityPublicKeyRef ||
-			ch.UUIDRef == ch.RealityShortIDRef || ch.RealityPublicKeyRef == ch.RealityShortIDRef {
-			return fmt.Errorf("descriptors[%s]: credential_refs must be exactly the three distinct role refs", ch.ID)
-		}
-		if ch.ShadowTLSPasswordRef != "" {
-			return fmt.Errorf("descriptors[%s]: shadowtls_password_ref is not valid for tcp-reality", ch.ID)
-		}
-	default:
-		return fmt.Errorf("descriptors[%s]: transport %q does not match protocol %q", ch.ID, ch.Transport, ch.Protocol)
-	}
-	if net.ParseIP(strings.TrimSpace(ch.ExpectedEgress)) == nil {
-		return fmt.Errorf("descriptors[%s]: expected_egress is not an IP", ch.ID)
-	}
-	if ch.Hostname == "" || ch.Port == 0 || ch.OriginServer == "" {
-		return fmt.Errorf("descriptors[%s]: incomplete endpoint", ch.ID)
-	}
-	if len(ch.CredentialRefs) == 0 {
-		return fmt.Errorf("descriptors[%s]: no credential refs", ch.ID)
-	}
-	switch ch.ValidationStatus {
-	case "planned", "configured", "locally-tested", "live-verified", "degraded", "blocked", "retired":
-	default:
-		return fmt.Errorf("descriptors[%s]: unknown validation_status %q", ch.ID, ch.ValidationStatus)
-	}
-	return validateChannelExtras(ch)
-}
-
-// validateChannelExtras — правила V2-037 (probe-цели/hopping/brutal/mux).
-func validateChannelExtras(ch ChannelDescriptor) error {
-	if len(ch.ProbeTargets) > 0 {
-		if len(ch.ProbeTargets) < 2 {
-			return fmt.Errorf("descriptors[%s]: probe_targets requires at least 2 entries (consistency check)", ch.ID)
-		}
-		if len(ch.ProbeTargets) > 3 {
-			return fmt.Errorf("descriptors[%s]: probe_targets allows at most 3 entries", ch.ID)
-		}
-		for _, target := range ch.ProbeTargets {
-			u, err := url.Parse(target)
-			if err != nil || u.Scheme != "https" || u.Host == "" {
-				return fmt.Errorf("descriptors[%s]: probe target %q must be a valid https URL", ch.ID, target)
-			}
-		}
-	}
-	if len(ch.ServerPorts) > 0 {
-		if ch.Protocol != "hysteria2" {
-			return fmt.Errorf("descriptors[%s]: server_ports is hysteria2-only (port hopping)", ch.ID)
-		}
-		for _, sp := range ch.ServerPorts {
-			parts := strings.SplitN(sp, ":", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("descriptors[%s]: server_ports %q must be lo:hi", ch.ID, sp)
-			}
-			lo, err1 := strconv.Atoi(parts[0])
-			hi, err2 := strconv.Atoi(parts[1])
-			if err1 != nil || err2 != nil || lo < 1 || hi < 1 || lo > hi || hi > 65535 {
-				return fmt.Errorf("descriptors[%s]: server_ports %q is not a valid range", ch.ID, sp)
-			}
-		}
-	}
-	if ch.HopInterval != "" {
-		if ch.Protocol != "hysteria2" {
-			return fmt.Errorf("descriptors[%s]: hop_interval is hysteria2-only", ch.ID)
-		}
-		d, err := time.ParseDuration(ch.HopInterval)
-		if err != nil || d < 5*time.Second || d > 10*time.Minute {
-			return fmt.Errorf("descriptors[%s]: hop_interval %q must be 5s..10m", ch.ID, ch.HopInterval)
-		}
-	}
-	if ch.UpMbps < 0 || ch.UpMbps > 10000 || ch.DownMbps < 0 || ch.DownMbps > 10000 {
-		return fmt.Errorf("descriptors[%s]: up_mbps/down_mbps must be within 0..10000", ch.ID)
-	}
-	if (ch.UpMbps > 0) != (ch.DownMbps > 0) {
-		return fmt.Errorf("descriptors[%s]: up_mbps and down_mbps must be set together", ch.ID)
-	}
-	return nil
+	return metadata.ValidateChannel(metadata.Channel(ch))
 }
 
 // Selectable — каналы, которым разрешено войти в защищённый селектор.
@@ -481,7 +337,19 @@ type ClientConfig struct {
 	ExpectedEgress string
 	// ProbeTargets — HTTPS-эхо egress для probe выбранного канала
 	// (дескриптор → self-hosted первичная цель; иначе DefaultProbeTargets).
-	ProbeTargets    []string
+	ProbeTargets []string
+	// DiagnosticURL — эндпоинт controlled-volume диагностики заморозки
+	// выбранного канала ("" = нет — freeze-тест честно skip).
+	DiagnosticURL string
+	// TunnelPort — порт, который КЛИЕНТ ФАКТИЧЕСКИ набирает у выбранного
+	// канала (ChannelDescriptor.Port): 443 у CDN-ветки, 8444 hy2, 8443 reality,
+	// 8445 shadowtls. Нужен классификатору отказов как разделяющий признак
+	// порт-эвристики (THEORY §2.4a: селективный SYN-блэкхол не-443 портов,
+	// доказано live V2-051) — порт probe-цели для этого НЕ годится: у всех
+	// встроенных дескрипторов цели https/443, из-за чего диагноз
+	// port_blackholed был недостижим в проде (аудит D1, V2-068).
+	// 0 = неизвестен (классификатор честно уйдёт на фолбэк порта probe-цели).
+	TunnelPort      int
 	SelectorTags    []string            // состав селектора (для UI, A1.4)
 	SelectorDefault string              // текущий выбранный канал (A1.4)
 	ChannelIDs      map[string]string   // tag → channel id
@@ -564,6 +432,11 @@ func WithDialOverrides(m map[string]string) RenderOption {
 // RenderFrom — сборка из явно заданного набора (точка для контрактных тестов
 // A1.4: селектор собирается из данных, а не из статического шаблона).
 func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderOption) (*ClientConfig, error) {
+	for _, ch := range channels {
+		if err := metadata.ValidateSecretIDs(ch.CredentialRefs, ch.SecretIDs); err != nil {
+			return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
+		}
+	}
 	o := renderOpts{}
 	for _, fn := range opts {
 		fn(&o)
@@ -630,9 +503,13 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 	}
 	if o.withTUN {
 		cfg.Inbounds = append(cfg.Inbounds, config.Inbound{
-			Type:                "tun",
-			Tag:                 "tun-in",
-			InterfaceName:       "snowden0",
+			Type:          "tun",
+			Tag:           "tun-in",
+			InterfaceName: "snowden0",
+			// Explicit addresses are required for sing-box to install the
+			// intercepting routes on Windows. Without them Wintun falls back to
+			// APIPA and traffic continues over the physical default route.
+			Address:             []string{"10.203.0.1/30", "fdfe:dcba:9876::1/126"},
 			AutoRoute:           true,
 			StrictRoute:         true,
 			RouteExcludeAddress: []string{"172.16.0.0/12"}, // локальная сеть остаётся прямой
@@ -684,7 +561,13 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 				// — системные TCP-таймеры (2ч+) рвут их на NAT/стейт-фильтрах;
 				// 60s/20s держат запись живой. Длительности — duration-строки:
 				// sing-box парсит их как badoption.Duration (int-форма = мёртвый рендер).
-				TCPFastOpen:    true,
+				// TCP Fast Open СНЯТ (V2-080, live-доказательство 2026-09-20):
+				// `tcp_fast_open: true` ронял КАЖДОЕ соединение REALITY на
+				// Windows — ядро отвечает «tfo-go does not support TCP Fast
+				// Open on Windows» (реализация TFO в pinned sing-box не
+				// поддерживает Windows), из-за чего канал был нерабочим
+				// целиком (probe падал на всех целях). Клиент Windows-only —
+				// поле не рендерим; keep-alive ниже с TFO не связан и работает.
 				TCPKeepAlive:   "60s",
 				TCPKeepAliveIt: "20s",
 			})
@@ -840,10 +723,23 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 	}
 	return &ClientConfig{
 		Raw: raw, ExpectedEgress: expected,
-		ProbeTargets: probeTargetsFor(selected, defaultID),
-		SelectorTags: candidates, SelectorDefault: defaultID,
+		ProbeTargets:  probeTargetsFor(selected, defaultID),
+		DiagnosticURL: diagnosticURLFor(selected, defaultID),
+		TunnelPort:    tunnelPortFor(selected, defaultID),
+		SelectorTags:  candidates, SelectorDefault: defaultID,
 		ChannelIDs: channelIDs, Descriptors: selected,
 	}, nil
+}
+
+// diagnosticURLFor — URL freeze-диагностики выбранного канала (V2-057 A2).
+// "" = дескриптор не задаёт (честный skip теста, не выдуманный эндпоинт).
+func diagnosticURLFor(selected []ChannelDescriptor, defaultID string) string {
+	for _, ch := range selected {
+		if ch.ID == defaultID && ch.DiagnosticURL != "" {
+			return ch.DiagnosticURL
+		}
+	}
+	return ""
 }
 
 // probeTargets — цели probe выбранного канала: дескриптор обязателен к
@@ -855,6 +751,19 @@ func probeTargetsFor(selected []ChannelDescriptor, defaultID string) []string {
 		}
 	}
 	return append([]string(nil), DefaultProbeTargets...)
+}
+
+// tunnelPortFor — порт выбранного канала (V2-068, аудит D1): то, что клиент
+// РЕАЛЬНО набирает, а не порт probe-цели. 0 = канал не найден или порт не
+// задан: классификатор обязан честно деградировать к порту probe-цели, а не
+// выдумывать порт-класс.
+func tunnelPortFor(selected []ChannelDescriptor, defaultID string) int {
+	for _, ch := range selected {
+		if ch.ID == defaultID && ch.Port != 0 {
+			return int(ch.Port)
+		}
+	}
+	return 0
 }
 
 // pickDefault — default селектора: явно запрошенный канал (если он среди
@@ -931,11 +840,44 @@ func getOrErr(src SecretsSource, ch ChannelDescriptor, want string) (string, err
 	if _, err := refOf(ch, want); err != nil {
 		return "", err
 	}
-	v, err := src.Get(want)
+	var v string
+	var err error
+	if id, bound := ch.SecretIDs[want]; bound {
+		exact, ok := src.(SecretIDSource)
+		if !ok {
+			return "", fmt.Errorf("SecretID source required for channel %s", ch.ID)
+		}
+		kind, kindErr := credentialKind(ch, want)
+		if kindErr != nil {
+			return "", kindErr
+		}
+		v, err = exact.GetByID(id, kind)
+	} else {
+		v, err = src.Get(want)
+	}
 	if err != nil {
 		return "", fmt.Errorf("secret %q unavailable: %w", want, err)
 	}
 	return v, nil
+}
+
+func credentialKind(ch ChannelDescriptor, ref string) (string, error) {
+	switch {
+	case ch.Protocol == "hysteria2" && (ref == "hy2-password" || ref == "hy2-obfs-password"):
+		return ref, nil
+	case ch.Protocol == "vless" && ch.Transport == "ws" && ref == "vless-uuid":
+		return "vless-uuid", nil
+	case ch.Protocol == "vless" && ref == ch.UUIDRef:
+		return "vless-uuid", nil
+	case ch.Transport == "tcp-reality" && ref == ch.RealityPublicKeyRef:
+		return "reality-public-key-c", nil
+	case ch.Transport == "tcp-reality" && ref == ch.RealityShortIDRef:
+		return "reality-short-id-c", nil
+	case ch.Transport == "shadowtls" && ref == ch.ShadowTLSPasswordRef:
+		return "shadowtls-password-d", nil
+	default:
+		return "", fmt.Errorf("channel %s: unknown credential role", ch.ID)
+	}
 }
 
 func tunnelHostnames(channels []ChannelDescriptor) []string {

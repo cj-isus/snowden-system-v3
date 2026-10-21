@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeading from '../components/PageHeading.vue'
 /**
  * Секреты: локальное хранилище значений с fingerprint, проверкой и аудитом
  * раскрытий. Значения никогда не отображаются и не логируются (AGENTS.md §2.4):
@@ -22,6 +23,7 @@ onMounted(() => {
 })
 
 const showForm = ref(false)
+const saving = ref(false)
 
 // Форма добавления
 const kind = ref<SecretKind>('custom')
@@ -32,7 +34,7 @@ const showValue = ref(false)
 
 const valueMismatch = computed(() => confirmValue.value.length > 0 && value.value !== confirmValue.value)
 const canSave = computed(
-  () => title.value.trim().length > 0 && value.value.length > 0 && !valueMismatch.value,
+  () => title.value.trim().length > 0 && value.value.length > 0 && value.value === confirmValue.value && !saving.value && !buildPhase.value,
 )
 
 const kindHint = computed(() => secretKindHints[kind.value] ?? '')
@@ -46,7 +48,9 @@ function onKindChange(): void {
 
 async function onSave(): Promise<void> {
   if (!canSave.value) return
+  saving.value = true
   const ok = await save(kind.value, title.value.trim(), value.value, kindHint.value)
+  saving.value = false
   if (ok) {
     value.value = ''
     confirmValue.value = ''
@@ -63,13 +67,7 @@ function onPaste(e: ClipboardEvent): void {
 
 <template>
   <div class="view">
-    <header class="head">
-      <h2>Секреты</h2>
-      <p class="sub">
-        Значения живут только в локальном игнорируемом хранилище. В UI виден только
-        SHA256-отпечаток — сверка конфигураций идёт по хешам, не по значениям.
-      </p>
-    </header>
+    <PageHeading title="Локальное хранилище" description="Управляйте учётными данными каналов. Сохранённые значения скрыты; для сверки используются отпечатки." :count="items?.length"></PageHeading>
 
     <div class="actions-row">
       <button class="btn primary" @click="showForm = !showForm">
@@ -275,6 +273,11 @@ input::placeholder {
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
 }
+.cards :deep(.secret) { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.cards :deep(.secret:last-child) { border-bottom: 0; }
 </style>

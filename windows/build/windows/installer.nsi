@@ -1,4 +1,4 @@
-﻿; snowden.system — per-user NSIS installer.
+; snowden.system — per-user NSIS installer.
 ; Правила (docs/PLAN.md):
 ;   - fail-closed: инсталлятор ничего не решает за продукт; он только кладёт
 ;     файлы и создаёт ярлыки. Никаких Run-записей автозапуска и служб.

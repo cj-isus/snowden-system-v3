@@ -59,7 +59,9 @@ if ($UserMode) {
 
     $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
     $is = Get-ItemProperty $reg
-    if ($is.ProxyEnable -eq 1 -and $is.ProxyServer -match '^(socks=)?127\.0\.0\.1:(\d+)$') {
+    # Snowden System writes exactly 127.0.0.1:1080. Other loopback ports can
+    # belong to another local VPN/proxy and are outside this task's ownership.
+    if ($is.ProxyEnable -eq 1 -and $is.ProxyServer -match '^(socks=)?127\.0\.0\.1:(1080)$') {
         $port = [int]$Matches[2]
         if (@(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue).Count -eq 0) {
             Set-ItemProperty $reg -Name ProxyEnable -Value 0

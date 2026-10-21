@@ -80,7 +80,7 @@ func retryDelay(attempt int) time.Duration {
 // Требует удержания a.mu (все вызывающие уже держат мьютекс). Проекцию
 // NextRetryAt/RetryAttempt в state делает pushStateLocked.
 func (a *App) scheduleFailClosedRetryLocked(now time.Time) {
-	if !a.failClosedState() {
+	if !a.protectionDesired || a.closing.Load() || !a.failClosedState() {
 		return
 	}
 	a.stopRetryTimerLocked() // прошлый таймер не наследуется; счётчик эпизода растёт
@@ -110,13 +110,15 @@ func (a *App) beginFailClosedRetryLocked() bool {
 // beginRetryLaunchLocked — общая точка после begin: перевод state в starting
 // и выбор точки запуска (тесты подменяют retryLaunch). Требует a.mu.
 func (a *App) beginRetryLaunchLocked() func() {
+	a.operationID++
+	id := a.operationID // capture before unlocking: delayed launch cannot adopt a newer Start
 	a.state.State = "starting"
 	a.state.Error = ""
 	a.state.BlockedReason = ""
 	a.pushStateLocked()
 	launch := a.retryLaunch
 	if launch == nil {
-		launch = func() { go a.startCore() }
+		launch = func() { go a.startCoreGeneration(id) }
 	}
 	return launch
 }
@@ -129,7 +131,7 @@ func (a *App) beginRetryLaunchLocked() func() {
 // — backoff растёт через весь эпизод, а не сбрасывается на каждый прогон.
 func (a *App) fireFailClosedRetry(attempt int) {
 	a.mu.Lock()
-	if a.closing.Load() || attempt != a.retry.attempt {
+	if a.closing.Load() || !a.protectionDesired || !a.failClosedState() || attempt != a.retry.attempt {
 		a.mu.Unlock()
 		return
 	}
@@ -151,7 +153,7 @@ func (a *App) fireFailClosedRetry(attempt int) {
 // exactly-once: если таймер уже начал попытку — это no-op.
 func (a *App) wakeFailClosedRetry() {
 	a.mu.Lock()
-	if a.closing.Load() || !a.failClosedState() || a.retry.timer == nil || a.retry.attempt == 0 {
+	if a.closing.Load() || !a.protectionDesired || !a.failClosedState() || a.retry.timer == nil || a.retry.attempt == 0 {
 		a.mu.Unlock()
 		return
 	}

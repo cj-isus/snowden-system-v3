@@ -5,51 +5,24 @@
  */
 import { computed } from 'vue'
 import Icon from './Icon.vue'
-import type { IconName } from './Icon.vue'
 
-export type NavId =
-  | 'dashboard'
-  | 'channels'
-  | 'autoprotect'
-  | 'network'
-  | 'statistics'
-  | 'logs'
-  | 'settings'
-  | 'tests'
-  | 'secrets'
-  | 'netguard'
+import { sections } from '../composables/navigation'
+import type { PageId, SectionId } from '../composables/navigation'
+export type NavId = PageId
 
 const props = defineProps<{
-  active: NavId
-  secretsCount: number | null
+  active: SectionId
 }>()
 
-const emit = defineEmits<{ navigate: [id: NavId] }>()
+const emit = defineEmits<{ navigate: [id: SectionId] }>()
 
-type Item = { id: NavId; label: string; icon: IconName; hint: string; main?: boolean }
-
-const mainNav: Item[] = [
-  { id: 'dashboard', label: 'Главная', icon: 'dashboard', hint: 'Power-кнопка, состояние защиты, текущий канал', main: true },
-  { id: 'channels', label: 'Каналы', icon: 'server', hint: 'Каналы активного конфига и их статусы', main: true },
-  { id: 'autoprotect', label: 'Автозащита', icon: 'shield', hint: 'Сторож защищённого пути и авто-переключение', main: true },
-  { id: 'network', label: 'Сеть', icon: 'pulse', hint: 'Сетевая информация и NetGuard', main: true },
-  { id: 'statistics', label: 'Статистика', icon: 'stats', hint: 'Трафик, счётчики и тестирование', main: true },
-  { id: 'logs', label: 'Логи', icon: 'logs', hint: 'Журнал приложения и ядра', main: true },
-  { id: 'settings', label: 'Настройки', icon: 'key', hint: 'Секреты, профиль доставки, о защите', main: true },
-]
-
-const toolNav: Item[] = [
-  { id: 'tests', label: 'Тестирование', icon: 'flask', hint: 'Проверка egress, DNS, каналов и HY2/UDP' },
-  { id: 'secrets', label: 'Секреты', icon: 'key', hint: 'Локальное хранилище значений с хешами и проверкой' },
-  { id: 'netguard', label: 'NetGuard', icon: 'pulse', hint: 'Авто-починка сети: прокси, DNS-DoH, задачи' },
-]
+const mainNav = sections
 
 const activeLabel = computed(() => {
-  const all = [...mainNav, ...toolNav]
-  return all.find((i) => i.id === props.active)?.label ?? ''
+  return mainNav.find((i) => i.id === props.active)?.label ?? ''
 })
 
-function onClick(id: NavId): void {
+function onClick(id: SectionId): void {
   emit('navigate', id)
 }
 </script>
@@ -63,27 +36,12 @@ function onClick(id: NavId): void {
         class="navigation-item"
         :class="{ active: props.active === item.id }"
         :title="item.hint"
+        :aria-label="item.label"
+        :aria-current="active === item.id ? 'page' : undefined"
         @click="onClick(item.id)"
       >
         <span class="navigation-icon"><Icon :name="item.icon" :size="16" /></span>
         <span class="navigation-label">{{ item.label }}</span>
-      </button>
-
-      <div class="nav-divider" role="separator">
-        <span>инструменты</span>
-      </div>
-
-      <button
-        v-for="item in toolNav"
-        :key="item.id"
-        class="navigation-item sub"
-        :class="{ active: props.active === item.id }"
-        :title="item.hint"
-        @click="onClick(item.id)"
-      >
-        <span class="navigation-icon"><Icon :name="item.icon" :size="15" /></span>
-        <span class="navigation-label">{{ item.label }}</span>
-        <span v-if="item.id === 'secrets' && props.secretsCount !== null" class="nav-count">{{ props.secretsCount }}</span>
       </button>
     </nav>
 
@@ -95,52 +53,68 @@ function onClick(id: NavId): void {
 
 <style scoped>
 .sidebar {
-  width: 178px;
-  flex: 0 0 178px;
+  width: 210px;
+  flex: 0 0 210px;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #193247;
-  background: linear-gradient(180deg, rgba(7, 21, 34, 0.97), rgba(5, 17, 29, 0.97));
+  border-right: 1px solid rgba(255, 98, 38, 0.28);
+  background:
+    linear-gradient(180deg, rgba(5, 12, 18, 0.98), rgba(4, 9, 14, 0.99)),
+    repeating-linear-gradient(135deg, transparent 0 22px, rgba(255, 98, 38, 0.025) 23px 24px);
   z-index: 15;
+  position: relative;
 }
 
+.sidebar::after {
+  content: '';
+  position: absolute;
+  top: 16%;
+  right: -1px;
+  width: 1px;
+  height: 38%;
+  background: linear-gradient(transparent, #ff6226, transparent);
+  box-shadow: 0 0 14px rgba(255, 98, 38, 0.58);
+}
 
 .main-navigation {
-  padding-top: 20px;
+  padding: 22px 0 10px;
   flex: 1;
   overflow-y: auto;
 }
 
 .navigation-item {
   position: relative;
-  height: 38px;
+  min-height: 48px;
   display: flex;
   align-items: center;
-  margin: 0 12px 2px;
-  padding: 0 12px;
+  margin: 0 10px 3px;
+  padding: 0 15px;
   border: 0;
-  border-radius: 8px;
-  color: #9db0c1;
+  border-radius: 0;
+  color: #9baabd;
   background: transparent;
-  font-size: 13px;
+  font-size: 13.5px;
   text-align: left;
-  width: calc(100% - 24px);
-  transition: background 0.15s, color 0.15s;
+  width: calc(100% - 20px);
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
 }
 .navigation-item:hover {
-  color: #e9f2f7;
-  background: rgba(20, 58, 88, 0.45);
+  color: #f6f8fa;
+  background: rgba(255, 98, 38, 0.07);
 }
 .navigation-item.active {
-  color: #f1f6fa;
-  background: linear-gradient(90deg, #103b66, #0d2b49);
-  box-shadow: inset 3px 0 #168cff, 0 5px 15px rgba(0, 0, 0, 0.12);
+  color: #fff5f0;
+  background: linear-gradient(90deg, rgba(255, 98, 38, 0.22), rgba(255, 98, 38, 0.035));
+  box-shadow: inset 3px 0 #ff6226, 0 0 28px rgba(255, 98, 38, 0.08);
 }
 .navigation-item.active .navigation-icon {
-  color: #46adff;
+  color: #ff7b47;
+  filter: drop-shadow(0 0 6px rgba(255, 98, 38, 0.55));
 }
 .navigation-item.sub {
-  font-size: 12px;
+  min-height: 42px;
+  font-size: 12.5px;
   color: #8ba0b3;
 }
 .navigation-item.sub.active {
@@ -148,9 +122,9 @@ function onClick(id: NavId): void {
 }
 
 .navigation-icon {
-  width: 26px;
+  width: 31px;
   display: inline-flex;
-  color: #c8d8e4;
+  color: #bed0e5;
 }
 .navigation-label {
   flex: 1;
@@ -161,21 +135,22 @@ function onClick(id: NavId): void {
 
 .nav-count {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 12px;
   color: #b8c8d4;
-  background: #172d41;
+  background: rgba(255, 98, 38, 0.12);
+  border: 1px solid rgba(255, 98, 38, 0.2);
   border-radius: 999px;
   padding: 1px 7px;
 }
 
 .nav-divider {
-  margin: 12px 12px 6px;
-  border-top: 1px solid #14293c;
-  padding-top: 7px;
+  margin: 20px 18px 9px;
+  border-top: 1px solid #1a2a37;
+  padding-top: 10px;
 }
 .nav-divider span {
-  font-size: 8.5px;
-  letter-spacing: 1.2px;
+  font-size: 12px;
+  letter-spacing: 1.7px;
   text-transform: uppercase;
   color: #55708a;
 }
@@ -187,10 +162,54 @@ function onClick(id: NavId): void {
 .active-hint {
   margin-top: 14px;
   margin-left: 6px;
-  color: #55708a;
-  font-size: 8.5px;
+  color: #566b7d;
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 1180px) {
+  .sidebar { width: 72px; flex-basis: 72px; }
+  .navigation-item { width: 52px; margin-inline: 10px; padding: 0; justify-content: center; }
+  .navigation-icon { width: auto; }
+  .navigation-label, .nav-count, .nav-divider span, .active-hint { display: none; }
+  .nav-divider { margin: 16px 15px 8px; }
+  .sidebar-bottom { display: none; }
+}
+
+@media (max-width: 700px) {
+  .sidebar {
+    width: 100%;
+    flex: 0 0 62px;
+    border-right: 0;
+    border-top: 1px solid rgba(255, 98, 38, 0.24);
+    order: 2;
+  }
+  .sidebar::after, .nav-divider, .sidebar-bottom { display: none; }
+  .main-navigation {
+    display: flex;
+    padding: 7px 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: space-around;
+  }
+  .navigation-item, .navigation-item.sub {
+    min-width: 66px;
+    width: auto;
+    flex: 1 0 66px;
+    min-height: 50px;
+    margin: 0 2px;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .navigation-label {
+    display: block;
+    width: 100%;
+    font-size: 12px;
+    text-align: center;
+  }
 }
 </style>

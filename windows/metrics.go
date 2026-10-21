@@ -39,37 +39,37 @@ type metricsState struct {
 	port   string // "127.0.0.1:9097"
 	secret string
 
-	mu        sync.Mutex
-	baseUp    int64  // uploadTotal на первом замере сессии
-	baseDown  int64  // downloadTotal на первом замере сессии
-	lastUp    int64  // прошлый сырой счётчик (для скорости)
-	lastDown  int64
-	lastAt    time.Time // момент прошлого сырого замера (0 = ещё не было)
-	rateUp    float64
-	rateDown  float64
-	started   bool      // база «за сессию» зафиксирована
+	mu       sync.Mutex
+	baseUp   int64 // uploadTotal на первом замере сессии
+	baseDown int64 // downloadTotal на первом замере сессии
+	lastUp   int64 // прошлый сырой счётчик (для скорости)
+	lastDown int64
+	lastAt   time.Time // момент прошлого сырого замера (0 = ещё не было)
+	rateUp   float64
+	rateDown float64
+	started  bool // база «за сессию» зафиксирована
 }
 
 // metricsView / connView — контракты UI (зеркало в contract.ts).
 type MetricsView struct {
-	Available   bool      `json:"available"`
-	Note        string    `json:"note,omitempty"`
-	RateUp      float64   `json:"rateUp"`  // байт/сек
-	RateDown    float64   `json:"rateDown"`
-	SessionUp   int64     `json:"sessionUp"` // от первого замера сессии
-	SessionDown int64     `json:"sessionDown"`
-	At          time.Time `json:"at"`
+	Available   bool       `json:"available"`
+	Note        string     `json:"note,omitempty"`
+	RateUp      float64    `json:"rateUp"` // байт/сек
+	RateDown    float64    `json:"rateDown"`
+	SessionUp   int64      `json:"sessionUp"` // от первого замера сессии
+	SessionDown int64      `json:"sessionDown"`
+	At          time.Time  `json:"at"`
 	Connections []ConnView `json:"connections"`
 }
 
 type ConnView struct {
-	Host      string   `json:"host"`      // домен (или IP:порт, если имени нет)
-	Network   string   `json:"network"`   // tcp | udp
-	Chain     string   `json:"chain"`     // цепочка outbound'ов ядра
-	Process   string   `json:"process"`   // процесс-инициатор (TUN-режим)
-	Up        int64    `json:"up"`
-	Down      int64    `json:"down"`
-	Since     string   `json:"since"`
+	Host    string `json:"host"`    // домен (или IP:порт, если имени нет)
+	Network string `json:"network"` // tcp | udp
+	Chain   string `json:"chain"`   // цепочка outbound'ов ядра
+	Process string `json:"process"` // процесс-инициатор (TUN-режим)
+	Up      int64  `json:"up"`
+	Down    int64  `json:"down"`
+	Since   string `json:"since"`
 }
 
 // newMetricsSession — порт+секрет для новой сессии метрик. Порт: SNOWDEN_CLASH_PORT
@@ -78,10 +78,12 @@ type ConnView struct {
 func newMetricsSession() *metricsState {
 	port := ""
 	if p := os.Getenv("SNOWDEN_CLASH_PORT"); p != "" {
-		if _, err := net.Listen("tcp", "127.0.0.1:"+p); err != nil {
+		l, err := net.Listen("tcp", "127.0.0.1:"+p)
+		if err != nil {
 			// занят: не рендерим метрики (ядро упало бы на bind)
 			return nil
 		}
+		_ = l.Close()
 		port = p
 	} else {
 		l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -96,6 +98,30 @@ func newMetricsSession() *metricsState {
 		return nil
 	}
 	return &metricsState{port: "127.0.0.1:" + port, secret: hex.EncodeToString(buf)}
+}
+
+// Reconstruct exactly the endpoint/secret applied to the engine, never a
+// second random session. The raw bytes remain internal and are not logged.
+func metricsForConfig(raw []byte) *metricsState {
+	if !clashAPIBuilt {
+		return nil
+	}
+	var cfg struct {
+		Experimental struct {
+			ClashAPI struct {
+				Address string `json:"external_controller"`
+				Secret  string `json:"secret"`
+			} `json:"clash_api"`
+		} `json:"experimental"`
+	}
+	if json.Unmarshal(raw, &cfg) != nil {
+		return nil
+	}
+	c := cfg.Experimental.ClashAPI
+	if c.Address == "" || c.Secret == "" {
+		return nil
+	}
+	return &metricsState{port: c.Address, secret: c.Secret}
 }
 
 // renderOption — WithClashAPI, если сборка с with_clash_api и порт получен.
@@ -115,18 +141,18 @@ func portOf(loopbackAddr string) uint16 {
 
 // clashSnapshot — ответ GET /connections (см. trafficontrol Snapshot).
 type clashSnapshot struct {
-	UploadTotal   int64      `json:"uploadTotal"`
-	DownloadTotal int64      `json:"downloadTotal"`
+	UploadTotal   int64       `json:"uploadTotal"`
+	DownloadTotal int64       `json:"downloadTotal"`
 	Connections   []clashConn `json:"connections"`
 }
 
 type clashConn struct {
-	ID        string `json:"id"`
-	Upload    int64  `json:"upload"`
-	Download  int64  `json:"download"`
-	Start     time.Time `json:"start"`
-	Chains    []string  `json:"chains"`
-	Metadata  struct {
+	ID       string    `json:"id"`
+	Upload   int64     `json:"upload"`
+	Download int64     `json:"download"`
+	Start    time.Time `json:"start"`
+	Chains   []string  `json:"chains"`
+	Metadata struct {
 		Network         string `json:"network"`
 		Host            string `json:"host"`
 		DestinationIP   string `json:"destinationIP"`
@@ -175,7 +201,13 @@ func (m *metricsState) poll() (MetricsView, error) {
 	return m.apply(snap), nil
 }
 
-var metricsHTTPClient = &http.Client{Timeout: metricsHTTPTimeout}
+var metricsHTTPClient = &http.Client{
+	Timeout: metricsHTTPTimeout,
+	Transport: &http.Transport{
+		Proxy: nil, MaxIdleConns: 2, MaxIdleConnsPerHost: 2,
+		IdleConnTimeout: 30 * time.Second, ResponseHeaderTimeout: metricsHTTPTimeout,
+	},
+}
 
 // apply — атомарный пересчёт: скорость (дельта/время), сессийные суммы
 // (только положительные дельты — рестарт счётчиков ядра не уводит в минус).

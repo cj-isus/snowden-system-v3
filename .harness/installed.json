@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "profile": "core",
+  "agentsBlockHash": "581a5a869dda447647822c77643db16c9d607cccb069a3c40f865ab8913c03a7",
+  "files": {
+    "scripts/harness/map.mjs": "608c4caf03dfe6f7ad63a401cac4fda186d9e038717280b9508a308d739ea372",
+    "scripts/harness/doctor.mjs": "0b260af977f32c7bcadcf0f90fd7b505f1dd0b73739473c22fd759a01a1ab2f8",
+    "scripts/harness/eval.mjs": "cf12028a336fe45852708c59806da895b92925c489b167508c8574fab2230e6b",
+    "docs/HARNESS.md": "b926c5ab643ab2d261a1b2727229f9786769d55f62ab35e18281c44000e0f499",
+    "docs/STATE.md": "4a4cb690dfc7f5fae27dfd5105f21d6fb76c0cf066235f8cff8366443f45d596",
+    "docs/LESSONS.md": "f247a0745ba1a524084e239b71d2b65c48877fa75d3db010c3a8e5bc9f34f7f8",
+    ".agents/skills/repo-recon/SKILL.md": "2a8ee98685ae71782a66696a10aae2b1ed57ba9fa843e594b34fd476b7092d17",
+    ".agents/skills/memory-loop/SKILL.md": "b2ef080a109ce284d959da6d446a5c24e02f319d48d89e26f70df36e4c727b99",
+    ".agents/skills/frontend-postgres/SKILL.md": "8f4fce4a1c89fc774b0d80e84a52190b9151bc2dd62a53996318bc28275f08f4",
+    "AGENTS.md": "89f840b339221b064a9dc521ce3ec3bf9108b994210aef697e7c06a5089a9add"
+  }
+}

@@ -1,45 +1,31 @@
 <script setup lang="ts">
+import PageHeading from '../components/PageHeading.vue'
 /**
  * Автозащита (concept): сторож защищённого пути — состояние, правила, инциденты.
  * Состояние сторожа — факт из failoverPolicy (GetFailoverStatus); правила —
  * описание реального кода (failover.go), не выдумка. Инциденты — из журнала.
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import HintBox from '../components/HintBox.vue'
 import { useBackendState, initBackendState } from '../composables/backendState'
-import { api, isBuildPhase } from '../api/backend'
-import type { FailoverStatus } from '../api/contract'
+import { api } from '../api/backend'
+import { usePolling } from '../composables/polling'
+import { useInfoFacts } from '../composables/infoFacts'
+import type { ChannelHealthEntry } from '../api/contract'
 import { uiLogLines } from '../composables/uiLog'
 import { fmtDateTime } from '../api/labels'
 
 const { isRunning, state } = useBackendState()
 const logLines = uiLogLines()
 
-const status = ref<FailoverStatus | null>(null)
-const loadError = ref('')
-let timer: number | undefined
-
-async function refresh(): Promise<void> {
-  if (isBuildPhase()) {
-    status.value = null
-    loadError.value = 'Биндинги недоступны: приложение запущено вне Wails (предпросмотр).'
-    return
-  }
-  try {
-    status.value = (await api.getFailoverStatus()) as FailoverStatus
-    loadError.value = ''
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
-}
-
-onMounted(() => {
-  void initBackendState()
-  void refresh()
-  timer = window.setInterval(() => void refresh(), 10000)
-})
-onUnmounted(() => window.clearInterval(timer))
+const { failover: status, refresh: refreshStatus } = useInfoFacts()
+const { data: chanHealth, error: chanHealthError, refresh: refreshHealth } = usePolling(api.getChannelHealth, 10000)
+const { data: incidentsClusters, refresh: refreshIncidents } = usePolling(api.getIncidents, 10000)
+const { data: independence, error: independenceError, refresh: refreshIndependence } = usePolling(api.getChannelIndependence, 10000)
+const loadError = computed(() => status.value ? '' : 'Состояние адаптации недоступно.')
+async function refresh() { await Promise.all([refreshStatus(), refreshHealth(), refreshIncidents(), refreshIndependence()]) }
+onMounted(() => { void initBackendState() })
 
 const tab = ref<'state' | 'rules' | 'incidents'>('state')
 
@@ -88,25 +74,170 @@ function incidentClass(level: string): string {
   if (level === 'warn') return 'warning'
   return 'info'
 }
+
+// ---------- Здоровье каналов (PLAN-V3 A0: ChannelHealth по эпохе) ----------
+
+// Человеческие подписи кодов failclass.go. Отсутствие кода в карте — не ошибка:
+// показываем сам код (новые классы THEORY появляются раньше UI).
+const FAIL_CLASS_LABELS: Record<string, string> = {
+  reset_injected: 'RST-инъекция',
+  port_blackholed: 'чёрная дыра порта',
+  silent_freeze: 'тихая заморозка',
+  tls_policing_443: 'полиция TLS:443',
+  whitelist_mode: 'белый список',
+  protected_channel_unavailable: 'канал недоступен',
+  dns_path_failure: 'отказ DNS-пути',
+  egress_divergence: 'подмена пути (egress)',
+  direct_leak_confirmed: 'подтверждённая утечка',
+  server_unreachable: 'сервер недоступен',
+  degraded: 'деградация',
+  unknown: 'причина неизвестна',
+}
+
+function classLabel(code: string): string {
+  return FAIL_CLASS_LABELS[code] ?? code
+}
+
+function verdictLabel(v: string): string {
+  if (v === 'healthy') return 'здоров'
+  if (v === 'failing') return 'сбоит'
+  return 'нет данных'
+}
+
+function verdictClass(v: string): string {
+  if (v === 'healthy') return 'success'
+  if (v === 'failing') return 'error'
+  return 'neutral'
+}
+
+// --- D2 (V2-064): состояние восстановления канала (quarantine.go) ---
+
+// D2_STATE_LABELS — RU-подписи состояний D2. Неизвестное состояние (новое в
+// backend) показывается как есть — UI не врёт и не ломается (прецедент C1).
+const D2_STATE_LABELS: Record<string, string> = {
+  HEALTHY: 'здоров',
+  PROBATION: 'под наблюдением',
+  RECOVERING: 'восстанавливается',
+  QUARANTINED: 'карантин',
+}
+
+function d2Label(s: string): string {
+  return D2_STATE_LABELS[s] ?? s
+}
+
+function d2Class(s: string): string {
+  switch (s) {
+    case 'HEALTHY':
+      return 'success'
+    case 'PROBATION':
+    case 'RECOVERING':
+      return 'info'
+    case 'QUARANTINED':
+      return 'danger'
+    default:
+      return 'neutral'
+  }
+}
+
+// freshness — свежесть последнего факта (EvidenceAge ≤2 мин живёт в Go;
+// здесь только показ). Протухший факт уже честно стал no_data на бэкенде.
+function freshness(c: ChannelHealthEntry): string {
+  const iso = c.verdict === 'failing' ? c.lastFailAt : c.lastOkAt
+  if (!iso) return 'probe ещё не был'
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return ''
+  const age = Math.max(0, Math.round((Date.now() - t) / 1000))
+  if (age < 60) return `${age} с назад`
+  return `${Math.round(age / 60)} мин назад`
+}
+
+const epochShort = computed(() => {
+  const h = chanHealth.value
+  if (!h || h.epoch <= 0) return ''
+  return `E${h.epoch}`
+})
+
+// --- C1: машина состояний адаптивного цикла (V2-060/062) ---
+
+// SM_STATE_LABELS — RU-подписи состояний controller.go. Неизвестное состояние
+// (новое в backend) показывается как есть — UI не врёт и не ломается.
+const SM_STATE_LABELS: Record<string, string> = {
+  HEALTHY: 'здоров',
+  SUSPECTED: 'подозрение',
+  CLASSIFYING: 'классификация',
+  DEGRADED: 'деградация',
+  SWITCHING: 'переключение',
+  BLOCKED: 'заблокирован',
+  RECOVERING: 'восстановление',
+}
+
+const smState = computed(() => status.value?.smState ?? '')
+
+const smStateLabel = computed(() => {
+  const s = smState.value
+  if (!s) return 'цикл не активен'
+  return SM_STATE_LABELS[s] ?? s
+})
+
+const smStateClass = computed(() => {
+  switch (smState.value) {
+    case 'HEALTHY':
+      return 'success'
+    case 'SUSPECTED':
+    case 'CLASSIFYING':
+    case 'RECOVERING':
+      return 'info'
+    case 'DEGRADED':
+    case 'SWITCHING':
+      return 'warning'
+    case 'BLOCKED':
+      return 'danger'
+    default:
+      return 'neutral' // "" = цикл не активен (нет туннеля / ручной Stop)
+  }
+})
+
+const smStateHint = computed(() => {
+  switch (smState.value) {
+    case 'HEALTHY':
+      return 'последний probe прошёл — путь жив'
+    case 'SUSPECTED':
+      return 'одиночный провал — подтверждение серией быстрых репроб'
+    case 'CLASSIFYING':
+      return 'серия подтверждена — классификатор определяет характер отказа'
+    case 'DEGRADED':
+      return 'канал деградировал — готовится автопереключение'
+    case 'SWITCHING':
+      return 'идёт попытка переключения с обязательным probe нового канала'
+    case 'BLOCKED':
+      return 'кандидаты исчерпаны — туннель остановлен (fail-closed, прямой трафик не включается)'
+    case 'RECOVERING':
+      return 'туннель остановлен — автоповтор запуска с растущей паузой'
+    default:
+      return 'цикл не активен: нет туннеля (ручной Stop или до первого запуска)'
+  }
+})
+
+// smSinceLabel — давность текущего состояния (обновляется тикером refresh).
+const smSinceLabel = computed(() => {
+  const iso = status.value?.smSince
+  if (!iso) return ''
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return ''
+  const age = Math.max(0, Math.round((Date.now() - t) / 1000))
+  if (age < 60) return `${age} с в состоянии`
+  if (age < 3600) return `${Math.round(age / 60)} мин в состоянии`
+  return `${Math.floor(age / 3600)} ч ${Math.round((age % 3600) / 60)} мин в состоянии`
+})
 </script>
 
 <template>
   <div class="view">
-    <header class="head">
-      <div class="section-title-group">
-        <h2>Автоматическая защита</h2>
-        <span class="pill" :class="stateClass"><span class="dot"></span>{{ stateLabel }}</span>
-      </div>
-      <p class="sub">
-        Сторож периодически проверяет защищённый путь и автоматически переключает канал при
-        подтверждённой деградации. Решение принимает policy (failover.go), применение — через
-        тот же Reload + probe, что и ручное переключение.
-      </p>
-    </header>
+    <PageHeading title="Адаптация" description="Как система выбирает маршрут и реагирует на сбои в текущей сети." ><span class="pill" :class="stateClass">{{ stateLabel }}</span><button class="btn" @click="refresh">Обновить</button></PageHeading>
 
     <div class="tabs card">
-      <button class="auto-tab" :class="{ active: tab === 'state' }" @click="tab = 'state'">Состояние</button>
-      <button class="auto-tab" :class="{ active: tab === 'rules' }" @click="tab = 'rules'">Правила</button>
+      <button class="auto-tab" :class="{ active: tab === 'state' }" @click="tab = 'state'">Обзор</button>
+      <button class="auto-tab" :class="{ active: tab === 'rules' }" @click="tab = 'rules'">Политика</button>
       <button class="auto-tab" :class="{ active: tab === 'incidents' }" @click="tab = 'incidents'">Инциденты</button>
     </div>
 
@@ -133,6 +264,18 @@ function incidentClass(level: string): string {
             <div class="row"><span>Последняя причина сбоя</span><strong>{{ status?.lastError || '—' }}</strong></div>
           </div>
 
+          <!-- C1 (V2-060/062): машина состояний адаптивного цикла — формализация
+               того, что сторож уже делает; решения принимает policy, карточка —
+               честная проекция фактов см. controller.go. -->
+          <div v-if="status" class="sm-box">
+            <div class="sm-head">
+              <span class="sm-title">Адаптивный цикл</span>
+              <span class="pill" :class="smStateClass"><span class="dot"></span>{{ smStateLabel }}</span>
+            </div>
+            <p class="sm-hint">{{ smStateHint }}</p>
+            <p v-if="smSinceLabel" class="sm-since">{{ smSinceLabel }}<template v-if="status?.smClass"> · последний отказ: {{ classLabel(status.smClass) }}</template></p>
+          </div>
+
           <p v-if="loadError" class="load-error">Нет данных: {{ loadError }}</p>
         </section>
 
@@ -147,6 +290,73 @@ function incidentClass(level: string): string {
           <p v-if="state?.probeLastAt" class="side-note">Последний probe: {{ fmtDateTime(state.probeLastAt) }}</p>
         </section>
       </div>
+
+      <section class="card health">
+        <div class="card-header">
+          <h2>Здоровье каналов</h2>
+          <span v-if="epochShort" class="pill neutral"><span class="dot"></span>эпоха {{ epochShort }}<template v-if="chanHealth?.netClass"> · {{ chanHealth.netClass }}</template></span>
+        </div>
+        <p class="health-sub">
+          Факты probe внутри текущей сетевой эпохи: смена сети обнуляет реестр — факт «канал жил в
+          прошлой эпохе» ничего не обещает сейчас. «Здоров» = свежий успешный probe (≤2 мин),
+          а не гарантия будущего.
+        </p>
+        <p v-if="chanHealthError" class="load-error">Нет данных: {{ chanHealthError }}</p>
+        <div v-else-if="!chanHealth" class="empty">Нет данных.</div>
+        <template v-else>
+          <div v-if="chanHealth.channels.length === 0" class="empty">Каналов нет.</div>
+          <div v-for="c in chanHealth.channels" :key="c.id" class="chan-row">
+            <div class="chan-id">
+              <strong>{{ c.id }}</strong>
+              <span v-if="c.transport" class="chan-transport">{{ c.transport }}</span>
+            </div>
+            <span class="pill" :class="verdictClass(c.verdict)"><span class="dot"></span>{{ verdictLabel(c.verdict) }}</span>
+            <div class="chan-stats">
+              <span class="chan-counts">ok {{ c.ok }} / fail {{ c.fail }}</span>
+              <span v-if="c.lastClass" class="chan-class">{{ classLabel(c.lastClass) }}</span>
+              <span class="chan-fresh">{{ freshness(c) }}</span>
+            </div>
+            <div v-if="c.d2State && c.d2State !== 'HEALTHY'" class="chan-d2" :title="c.d2Note">
+              <span class="pill" :class="d2Class(c.d2State)"><span class="dot"></span>{{ d2Label(c.d2State) }}</span>
+              <span class="chan-d2-note">{{ c.d2Note }}</span>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <!-- V2-074 (аудит C5/D16): независимость по failure domains. Это policy-модель
+           (дескрипторы + известный ASN), не измерение магистрали: показываем число,
+           общие домены и честное «ниже порога». -->
+      <section class="card health">
+        <div class="card-header">
+          <h2>Независимость каналов</h2>
+          <span v-if="independence && independence.length" class="pill neutral">
+            <span class="dot"></span>{{ independence.length }} пар
+          </span>
+        </div>
+        <p class="health-sub">
+          Оценка по пересечению failure domains (origin, ASN, carrier, транспорт, класс порта,
+          слой, TLS-донор): чем ниже, тем сильнее каналы зависят от одной инфраструктуры.
+          Порог независимости — 0.35; ниже порога пара не является безопасной заменой друг друга.
+          Это policy-модель, а не измерение сети.
+        </p>
+        <p v-if="independenceError" class="load-error">Нет данных: {{ independenceError }}</p>
+        <div v-else-if="!independence" class="empty">Нет данных.</div>
+        <template v-else>
+          <div v-for="row in independence" :key="row.a + '|' + row.b" class="indep-row" :class="{ 'indep-low': row.belowLimit }">
+            <div class="indep-pair">
+              <strong>{{ row.a }}</strong>
+              <span class="indep-vs">↔</span>
+              <strong>{{ row.b }}</strong>
+            </div>
+            <span class="indep-score mono">{{ row.score.toFixed(2) }}</span>
+            <span class="pill" :class="row.belowLimit ? 'warning' : 'success'">
+              <span class="dot"></span>{{ row.belowLimit ? 'ниже порога' : 'независимы' }}
+            </span>
+            <span class="indep-shared">{{ row.sharedFdoms || 'общих известных доменов нет' }}</span>
+          </div>
+        </template>
+      </section>
     </template>
 
     <template v-else-if="tab === 'rules'">
@@ -177,9 +387,34 @@ function incidentClass(level: string): string {
 
     <template v-else>
       <section class="card incidents">
-        <div class="card-header"><h2>Инциденты (из журнала)</h2></div>
+        <div class="card-header">
+          <h2>Волны отказов (эпоха {{ epochShort || '—' }})</h2>
+        </div>
+        <p class="health-sub">
+          Подтверждённые отказы каналов, сгруппированные по времени (окно 90 с, центр ±60 с):
+          отказы одной волны — это реакция сети на несколько каналов сразу, а не совпадение.
+          Смена сети (новая эпоха) обнуляет картину.
+        </p>
+        <div v-if="incidentsClusters === null" class="empty">Нет данных: эпоха сети ещё не открыта (наблюдений отказов не было).</div>
+        <div v-else-if="incidentsClusters.length === 0" class="empty">Подтверждённых отказов в этой эпохе не было.</div>
+        <div v-for="c in incidentsClusters" :key="c.clusterId" class="incident-cluster">
+          <span class="pill" :class="c.isWave ? 'warning' : 'neutral'"><span class="dot"></span>{{ c.isWave ? 'волна' : 'одиночный' }}</span>
+          <div class="incident-cluster-body">
+            <div class="incident-cluster-head">
+              <strong>{{ c.channels.join(' · ') }}</strong>
+              <span class="incident-cluster-count">{{ c.count }} отказ(ов), {{ fmtDateTime(c.since) }} — {{ fmtDateTime(c.until) }}</span>
+            </div>
+            <div v-if="c.classes.length" class="incident-cluster-classes">
+              {{ c.classes.map((code) => classLabel(code)).join(' · ') }}
+            </div>
+            <div v-if="c.netClasses.length || c.isps.length" class="incident-cluster-classes">
+              Сеть: {{ [...c.netClasses, ...c.isps].join(' · ') }}
+            </div>
+          </div>
+        </div>
+        <div class="card-header" style="margin-top: 10px"><h2>Строки журнала</h2></div>
         <div v-if="incidents.length === 0" class="empty">Пока пусто — это норма до первого инцидента.</div>
-        <div v-for="(l, i) in incidents" :key="i" class="incident" :class="incidentClass(l.level)">
+        <div v-for="(l, i) in incidents" :key="'log' + i" class="incident" :class="incidentClass(l.level)">
           <span class="incident-dot"></span>
           <time class="mono">{{ fmtDateTime(l.t) }}</time>
           <span class="incident-text">{{ l.text }}</span>
@@ -229,7 +464,7 @@ function incidentClass(level: string): string {
 }
 .auto-tab.active {
   color: #e2edf4;
-  background: #102d47;
+  background: var(--accent-soft);
 }
 
 .state-grid {
@@ -238,9 +473,39 @@ function incidentClass(level: string): string {
   gap: 10px;
 }
 
-.watcher,
-.side,
-.rules,
+.watcher, .side, .rules { padding: 20px; }
+/* D3 (V2-065): кластеры волн отказов */
+.incident-cluster {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.incident-cluster-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.incident-cluster-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.incident-cluster-count {
+  font-size: 12px;
+  color: #6f8699;
+}
+
+.incident-cluster-classes {
+  font-size: 12px;
+  color: #6f8699;
+}
+
 .incidents {
   padding: 13px;
 }
@@ -272,12 +537,44 @@ function incidentClass(level: string): string {
 .watcher-status p {
   margin: 4px 0 0;
   color: #8299ad;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .rows {
   margin-top: 10px;
+}
+
+/* C1: карточка машины состояний адаптивного цикла */
+.sm-box {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #19364d;
+  border-radius: 7px;
+  background: rgba(7, 22, 35, 0.7);
+}
+.sm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sm-title {
+  color: #8298ab;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sm-hint {
+  margin: 6px 0 0;
+  color: #8299ad;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sm-since {
+  margin: 5px 0 0;
+  color: #5f788c;
+  font-size: 12px;
 }
 .row {
   min-height: 28px;
@@ -287,7 +584,7 @@ function incidentClass(level: string): string {
   gap: 10px;
   border-bottom: 1px solid #142d40;
   color: #8298ab;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .row strong {
   color: #dbe6ed;
@@ -297,20 +594,20 @@ function incidentClass(level: string): string {
 .load-error {
   margin: 10px 0 0;
   color: #ff8a90;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .side .facts {
   margin: 10px 0 0;
   padding-left: 16px;
   color: #8499ab;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .side-note {
   margin: 10px 0 0;
   color: #6f8699;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .rule {
@@ -327,7 +624,7 @@ function incidentClass(level: string): string {
 .rule p {
   margin: 4px 0 0;
   color: #8499ab;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -343,7 +640,7 @@ function incidentClass(level: string): string {
   align-items: baseline;
   padding: 7px 0;
   border-bottom: 1px solid #142d40;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .incident-dot {
   width: 7px;
@@ -360,11 +657,120 @@ function incidentClass(level: string): string {
 }
 .incident time {
   color: #73899d;
-  font-size: 9.5px;
+  font-size: 12px;
 }
 .incident-text {
   color: #a4b6c5;
   word-break: break-word;
+}
+
+.health {
+  padding: 13px;
+}
+.health-sub {
+  margin: 8px 0 0;
+  color: #6f8699;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.chan-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #142d40;
+}
+.chan-row:last-child {
+  border-bottom: 0;
+}
+.chan-id {
+  min-width: 0;
+  flex-wrap: wrap;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.chan-id strong {
+  color: #dbe6ed;
+  font-size: 11px;
+  font-weight: 500;
+}
+.chan-transport {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #19364d;
+  color: #7e96a9;
+  font-size: 12px;
+  background: rgba(7, 22, 35, 0.7);
+}
+.chan-stats {
+  flex-wrap: wrap;
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+  color: #8298ab;
+}
+.chan-class {
+  color: #ffc46b;
+}
+.chan-fresh {
+  color: #6f8699;
+}
+
+/* D2 (V2-064): строка состояния восстановления канала */
+.chan-d2 {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.chan-d2-note {
+  font-size: 12px;
+  color: #6f8699;
+}
+
+/* V2-074: независимость каналов (failure domains) */
+.indep-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+.indep-row:last-child {
+  border-bottom: none;
+}
+.indep-low {
+  opacity: 0.95;
+}
+.indep-pair {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.indep-pair strong {
+  font-weight: 600;
+  color: #cdd9e5;
+}
+.indep-vs {
+  color: #6f8699;
+}
+.indep-score {
+  color: #9fb3c8;
+}
+.indep-shared {
+  margin-left: auto;
+  color: #8298ab;
+  font-size: 11px;
 }
 
 @media (max-width: 1000px) {

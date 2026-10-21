@@ -23,6 +23,7 @@ import (
 // антидаунгрейд-теста версия поднимается отдельным сценарием).
 func newTestApp(t *testing.T) *App {
 	t.Helper()
+	t.Setenv("APPDATA", t.TempDir())
 	a := &App{}
 	a.vault = secretvault.NewManager(filepath.Join(t.TempDir(), "vault.json"))
 	return a
@@ -133,33 +134,18 @@ func TestOnboardingApplyRejectsBadSignature(t *testing.T) {
 }
 
 func TestOnboardingPreviewDoesNotTouchDisk(t *testing.T) {
-	a := newTestApp(t)
-	env := &metadata.Envelope{
-		SchemaVersion:   1,
-		MetadataVersion: 5,
-		IssuedAt:        time.Now().UTC(),
-		ExpiresAt:       time.Now().UTC().Add(time.Hour),
-	}
-	payload := &onboarding.BundlePayload{
-		Schema:      1,
-		CreatedAt:   time.Now().UTC(),
-		TrustedKeys: []onboarding.TrustedKey{{KeyID: "k", Public: "ab"}},
-		Envelope:    mustJSON(t, env),
-		Secrets:     []onboarding.SecretSlot{{Kind: "hy2-password", ID: "h1", Value: "supersecret1"}},
-	}
-	transport, err := onboarding.Seal(payload, "passphrase-123")
+	f := newImportFixture(t)
+	transport := f.seal(t)
+	before := snapshotImport(t, f.paths)
+	prev, err := f.app.ApplyOnboardingString(transport, "synthetic-passphrase", false)
 	if err != nil {
-		t.Fatalf("seal: %v", err)
+		t.Fatal(err)
 	}
-	prev, err := a.ApplyOnboardingString(transport, "passphrase-123", false)
-	if err != nil {
-		t.Fatalf("preview: %v", err)
-	}
-	if prev.Channels != 0 || prev.Secrets != 1 || prev.BundleVer != 5 {
+	if prev.Channels != 1 || prev.Secrets != 1 || prev.BundleVer != 2 || prev.CurrentVer != 1 {
 		t.Fatalf("preview fields: %+v", prev)
 	}
+	assertImportUnchanged(t, f.paths, before)
 }
-
 func TestOnboardingExportRequiresPassphraseLength(t *testing.T) {
 	a := newTestApp(t)
 	if _, err := a.ExportOnboarding("short"); err == nil {

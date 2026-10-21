@@ -8,7 +8,7 @@
 // теста идёт через туннель, RU-сайты должны быть достижимы И ЧЕРЕЗ NL —
 // они публичные; это проверка «не сломали ли RU для путешественника»).
 //
-// Запуск: go test -tags "live,with_utls,with_gvisor,with_quic" -run TestLiveMultiSite -v
+// Запуск (PowerShell): $env:SNOWDEN_LIVE_USE_PROFILE='1'; go test -tags "live,with_utls,with_gvisor,with_quic" -run TestLiveMultiSite -v
 // Требования: секреты в DPAPI (AppData), сеть с рабочим return-путём.
 package main
 

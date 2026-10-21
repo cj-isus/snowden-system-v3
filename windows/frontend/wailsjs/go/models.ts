@@ -180,6 +180,97 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ChannelHealthEntry {
+	    id: string;
+	    transport: string;
+	    ok: number;
+	    fail: number;
+	    lastOkAt: string;
+	    lastFailAt: string;
+	    lastClass: string;
+	    lastSrc: string;
+	    d2State: string;
+	    d2Note: string;
+	    verdict: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChannelHealthEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.transport = source["transport"];
+	        this.ok = source["ok"];
+	        this.fail = source["fail"];
+	        this.lastOkAt = source["lastOkAt"];
+	        this.lastFailAt = source["lastFailAt"];
+	        this.lastClass = source["lastClass"];
+	        this.lastSrc = source["lastSrc"];
+	        this.d2State = source["d2State"];
+	        this.d2Note = source["d2Note"];
+	        this.verdict = source["verdict"];
+	    }
+	}
+	export class ChannelHealth {
+	    epoch: number;
+	    started: string;
+	    netClass: string;
+	    now: string;
+	    channels: ChannelHealthEntry[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ChannelHealth(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.epoch = source["epoch"];
+	        this.started = source["started"];
+	        this.netClass = source["netClass"];
+	        this.now = source["now"];
+	        this.channels = this.convertValues(source["channels"], ChannelHealthEntry);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class ChannelIndependenceInfo {
+	    a: string;
+	    b: string;
+	    score: number;
+	    shared_fdoms: string;
+	    below_limit: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChannelIndependenceInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.a = source["a"];
+	        this.b = source["b"];
+	        this.score = source["score"];
+	        this.shared_fdoms = source["shared_fdoms"];
+	        this.below_limit = source["below_limit"];
+	    }
+	}
 	
 	export class ConnView {
 	    host: string;
@@ -235,6 +326,9 @@ export namespace main {
 	    switches: number;
 	    lastError: string;
 	    nextCheckIn: number;
+	    smState: string;
+	    smSince: string;
+	    smClass: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new FailoverStatus(source);
@@ -247,6 +341,37 @@ export namespace main {
 	        this.switches = source["switches"];
 	        this.lastError = source["lastError"];
 	        this.nextCheckIn = source["nextCheckIn"];
+	        this.smState = source["smState"];
+	        this.smSince = source["smSince"];
+	        this.smClass = source["smClass"];
+	    }
+	}
+	export class IncidentCluster {
+	    since: string;
+	    until: string;
+	    channels: string[];
+	    count: number;
+	    classes: string[];
+	    netClasses: string[];
+	    isps: string[];
+	    isWave: boolean;
+	    clusterId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new IncidentCluster(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.since = source["since"];
+	        this.until = source["until"];
+	        this.channels = source["channels"];
+	        this.count = source["count"];
+	        this.classes = source["classes"];
+	        this.netClasses = source["netClasses"];
+	        this.isps = source["isps"];
+	        this.isWave = source["isWave"];
+	        this.clusterId = source["clusterId"];
 	    }
 	}
 	export class LogLine {
@@ -431,6 +556,7 @@ export namespace main {
 	    localIP: string;
 	    isp: string;
 	    publicIP: string;
+	    tunnelIP: string;
 	    country: string;
 	    countryOrigin: string;
 	    dnsViaTunnel: boolean;
@@ -448,6 +574,7 @@ export namespace main {
 	        this.localIP = source["localIP"];
 	        this.isp = source["isp"];
 	        this.publicIP = source["publicIP"];
+	        this.tunnelIP = source["tunnelIP"];
 	        this.country = source["country"];
 	        this.countryOrigin = source["countryOrigin"];
 	        this.dnsViaTunnel = source["dnsViaTunnel"];
@@ -533,6 +660,28 @@ export namespace main {
 	}
 	
 	
+	export class RuntimeInfo {
+	    version: string;
+	    os: string;
+	    arch: string;
+	    pid: number;
+	    coreVersion: string;
+	    shellVersion: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RuntimeInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.os = source["os"];
+	        this.arch = source["arch"];
+	        this.pid = source["pid"];
+	        this.coreVersion = source["coreVersion"];
+	        this.shellVersion = source["shellVersion"];
+	    }
+	}
 	export class SecretTestReport {
 	    ok: boolean;
 	    steps: ProbeStepView[];

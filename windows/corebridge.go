@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -31,16 +32,11 @@ type vaultSecrets struct {
 }
 
 func (v *vaultSecrets) Get(ref string) (string, error) {
-	metas, err := v.vault.List()
-	if err != nil {
-		return "", err
-	}
-	for _, m := range metas {
-		if m.Kind == ref {
-			return v.vault.Value(m.ID)
-		}
-	}
-	return "", fmt.Errorf("секрет %q не найден в хранилище", ref)
+	return v.vault.ValueByKind(ref)
+}
+
+func (v *vaultSecrets) GetByID(id, kind string) (string, error) {
+	return v.vault.ValueFor(id, kind)
 }
 
 func (v *vaultSecrets) PinCertPath(channelID string) string {
@@ -100,6 +96,13 @@ var runtime_ = &coreRuntime{}
 // (server=IP, SNI/Host=домен), и старт канала перестаёт зависеть от
 // bootstrap-DNS sing-box.
 func (a *App) renderAndPrepare(channelID string) (*render.ClientConfig, error) {
+	return a.renderAndPrepareContext(context.Background(), channelID, nil)
+}
+
+func (a *App) renderAndPrepareContext(ctx context.Context, channelID string, metrics *metricsState) (*render.ClientConfig, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	src := &vaultSecrets{vault: a.vault}
 	channels, err := render.LoadDescriptors()
 	if err != nil {
@@ -126,7 +129,7 @@ func (a *App) renderAndPrepare(channelID string) (*render.ClientConfig, error) {
 			a.appendLog("info", fmt.Sprintf(format, args...))
 		},
 	}
-	resolveCtx, resolveCancel := context.WithTimeout(context.Background(), 6*time.Second)
+	resolveCtx, resolveCancel := context.WithTimeout(ctx, 6*time.Second)
 	for _, ch := range channels {
 		if !ch.Enabled || ch.Protocol != "vless" || ch.Transport != "ws" {
 			continue
@@ -142,6 +145,9 @@ func (a *App) renderAndPrepare(channelID string) (*render.ClientConfig, error) {
 		overrides[ch.Hostname] = ip
 	}
 	resolveCancel()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	withTUN := tunRequested()
 	// Валидация запроса ДО рендера: несуществующий/не включённый канал —
@@ -168,23 +174,15 @@ func (a *App) renderAndPrepare(channelID string) (*render.ClientConfig, error) {
 	if len(overrides) > 0 {
 		opts = append(opts, render.WithDialOverrides(overrides))
 	}
-	// Лог ядра в файл (V2-046): усекаем на КАЖДОМ рендере — файл per-session,
-	// строки прошлых запусков не должны смешиваться с текущим каналом.
+	// Preparing a candidate must not truncate the running engine's log.
 	enginePath := engineFileLogPath()
 	_ = os.MkdirAll(logsDir(), 0o700)
-	if f, terr := os.OpenFile(enginePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600); terr == nil {
-		f.Close()
-	}
 	opts = append(opts, render.WithEngineLogPath(enginePath))
-	// Метрики (V2-048/F12): сессия на каждый рендер; у каждого рендера свой
-	// порт+секрет, ядро биндит контроллер при Start этого рендера.
-	runtime_.mu.Lock()
-	runtime_.metrics = newMetricsSession()
-	runtime_.mu.Unlock()
-	opts = append(opts, runtime_.metrics.renderOption()...)
-	// Метрики (V2-048/F12): сессия собирается ДО рендера — рендер включает
-	// experimental.clash_api только если и ядро умеет, и порт получен.
-	metrics := newMetricsSession()
+	// One controller endpoint/secret per engine. A selector-only switch keeps
+	// that session; a new engine publishes its metrics only after probe pass.
+	if metrics == nil {
+		metrics = newMetricsSession()
+	}
 	opts = append(opts, metrics.renderOption()...)
 	cc, err := render.RenderFrom(channels, src, opts...)
 	if err != nil {
@@ -222,6 +220,20 @@ func legacyHy2PinPaths() []string {
 // startCore — фактический запуск VPN (без прокси-простоты: полный путь
 // engine → system proxy → protected probe). Горутина: UI не блокируется.
 func (a *App) startCore() {
+	a.mu.Lock()
+	id := a.operationID
+	a.mu.Unlock()
+	a.startCoreGeneration(id)
+}
+
+func (a *App) startCoreGeneration(id uint64) {
+	a.operationMu.Lock()
+	defer a.operationMu.Unlock()
+	ctx, cancel, ok := a.beginOperation(id)
+	if !ok {
+		return
+	}
+	defer a.endOperation(cancel)
 	runtime_.mu.Lock()
 	if runtime_.startBusy {
 		runtime_.mu.Unlock()
@@ -236,12 +248,23 @@ func (a *App) startCore() {
 	}()
 
 	a.mu.Lock()
+	if a.operationID != id || !a.protectionDesired || ctx.Err() != nil {
+		a.mu.Unlock()
+		return
+	}
 	a.state.State = "starting"
 	a.state.Error = ""
 	a.state.BlockedReason = "" // прошлый BLOCKED (например, исчерпан failover) не висит над новым запуском
 	a.pushStateLocked()
 	a.mu.Unlock()
-
+	// Protect even render/preflight failures on the first Connect, before
+	// there is a Manager to tear down. No automatic error releases this policy.
+	if tunRequested() {
+		if err := a.protectionPolicy().Arm(); err != nil {
+			a.failCore("WFP: барьер не подтверждён до подготовки конфига", err)
+			return
+		}
+	}
 	// Авто-выбор первого канала по классу сети (V2-054): mobile → HY2/QUIC
 	// первым (CGNAT-валоны бьют по CDN-пути, V2-026), wifi/ethernet → vless+ws
 	// первым. Probe-безопасно: выбор влияет только на ПОРЯДОК попыток —
@@ -257,16 +280,18 @@ func (a *App) startCore() {
 			}
 		}
 	}
-	cc, err := a.renderAndPrepare(defaultCh)
+	cc, err := a.renderAndPrepareContext(ctx, defaultCh, nil)
 	if err != nil {
-		a.failCore("рендер конфига", err)
+		if ctx.Err() == nil {
+			a.failCore("рендер конфига", err)
+		}
 		return
 	}
-	runtime_.mu.Lock()
-	runtime_.cc = cc
-	runtime_.mu.Unlock()
 
-	if !a.startWithProbe(cc) {
+	if !a.startWithProbeContext(ctx, cc) {
+		if ctx.Err() != nil {
+			return
+		}
 		a.appendLog("warn", "запуск: protected probe на "+cc.SelectorDefault+" не прошёл")
 		// Failover-on-start (V2-040): провал probe на первом канале не является
 		// приговором всей защите — сеть могла отрезать именно этот транспорт
@@ -287,7 +312,10 @@ func (a *App) startCore() {
 		a.appendLog("warn", "запуск: probe канала "+cc.SelectorDefault+" не прошёл — перебираю альтернативные каналы (failover-on-start)")
 		started := false
 		for _, cand := range others {
-			candCC, ok := a.startChannelWithProbe(cand)
+			if ctx.Err() != nil {
+				return
+			}
+			candCC, ok := a.startChannelWithProbeContext(ctx, cand)
 			if !ok {
 				continue
 			}
@@ -302,9 +330,16 @@ func (a *App) startCore() {
 			// канал обычно отпускает. Дешёвый ретрай резко снижает «встал без VPN»
 			// без ослабления FR-001 (probe обязателен на каждой попытке).
 			a.appendLog("warn", "запуск: все кандидаты не прошли с первого раза — повторная серия через 20с (волны деградации бьют не непрерывно)")
-			time.Sleep(20 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(20 * time.Second):
+			}
 			for _, cand := range others {
-				candCC, ok := a.startChannelWithProbe(cand)
+				if ctx.Err() != nil {
+					return
+				}
+				candCC, ok := a.startChannelWithProbeContext(ctx, cand)
 				if !ok {
 					continue
 				}
@@ -312,6 +347,9 @@ func (a *App) startCore() {
 				started = true
 				break
 			}
+		}
+		if ctx.Err() != nil {
+			return
 		}
 		if !started {
 			a.failCore("запуск", fmt.Errorf("все каналы не прошли probe (%s и %v), включая повторную серию — fail-closed (FR-001)", cc.SelectorDefault, others))
@@ -322,10 +360,19 @@ func (a *App) startCore() {
 	// Сторож — один на процесс (не на Start): повторный Start после Stop
 	// не должен плодить тикеры. Явный Start также сбрасывает состояние
 	// failover: прошлый инцидент не должен копиться в новом запуске.
+	if ctx.Err() != nil || !a.operationCurrent(id) {
+		return // Stop owns cleanup; an obsolete generation cannot publish running.
+	}
 	a.ensureWatchdog()
 	a.fpol.hardReset()
+	a.sm.markStarted(time.Now()) // C1 (V2-060): туннель поднят (в т.ч. после авто-ретрая) → HEALTHY
 
 	a.mu.Lock()
+	if a.operationID != id || !a.protectionDesired {
+		a.mu.Unlock()
+		return
+	}
+	a.cancelFailClosedRetryLocked() // successful gate ends the recovery episode
 	a.state.State = "running"
 	if tunRequested() {
 		a.state.ProxyMode = "tun"
@@ -338,26 +385,10 @@ func (a *App) startCore() {
 	a.state.Active = channelViewOf(cc, cc.SelectorDefault)
 	a.mu.Unlock()
 
-	// Kill switch — ТОЛЬКО TUN (V2-038, аудит п.5): в SOCKS смерть движка
-	// означает повисший браузер (fail-closed по построению), в TUN — молча
-	// прямой трафик мимо туннеля. Применяется ПОСЛЕ успешного probe (политика
-	// разрешает наш exe — движок in-process); startup-очистка снимет её при
-	// следующем старте, даже если этот процесс умрёт (dead-man + state-файл).
-	// Вне a.mu: netsh — секунды, UI-мьютекс держать нельзя (урок V2-028).
-	if tunRequested() {
-		exe, eerr := osExecutable()
-		switch {
-		case eerr != nil:
-			a.appendLog("warn", "kill switch: путь exe не определён — блок не применён (fail-open, честно): "+eerr.Error())
-		default:
-			if kerr := applyKillSwitch(osRunner{}, exe, killSwitchExpireDefault); kerr != nil {
-				a.appendLog("warn", "kill switch: не применён (fail-open, честно): "+kerr.Error())
-			} else {
-				a.appendLog("info", "kill switch: блок-политика активна (TUN): прямой трафик вне туннеля заблокирован")
-			}
-		}
-	}
 	a.appendLog("info", "запуск: protected probe пройден — канал "+cc.SelectorDefault)
+	// V2-057 (A0): успешный старт-гейт = первый health-факт канала в эпохе.
+	// channelID — фактический активный (default мог быть скорректирован перебором).
+	chanHealth.observeResult(currentChannelEpoch(), cc.SelectorDefault, true, "", time.Now())
 	a.appendLog("info", "VPN запущен: селектор "+fmt.Sprint(cc.SelectorTags)+", ожидаемый egress "+cc.ExpectedEgress)
 	a.pushState()
 }
@@ -365,13 +396,36 @@ func (a *App) startCore() {
 // startWithProbe — Start текущего cc через Manager; провал = остановленный
 // менеджер и false. Единая точка для startCore и перебора каналов.
 func (a *App) startWithProbe(cc *render.ClientConfig) bool {
+	return a.startWithProbeContext(context.Background(), cc)
+}
+
+func (a *App) startWithProbeContext(ctx context.Context, cc *render.ClientConfig) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	runtime_.mu.Lock()
+	previous := runtime_.manager
+	runtime_.mu.Unlock()
+	if previous != nil {
+		if err := previous.Stop(context.Background()); err != nil {
+			a.appendLog("error", "cleanup предыдущего manager не завершён; новый engine не запускается: "+err.Error())
+			return false
+		}
+	}
+	tunMode := tunRequested()
+	if tunMode {
+		if err := a.protectionPolicy().Arm(); err != nil {
+			a.appendLog("error", "WFP: TUN заблокирован до безопасного применения policy: "+err.Error())
+			return false
+		}
+	}
 	engine := core.NewEngine(cc.Raw)
 	manager := core.NewManager()
 	manager.SetEngine(engine)
-	manager.SetProbe(newAppProbe(cc))
+	manager.SetProbe(a.protectedProbe(cc))
 	// TUN-режим: маршрутизацию делает адаптер snowden0 на IP-уровне, системный
 	// прокси-реестр не трогаем (он же не действует на весь трафик — зачем).
-	if tunRequested() {
+	if tunMode {
 		manager.SetSystemProxy(noopProxy{})
 	}
 
@@ -380,10 +434,31 @@ func (a *App) startWithProbe(cc *render.ClientConfig) bool {
 	runtime_.engine = engine
 	runtime_.mu.Unlock()
 
-	if err := manager.Start(context.Background()); err != nil {
+	if err := manager.Start(ctx); err != nil {
 		_ = manager.Stop(context.Background())
 		return false
 	}
+	if tunMode {
+		if err := permitWFPTUN(wfpTunName, 8*time.Second); err != nil {
+			_ = manager.Stop(context.Background()) // policy remains active while routes disappear
+			a.appendLog("error", "WFP: интерфейс TUN не разрешён/не проверен: "+err.Error())
+			return false
+		}
+		if err := externalTUNProbe(cc.ExpectedEgress, 15*time.Second); err != nil {
+			_ = manager.Stop(context.Background())
+			a.appendLog("error", "WFP: внешний процесс не подтвердил protected TUN: "+err.Error())
+			return false
+		}
+		a.appendLog("info", "WFP: policy и внешний protected TUN probe подтверждены")
+	}
+	if ctx.Err() != nil {
+		_ = manager.Stop(context.Background())
+		return false
+	}
+	runtime_.mu.Lock()
+	runtime_.cc = cc
+	runtime_.metrics = metricsForConfig(cc.Raw)
+	runtime_.mu.Unlock()
 	return true
 }
 
@@ -391,15 +466,16 @@ func (a *App) startWithProbe(cc *render.ClientConfig) bool {
 // Используется failover-on-start: каждый кандидат получает свежий рендер
 // (expected egress/probe-цели следуют за каналом, V2-032).
 func (a *App) startChannelWithProbe(channelID string) (*render.ClientConfig, bool) {
-	cc, err := a.renderAndPrepare(channelID)
+	return a.startChannelWithProbeContext(context.Background(), channelID)
+}
+
+func (a *App) startChannelWithProbeContext(ctx context.Context, channelID string) (*render.ClientConfig, bool) {
+	cc, err := a.renderAndPrepareContext(ctx, channelID, nil)
 	if err != nil {
 		a.appendLog("warn", "старт канала "+channelID+": рендер не собран: "+err.Error())
 		return nil, false
 	}
-	runtime_.mu.Lock()
-	runtime_.cc = cc
-	runtime_.mu.Unlock()
-	return cc, a.startWithProbe(cc)
+	return cc, a.startWithProbeContext(ctx, cc)
 }
 
 // failCore — честный перевод в error с человеческой причиной.
@@ -412,11 +488,37 @@ func (a *App) failCore(stage string, err error) {
 	m := runtime_.manager
 	runtime_.mu.Unlock()
 	if m != nil {
-		if serr := a.stopCore(); serr != nil {
+		if serr := a.stopCoreLocked(stopFailure); serr != nil {
 			a.appendLog("warn", "cleanup после ошибки: "+serr.Error())
+			err = errors.Join(err, serr)
 		}
 	}
+	// V2-056: если в момент failCore есть свежий probe-отчёт — классифицируем
+	// его причину (журнал; поведение не меняется). runtime_.cc читаем под
+	// runtime_.mu (правило конкурентного слоя V2-028).
+	runtime_.mu.Lock()
+	cc := runtime_.cc
+	runtime_.mu.Unlock()
 	a.mu.Lock()
+	if last := a.state.Probe; last != nil && !last.OK {
+		lreport := &core.ProbeReport{AllPassed: false}
+		for _, st := range last.Steps {
+			lreport.Results = append(lreport.Results, core.ProbeResult{
+				Name: st.Name, Passed: st.Status == "pass", Detail: st.Detail,
+			})
+		}
+		channelPort, probePort := 0, 0
+		if cc != nil {
+			channelPort, probePort = cc.TunnelPort, probeTunnelPort(cc.ProbeTargets)
+		}
+		a.appendLogLocked("error", stage+": "+classifyFailureLogLine(lreport, channelPort, probePort))
+	}
+	a.mu.Unlock()
+	a.mu.Lock()
+	if !a.protectionDesired {
+		a.mu.Unlock()
+		return
+	}
 	a.state.State = "error"
 	a.state.Error = stage + ": " + err.Error()
 	a.state.ProxyMode = ""
@@ -426,8 +528,9 @@ func (a *App) failCore(stage string, err error) {
 	// кончиться, когда никто не смотрит в окно. Планируем только здесь:
 	// живой туннель после отката переключения сюда не попадает.
 	a.scheduleFailClosedRetryLocked(time.Now())
+	a.sm.markRecovering(time.Now()) // C1 (V2-060): fail-closed с авто-ретраем → RECOVERING
+	a.appendLogLocked("error", a.state.Error)
 	a.mu.Unlock()
-	a.appendLog("error", a.state.Error)
 	a.pushState()
 }
 
@@ -444,30 +547,50 @@ const (
 // fastReprobe — серия быстрых репроб после провала тика. true = путь
 // восстановился (мерцание), туннель жив. Возвращает последний отчёт.
 func (a *App) fastReprobe(ctx context.Context, cc *render.ClientConfig) (recovered bool, report *core.ProbeReport) {
+	return a.fastReprobeAfter(ctx, cc, fastReprobeGap)
+}
+
+func (a *App) fastReprobeAfter(ctx context.Context, cc *render.ClientConfig, gap time.Duration) (recovered bool, report *core.ProbeReport) {
 	for i := 0; i < fastReprobeCount; i++ {
 		select {
 		case <-ctx.Done():
 			return false, nil
-		case <-time.After(fastReprobeGap):
+		case <-time.After(gap):
 		}
 		if a.closing.Load() {
 			return false, nil
 		}
-		runtime_.mu.Lock()
-		ours := runtime_.cc == cc && runtime_.manager != nil
-		runtime_.mu.Unlock()
-		if !ours {
+		if !a.sessionCurrent(cc) {
 			return false, nil // туннель переключили/остановили, пока мы ждали
 		}
 		probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		r := newAppProbe(cc).Run(probeCtx)
+		r := a.protectedProbe(cc).Run(probeCtx)
 		cancel()
+		if ctx.Err() != nil || !a.sessionCurrent(cc) {
+			return false, nil
+		}
+		if r.LeakConfirmed {
+			return false, r // confirmed leak must never wait for another probe
+		}
 		if r.AllPassed {
 			return true, r
 		}
 		report = r
 	}
 	return false, report
+}
+
+// blockUnsafePath is reserved for positive evidence of an unsafe route.
+// No debounce or live selector switch is allowed once such evidence exists.
+func (a *App) blockUnsafePath(cc *render.ClientConfig, reason string, report *core.ProbeReport, failureClass string) {
+	if !a.failSession(cc, report, reason, false) {
+		return
+	}
+	now := time.Now()
+	a.sm.markTick(false, report.Summary(), now)
+	a.sm.markClassified(failureClass, report.Summary(), now)
+	chanHealth.observeResult(currentChannelEpoch(), a.activeChannelIDForHealth(), false, failureClass, now)
+	a.appendLog("error", reason+" — немедленная остановка")
 }
 
 // watchCore — сторож защищённого пути. Раз в watchdogInterval повторный
@@ -485,11 +608,18 @@ func (a *App) fastReprobe(ctx context.Context, cc *render.ClientConfig) (recover
 func (a *App) watchCore(ctx context.Context) {
 	ticker := time.NewTicker(watchdogInterval)
 	defer ticker.Stop()
+	a.watchCoreTicks(ctx, ticker.C)
+}
+
+func (a *App) watchCoreTicks(ctx context.Context, ticks <-chan time.Time) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case _, open := <-ticks:
+			if !open {
+				return
+			}
 		}
 		runtime_.mu.Lock()
 		running := runtime_.manager != nil && runtime_.cc != nil
@@ -505,30 +635,56 @@ func (a *App) watchCore(ctx context.Context) {
 		if startBusy {
 			continue
 		}
-		if !running || a.closing.Load() {
+		if !running || !a.sessionCurrent(cc) {
 			continue
 		}
 		probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		report := newAppProbe(cc).Run(probeCtx)
+		report := a.protectedProbe(cc).Run(probeCtx)
 		cancel()
+		if ctx.Err() != nil {
+			return
+		}
 		// Состояние могло измениться, пока probe шёл (Stop/Reload): выходим,
 		// если туннель уже не наш.
-		runtime_.mu.Lock()
-		stillOurs := runtime_.manager != nil && runtime_.cc == cc
-		runtime_.mu.Unlock()
+		stillOurs := a.sessionCurrent(cc)
 		if !stillOurs {
 			continue
 		}
+		if report.LeakConfirmed {
+			a.blockUnsafePath(cc, "сторож: обнаружена утечка защищённого пути", report, fcLeakConfirmed)
+			continue
+		}
 		if !report.AllPassed {
+			// V2-056: детерминированный классификатор (THEORY §2.10 п.16) —
+			// диагноз в журнал, решения не меняет (PLAN §5, честная граница v1).
 			a.appendLog("warn", "сторож: шаг probe не прошёл — подтверждаю серией быстрых репроб: "+report.Summary())
+			a.appendLog("warn", "сторож: "+classifyFailureLogLine(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets)))
+			a.sm.markTick(false, report.Summary(), time.Now()) // C1 (V2-060): одиночный провал = SUSPECTED (§23)
 			recovered, lastReport := a.fastReprobe(ctx, cc)
+			if ctx.Err() != nil {
+				return
+			}
+			if !a.sessionCurrent(cc) {
+				continue
+			}
 			if lastReport != nil {
 				report = lastReport
+			}
+			if report.LeakConfirmed {
+				a.blockUnsafePath(cc, "сторож: обнаружена утечка защищённого пути", report, fcLeakConfirmed)
+				continue
 			}
 			if recovered {
 				a.appendLog("info", "сторож: путь восстановился (краткое мерцание) — туннель не тронут")
 				a.fpol.hardReset()
-				a.renewKillSwitchIfTUN()
+				a.sm.markRecovered(time.Now()) // C1: серия прервалась успехом → HEALTHY
+				if err := a.renewKillSwitchIfTUN(); err != nil {
+					a.blockUnsafePath(cc, "WFP: policy не подтверждена", report, fcUnknown)
+					continue
+				}
+				// V2-057 (A0): мерцание = успех пути (последний исход серии),
+				// но FAIL не пишем — серия поглощена (семантика V2-037).
+				a.recordProbeOutcome(true, report)
 				a.mu.Lock()
 				a.state.Probe = toView(report)
 				a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
@@ -541,6 +697,12 @@ func (a *App) watchCore(ctx context.Context) {
 			}
 			// Подтверждённый отказ защищённого пути.
 			a.appendLog("error", "сторож: подтверждённый отказ защищённого пути — "+report.Summary())
+			fc := ClassifyFailure(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets))
+			// C1 (V2-060): подтверждённая серия → классификация (§22 CLASSIFYING;
+			// unknown-класс честен — выдумывать диагноз не будем).
+			a.sm.markClassified(fc.Code, report.Summary(), time.Now())
+			// V2-057 (A0): подтверждённая серия = FAIL записи канала (мерцания — нет).
+			a.appendLog("error", "сторож: "+classifyFailureLogLine(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets))+" — "+fc.Hint)
 			inSelector := map[string]bool{}
 			for _, tag := range cc.SelectorTags {
 				inSelector[tag] = true
@@ -549,23 +711,23 @@ func (a *App) watchCore(ctx context.Context) {
 			if cerr != nil {
 				channels = nil
 			}
-			switched, blocked := a.tryFailover(channels, inSelector, cc.SelectorDefault)
+			a.sm.markDegraded(time.Now()) // C1: класс есть → решение «деградировал» (§24)
+			if fc.Code == fcEgressDivergence {
+				a.blockUnsafePath(cc, "сторож: egress защищённого пути не совпадает с ожидаемым", report, fc.Code)
+				continue
+			}
+			if fc.Code == fcWhitelistMode {
+				a.blockUnsafePath(cc, "сторож: признаки allowlist-ограничения; диагноз требует дополнительной проверки", report, fc.Code)
+				continue
+			}
+			chanHealth.observeResult(currentChannelEpoch(), a.activeChannelIDForHealth(), false, fc.Code, time.Now())
+			switched, blocked := a.tryFailoverForClass(channels, inSelector, cc.SelectorDefault, fc.Code, cc)
 			if switched {
 				continue // попытка удалась: следующий тик проверит новый канал
 			}
 			if blocked {
 				a.appendLog("error", "failover: все каналы исчерпаны — остановка (fail-closed, BLOCKED)")
-				a.stopCore()
-				a.mu.Lock()
-				a.state.State = "stopped"
-				a.state.BlockedReason = "all_channels_failed"
-				a.state.Error = "failover: защищённый путь недоступен на всех validated каналах — туннель остановлен (BLOCKED). Повторите подключение, когда сеть восстановится."
-				a.state.Probe = toView(report)
-				// V2-053: авто-ретрай и после исчерпания сторожа (та же волна,
-				// та же честная автоматика; попытка = полный перебор с probe).
-				a.scheduleFailClosedRetryLocked(time.Now())
-				a.pushStateLocked()
-				a.mu.Unlock()
+				a.failSession(cc, report, "failover: защищённый путь недоступен на всех validated каналах (BLOCKED)", true)
 				continue
 			}
 			// Попытка не удалась, лимит не исчерпан. Два сценария:
@@ -578,105 +740,75 @@ func (a *App) watchCore(ctx context.Context) {
 				a.appendLog("warn", "failover: попытка не удалась, туннель жив на прежнем канале — повтор после cooldown")
 				continue
 			}
-			a.mu.Lock()
-			if a.state.State != "error" { // failCore уже мог записать причину
-				a.state.State = "error"
-				a.state.Error = "защищённый путь недоступен (сторож): " + report.Summary() + " — повторите подключение"
-			}
-			a.pushStateLocked()
-			a.mu.Unlock()
+			a.failSession(cc, report, "защищённый путь недоступен (сторож): "+report.Summary(), false)
 			continue
 		}
 		// Успешный тик: обновляем evidence и сбрасываем риск-серию.
+		a.recordProbeOutcome(true, report) // V2-057 (A0): health текущей эпохи
 		a.mu.Lock()
 		a.state.Probe = toView(report)
 		a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
 		a.pushStateLocked()
 		a.mu.Unlock()
 		a.fpol.hardReset()
-		a.renewKillSwitchIfTUN()
+		a.sm.markTick(true, "", time.Now()) // C1: успешный тик → HEALTHY (восстановление всегда выигрывает)
+		if err := a.renewKillSwitchIfTUN(); err != nil {
+			a.blockUnsafePath(cc, "WFP: policy не подтверждена", report, fcUnknown)
+			continue
+		}
 		a.pushState()
 	}
 }
 
-// renewKillSwitchIfTUN — продление lease dead-man helper'а на каждый
-// успешный тик сторожа (V2-046, закрытие P1). Без этого helper снимал
-// политику через killSwitchExpireDefault (90с) посреди живой TUN-сессии:
-// лог говорил «активна», а блок уже снят. Тик каждые 30с << lease 90с —
-// продление идёт регулярно; при смерти отца последний lease дорабатывает
-// срок и снимает политику (dead-man семантика сохранена). Только TUN:
-// в SOCKS политика не применяется и продлевать нечего. Ошибки честно в
-// журнал (fail-open объявлен), не молча.
-func (a *App) renewKillSwitchIfTUN() {
+// renewKillSwitchIfTUN verifies persistent WFP policy; strict mode has no lease.
+func (a *App) renewKillSwitchIfTUN() error {
 	if !tunRequested() {
-		return
+		return nil
 	}
-	exe, err := osExecutable()
-	if err != nil {
-		return
-	}
-	if err := renewKillSwitchLease(exe, killSwitchExpireDefault); err != nil {
-		a.appendLog("warn", "kill switch: lease не продлён (fail-open, честно): "+err.Error())
-	}
+	return verifyWFPPolicy(true) // strict persistent protection has no expiry
 }
-
-// startBusyWait — пауза ожидания завершения стартующей горутины (startCore
-// продолжает работать под флагом startBusy). Раньше stopCore при manager==nil
-// во время Start просто объявлял «stopped»: предстартовый Stop оставлял гонку —
-// startCore продолжал старт и включал прокси/туннель ПОВЕРХ остановки. 100мс
-// ниже максимального времени render+validate; Stop всё равно остаётся короткой
-// операцией, а затяжной Start сам упрётся в lifecycleTimeout менеджера.
-const startBusyWait = 100 * time.Millisecond
 
 // stopCore — фактическая остановка.
 func (a *App) stopCore() error {
-	// Если идёт Start, ждём его завершения: иначе stopCore увидит manager==nil
-	// (или поймает полу-сконструированный движок) и объявит stopped, а горутина
-	// startCore продолжит включать прокси/туннель поверх остановки.
-	for waited := time.Duration(0); waited < 5*time.Second; waited += startBusyWait {
-		runtime_.mu.Lock()
-		busy := runtime_.startBusy
-		runtime_.mu.Unlock()
-		if !busy {
-			break
-		}
-		time.Sleep(startBusyWait)
-	}
+	return a.stopCoreFor(stopDisconnect)
+}
+
+// Caller holds operationMu. Automatic teardown retains strict WFP protection.
+func (a *App) stopCoreLocked(reason StopReason) error {
 	runtime_.mu.Lock()
-	stillBusy := runtime_.startBusy
 	m := runtime_.manager
 	runtime_.mu.Unlock()
-	if stillBusy {
-		a.appendLog("warn", "остановка: Start не завершился за 5с — продолжаем с текущим состоянием")
-	}
-	if m == nil {
-		a.mu.Lock()
-		a.state.State = "stopped"
-		a.pushStateLocked()
-		a.mu.Unlock()
-		return nil
-	}
 	a.mu.Lock()
 	a.state.State = "stopping"
 	a.pushStateLocked()
 	a.mu.Unlock()
 
-	// Kill switch (V2-038): снять блок-политику ДО остановки движка — пока
-	// туннель ещё маршрутизирует (окно «политика снята, туннель жив» безопасно:
-	// туннель продолжает защищать; обратный порядок дал бы секунды прямого
-	// трафика между смертью маршрутов и удалением правил). Helper гасим только
-	// после успешного снятия — иначе он не нужен: правила уже удалены.
-	if tunRequested() {
-		if kerr := removeKillSwitch(osRunner{}); kerr != nil {
-			a.appendLog("warn", "kill switch: снятие при остановке неполное (expire-helper доведёт): "+kerr.Error())
-			// Helper оставляем: он снимет остатки через expire — сеть не останется
-			// заблокированной из-за одной неудачной попытки netsh.
-		} else {
-			stopKillSwitchHelper()
+	var err error
+	policyRequired := tunRequested() || strictProtectionRetained()
+	if policyRequired && !reason.releasesProtection() {
+		err = a.protectionPolicy().BlockDirect()
+	}
+	if m != nil {
+		err = errors.Join(err, m.Stop(context.Background()))
+	}
+	// Keep WFP active until TUN routes are gone. Only then remove the provider;
+	// a process-stop window can therefore be offline, never direct.
+	if policyRequired && reason.releasesProtection() && err == nil {
+		if kerr := a.protectionPolicy().Release(); kerr != nil {
+			err = fmt.Errorf("WFP: снятие защиты не завершено: %w", kerr)
 		}
 	}
-
-	err := m.Stop(context.Background())
+	if err != nil {
+		// Keep the ownership handle for a later cleanup attempt.
+		a.mu.Lock()
+		a.state.State = "error"
+		a.state.Error = "остановка: " + err.Error()
+		a.state.CoreReady = false
+		a.state.ProbeRunning = false
+		a.pushStateLocked()
+		a.mu.Unlock()
+		return err
+	}
 
 	runtime_.mu.Lock()
 	runtime_.manager = nil
@@ -696,79 +828,21 @@ func (a *App) stopCore() error {
 		a.state.Active = nil
 		a.state.ActiveID = ""
 		a.state.CoreReady = false
+		a.state.ProbeRunning = false
+		a.state.BlockedReason = ""
+		if policyRequired && !reason.releasesProtection() {
+			a.state.BlockedReason = "protection_retained"
+		}
 	}
 	a.mu.Unlock()
-	a.appendLog("info", "VPN остановлен")
+	a.sm.markStopped(time.Now()) // C1 (V2-060): туннель остановлен вручную/при закрытии — цикл погас ("" = не наблюдаем)
+	if policyRequired && !reason.releasesProtection() {
+		a.appendLog("info", "Ядро остановлено; автоматическое снятие WFP запрещено, состояние защиты требует проверки")
+	} else {
+		a.appendLog("info", "VPN остановлен")
+	}
 	a.pushState()
 	return err
-}
-
-// probeCore — повторный protected probe по работающему туннелю (UI-кнопка).
-func (a *App) probeCore() error {
-	runtime_.mu.Lock()
-	cc := runtime_.cc
-	running := runtime_.manager != nil
-	runtime_.mu.Unlock()
-	if !running || cc == nil {
-		return fmt.Errorf("probe: VPN не запущен")
-	}
-	a.mu.Lock()
-	a.state.ProbeRunning = true
-	a.pushState()
-	a.mu.Unlock()
-
-	report := newAppProbe(cc).Run(context.Background())
-
-	a.mu.Lock()
-	a.state.ProbeRunning = false
-	a.state.Probe = toView(report)
-	if report.AllPassed {
-		a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
-	}
-	a.mu.Unlock()
-	a.appendLog("info", "probe: "+report.Summary())
-	a.pushState()
-	if !report.AllPassed {
-		return fmt.Errorf("probe: %s", report.Summary())
-	}
-	return nil
-}
-
-// newAppProbe — probe с ожидаемым egress из дескриптора выбранного канала.
-// Цели — из дескриптора (V2-037: первая цель self-hosted на нашем VPS,
-// вторая — независимое эхо; сторож каждые 30с больше не зависит от
-// rate-limit'ов сторонних ipify/ifconfig). Direct-leak семантика следует
-// режиму (SOCKS: различие; TUN: совпадение — PLAN §2.3).
-func newAppProbe(cc *render.ClientConfig) *core.ProtectedProbe {
-	targets := cc.ProbeTargets
-	if len(targets) < 2 {
-		targets = render.DefaultProbeTargets
-	}
-	return &core.ProtectedProbe{
-		SOCKSAddr:               "127.0.0.1:1080",
-		Targets:                 targets,
-		Timeout:                 10 * time.Second,
-		ExpectedEgress:          cc.ExpectedEgress,
-		DirectLeakThroughTunnel: tunRequested(),
-	}
-}
-
-// toView — маппинг отчёта ядра в UI-контракт.
-func toView(r *core.ProbeReport) *ProbeReportView {
-	if r == nil {
-		return nil
-	}
-	out := &ProbeReportView{OK: r.AllPassed, Steps: []ProbeStepView{}}
-	for _, res := range r.Results {
-		status := "pass"
-		if !res.Passed {
-			status = "fail"
-		}
-		out.Steps = append(out.Steps, ProbeStepView{
-			Name: res.Name, Status: status, Detail: res.Detail,
-		})
-	}
-	return out
 }
 
 // SelectChannel — переключение активного канала (A1.4) через Reload:

@@ -172,7 +172,7 @@ func TestNetWatcherCoalescesBurst(t *testing.T) {
 
 // Exactly-once: два подряд wake дают ОДНУ попытку (begin-гвард).
 func TestWakeExactlyOnce(t *testing.T) {
-	a := &App{}
+	a := &App{protectionDesired: true}
 	a.state.State = "stopped"
 	a.state.BlockedReason = "all_channels_failed"
 	a.mu.Lock()
@@ -215,7 +215,7 @@ func TestWakeWithoutScheduleIsNoop(t *testing.T) {
 
 // Таймер и wake «одновременно»: одна попытка.
 func TestTimerAndWakeRaceExactlyOnce(t *testing.T) {
-	a := &App{}
+	a := &App{protectionDesired: true}
 	a.state.State = "error"
 	a.mu.Lock()
 	a.scheduleFailClosedRetryLocked(time.Now())
@@ -234,7 +234,7 @@ func TestTimerAndWakeRaceExactlyOnce(t *testing.T) {
 // Провал авто-попытки → failCore → schedule: счётчик растёт (регресс
 // V2-053 не должен вернуться после рефакторинга begin).
 func TestBackoffCounterStillGrows(t *testing.T) {
-	a := &App{}
+	a := &App{protectionDesired: true}
 	a.state.State = "stopped"
 	a.state.BlockedReason = "all_channels_failed"
 	a.mu.Lock()
@@ -244,10 +244,11 @@ func TestBackoffCounterStillGrows(t *testing.T) {
 	a.mu.Unlock()
 	defer func() { a.mu.Lock(); a.cancelFailClosedRetryLocked(); a.mu.Unlock() }()
 	a.mu.Lock()
-	if a.retry.attempt != 1 {
-		t.Fatalf("новый эпизод: attempt = %d, want 1", a.retry.attempt)
-	}
+	attempt := a.retry.attempt
 	a.mu.Unlock()
+	if attempt != 1 {
+		t.Fatalf("новый эпизод: attempt = %d, want 1", attempt)
+	}
 }
 
 // Живой туннель → probe-реакция, не wake.

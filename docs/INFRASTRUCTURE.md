@@ -1,6 +1,6 @@
 # Инфраструктура snowden.system — серверы, секреты, процедуры
 
-> Обновлено: 2026-09-08. Файл документирует фактическое состояние, проверенное
+> Обновлено: 2026-09-24. Файл документирует фактическое состояние, проверенное
 > live. Секреты в этом файле НЕ печатаются — только расположения и хеши.
 
 ## 1. Сервер
@@ -17,19 +17,21 @@
 
 ```text
 nginx  :443/tcp  — TLS-терминация (Cloudflare origin cert, 15 лет),
-                   location /ws → proxy_pass http://127.0.0.1:8443
+                   location /ws → proxy_pass http://127.0.0.1:9443
                    (proxy_http_version 1.1, Upgrade/Connection headers,
                     Sec-WebSocket-Protocol НЕ переопределяется — идёт как есть)
 sing-box 1.13.19:
-  vless-in    127.0.0.1:8443/tcp  (ws, path /ws, early_data header)
+  vless-in    127.0.0.1:9443/tcp  (ws, path /ws, early_data header)
+  reality-in  0.0.0.0:8443/tcp   (VLESS+TCP+REALITY)
+  shadowtls   0.0.0.0:8445/tcp   (detour → 127.0.0.1:9444 vless-st-in)
   hy2-in      0.0.0.0:8444/udp   (salamander obfs, tls cert /etc/ssl/vpn.example.com.crt)
   outbounds: direct, block; route.final = direct  ← КРИТИЧНО: не block!
   log level: info
-firewall (nft/ufw): 22/tcp, 80/tcp, 443/tcp, 8443/udp(legacy), 8444/udp
+firewall (nft/ufw): 22/tcp, 80/tcp, 443/tcp, 8443/tcp, 8444/udp, 8445/tcp
 ```
 
-Важно: порт 8443 занят vless-in (TCP, localhost). HY2 слушает 8444/UDP.
-Старый inventory.yaml ошибочно указывал HY2 на 8443.
+Важно: WS inbound слушает только loopback:9443; публичный TCP/8443 занят
+REALITY. HY2 слушает UDP/8444. Старый inventory ошибочно указывал HY2 на 8443.
 
 ## 3. Домены и Cloudflare
 
@@ -75,10 +77,9 @@ SSL mode: full; edge TLS 1.3; оба домена отвечают 200 с edge
 
 ## 6. Известные ограничения окружения агента
 
-- Агент сидит за внешним VPN (HAP): egress 138.124.67.78 (не равен локальному ISP);
-- UDP в этом окружении фильтруется полностью (подтверждено повторно 2026-09-09:
-  QUIC к 8.8.8.8:443 и UDP к 203.0.113.10:8444 оба молчат) → HY2
-  проверяется только на устройстве owner'а в сети без UDP-фильтра;
+- Сетевые свойства среды меняются; прежний вывод о полном UDP-фильтре был
+  опровергнут live HY2 probe 2026-09-09. Каждый новый запуск измеряет канал,
+  а не наследует старый вывод;
 - TUN требует elevation → admin smoke отдельно;
 - Выводы о «работе из РФ» из этого окружения не делаются.
 
@@ -91,7 +92,7 @@ ssh vps 'systemctl is-active sing-box; ss -tlnp | grep 443; ss -ulnp | grep 8444
 ssh vps 'journalctl -u sing-box -n 50 | grep -iE "error|blocked"'
 # 3) конфиг валиден и final=direct
 ssh vps 'sing-box check -c /etc/sing-box/config.json && grep -o "\"final\": \"[a-z]*\"" /etc/sing-box/config.json'
-# 4) nginx проксирует WS (ожидаём 101 от sing-box, не 400)
+# 4) nginx проксирует валидный WS (101); неавторизованный запрос выглядит как сайт
 ssh vps 'tail -5 /var/log/nginx/access.log | grep /ws'
 # 5) сквозной тест с клиента
 curl --proxy socks5h://127.0.0.1:1080 https://api.ipify.org   # → 203.0.113.10

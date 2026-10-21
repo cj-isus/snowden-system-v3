@@ -17,16 +17,24 @@ const busy = ref(false) // идёт Start/Stop/Reload — кнопки блок�
 const busyLabel = ref('')
 
 let unsubscribe: (() => void) | null = null
+let initialization: Promise<void> | null = null
+let generation = 0
+let eventRevision = 0
 
 /** Инициализация: единственная подписка на backend-события + первый getState. */
-async function initBackendState(): Promise<void> {
-  if (unsubscribe) return
-  unsubscribe = api.subscribe(
+function initBackendState(): Promise<void> {
+  if (initialization) return initialization
+  const owner = generation
+  const revision = eventRevision
+  if (!unsubscribe) unsubscribe = api.subscribe(
     (s) => {
+      if (owner !== generation) return
+      eventRevision++
       state.value = s
       stateLoaded.value = true
     },
     (l) => {
+      if (owner !== generation) return
       // Backend-событие лога: пробрасываем в журнал UI. Go LogLine = {t, level,
       // text} — читаем именно эти поля (дефект V2-045: читали l.line, его нет,
       // и каждая строка падала в JSON.stringify — в журнале был сырой JSON).
@@ -37,17 +45,34 @@ async function initBackendState(): Promise<void> {
     },
   )
 
-  state.value = await api.getState()
-  stateLoaded.value = true
-  channels.value = await api.listChannels()
-  tests.value = await api.listTests()
-  void initTUNMode() // дефект v2: режим процесса (--tun) не запрашивался вовсе
-
-  if (isBuildPhase()) {
-    backendLog('warn', 'UI работает в build phase: backend ещё не собран; статус недоступен, это честно показано')
-  }
+  initialization = (async () => {
+    const results = await Promise.allSettled([api.getState(), api.listChannels(), api.listTests(), api.isTUNMode()])
+    if (owner !== generation) return
+    const [snapshot, channelList, testList, mode] = results
+    // An event delivered after getState began always wins over that snapshot.
+    if (revision === eventRevision) state.value = snapshot.status === 'fulfilled' ? snapshot.value : null
+    stateLoaded.value = true
+    channels.value = channelList.status === 'fulfilled' ? channelList.value : null
+    tests.value = testList.status === 'fulfilled' ? testList.value : null
+    tunMode.value = mode.status === 'fulfilled' ? mode.value : false
+    if (isBuildPhase()) backendLog('warn', 'Предпросмотр: VPN backend недоступен')
+    if (results.some(result => result.status === 'rejected')) {
+      backendLog('warn', 'Часть данных backend недоступна. Повторите загрузку.')
+      // A failed auxiliary snapshot must not disconnect lifecycle events.
+      // A retry reuses this subscription; only the root owner disposes it.
+      initialization = null
+    }
+  })()
+  return initialization
 }
 
+/** App root owns the subscription. Retire pending responses before cleanup. */
+export function disposeBackendState(): void {
+  generation++
+  unsubscribe?.()
+  unsubscribe = null
+  initialization = null
+}
 const lifecycle = computed(() => state.value?.state ?? null)
 const isRunning = computed(() => lifecycle.value === 'running')
 const isBusy = computed(
@@ -61,6 +86,7 @@ const hasError = computed(() => lifecycle.value === 'error' || !!state.value?.er
 
 /** Глагол действия на главной кнопке — только фактические состояния. */
 const primaryAction = computed<{ label: string; kind: 'start' | 'stop'; disabled: boolean }>(() => {
+  if (isBuildPhase()) return { label: 'Откройте приложение', kind: 'start', disabled: true }
   const s = lifecycle.value
   if (!stateLoaded.value || !s) return { label: '…', kind: 'start', disabled: true }
   if (busy.value) return { label: busyLabel.value || '…', kind: s === 'running' ? 'stop' : 'start', disabled: true }
@@ -70,19 +96,26 @@ const primaryAction = computed<{ label: string; kind: 'start' | 'stop'; disabled
 })
 
 async function startVpn(): Promise<void> {
+  if (isBusy.value || switching.value || isRunning.value) return
+  const action = ++actionGeneration
   busy.value = true
   busyLabel.value = 'Запуск…'
   try {
     await api.start()
   } catch (e) {
-    toast('error', errText(e, 'Запуск не выполнен'))
+    if (action === actionGeneration) toast('error', errText(e, 'Запуск не выполнен'))
   } finally {
-    busy.value = false
-    busyLabel.value = ''
+    if (action === actionGeneration) { busy.value = false; busyLabel.value = '' }
   }
 }
 
+let actionGeneration = 0
+let stopping = false
 async function stopVpn(): Promise<void> {
+  // Stop must remain available while a slow Start or Switch is pending.
+  if (stopping) return
+  stopping = true
+  const action = ++actionGeneration
   busy.value = true
   busyLabel.value = 'Остановка…'
   try {
@@ -90,8 +123,8 @@ async function stopVpn(): Promise<void> {
   } catch (e) {
     toast('error', errText(e, 'Остановка не выполнена'))
   } finally {
-    busy.value = false
-    busyLabel.value = ''
+    stopping = false
+    if (action === actionGeneration) { busy.value = false; busyLabel.value = '' }
   }
 }
 
@@ -102,12 +135,14 @@ const switching = ref(false)
  * Ошибка = fail-closed backend'а; UI показывает честный текст.
  */
 async function selectChannel(id: string): Promise<void> {
+  if (switching.value || isBusy.value || !isRunning.value) return
+  const action = ++actionGeneration
   switching.value = true
   try {
     await api.selectChannel(id)
-    toast('info', 'Канал переключён: ' + id)
+    if (action === actionGeneration) toast('info', 'Канал переключён: ' + id)
   } catch (e) {
-    toast('error', errText(e, 'Переключение не выполнено'))
+    if (action === actionGeneration) toast('error', errText(e, 'Переключение не выполнено'))
   } finally {
     switching.value = false
   }

@@ -15,7 +15,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -30,11 +32,23 @@ type NetworkFacts struct {
 	LocalIP        string `json:"localIP"`        // локальный IPv4 интерфейса по умолчанию
 	ISP            string `json:"isp"`            // провайдер прямого канала (пусто = недоступен)
 	PublicIP       string `json:"publicIP"`       // egress-IP, видимый из этой машины (прямой)
+	TunnelIP       string `json:"tunnelIP"`       // egress-IP через локальный SOCKS; пусто = путь не доказан
 	Country        string `json:"country"`        // страна egress (echo сервиса)
 	CountryOrigin  string `json:"countryOrigin"`  // источник факта страны
 	DNSViaTunnel   bool   `json:"dnsViaTunnel"`   // DNS/HTTP реально проходит через 127.0.0.1:1080 (socks5h)
 	NetClass       string `json:"netClass"`       // wifi | ethernet | mobile | "" (V2-054, MediaType фактом)
 	CheckedAt      string `json:"checkedAt"`      // RFC3339
+}
+
+// RuntimeInfo — факты именно о запущенном бинарнике. Версия приходит из
+// ldflags production-сборки, поэтому UI не дублирует wails.json вручную.
+type RuntimeInfo struct {
+	Version      string `json:"version"`
+	OS           string `json:"os"`
+	Arch         string `json:"arch"`
+	PID          int    `json:"pid"`
+	CoreVersion  string `json:"coreVersion"`
+	ShellVersion string `json:"shellVersion"`
 }
 
 // NetStats — счётчики адаптера маршрута по умолчанию (Traffic-карточка).
@@ -64,6 +78,9 @@ type FailoverStatus struct {
 	Switches    int    `json:"switches"`    // авто-переключений за текущий инцидент
 	LastError   string `json:"lastError"`   // последняя причина (без секретов)
 	NextCheckIn int    `json:"nextCheckIn"` // сек до следующей автопопытки (0 = сейчас/не применимо)
+	SmState     string `json:"smState"`     // C1 (V2-060): состояние машины адаптивного цикла ("" = нет живого туннеля)
+	SmSince     string `json:"smSince"`     // RFC3339: с какого момента в этом состоянии
+	SmClass     string `json:"smClass"`     // код THEORY последнего классифицированного отказа ("" = нет)
 }
 
 // ---------- кеш фактов (PowerShell-опрос дорогой — не ддосим сами себя) ----------
@@ -116,6 +133,12 @@ func collectFacts() (NetworkFacts, NetStats, error) {
 	}
 	out.LocalIP = ip
 	stats = NetStats{Alias: alias, SpeedBps: speed, InOctets: inB, OutOctets: outB}
+	if tunRequested() && alias == tunAdapterName {
+		// A request with Proxy:nil is still routed by the TUN adapter. Do not
+		// label that route as an independent physical/direct observation.
+		out.LocalIP = ""
+		media = ""
+	}
 	switch {
 	case media == "Native802.11":
 		out.ConnectionType = "Wi-Fi"
@@ -132,8 +155,22 @@ func collectFacts() (NetworkFacts, NetStats, error) {
 		// классификации адаптера (V2-054: mobile и т.п.).
 		out.NetClass = adapterNetClass(alias)
 	}
-	out.PublicIP, out.Country, out.CountryOrigin = egressFacts()
-	out.DNSViaTunnel = dnsThroughTunnel()
+	// Прямой и туннельный egress независимы; опрашиваем параллельно, чтобы
+	// один медленный внешний путь не задерживал второй на дополнительные 6 с.
+	var wg sync.WaitGroup
+	if !tunRequested() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out.PublicIP, out.Country, out.CountryOrigin, out.ISP = egressFacts()
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		out.TunnelIP, out.DNSViaTunnel = tunnelEgressFacts()
+	}()
+	wg.Wait()
 	return out, stats, nil
 }
 
@@ -149,6 +186,31 @@ func (a *App) GetNetworkFacts() (NetworkFacts, error) {
 func (a *App) GetNetStats() (NetStats, error) {
 	_, stats, err := snapshotFacts()
 	return stats, err
+}
+
+// GetRuntimeInfo — версия/платформа текущего процесса, а не frontend-константа.
+func (a *App) GetRuntimeInfo() RuntimeInfo {
+	return RuntimeInfo{
+		Version: runningVersion, OS: runtime.GOOS, Arch: runtime.GOARCH, PID: os.Getpid(),
+		CoreVersion:  dependencyVersion("github.com/sagernet/sing-box"),
+		ShellVersion: dependencyVersion("github.com/wailsapp/wails/v2"),
+	}
+}
+
+func dependencyVersion(path string) string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	for _, dep := range info.Deps {
+		if dep.Path == path {
+			if dep.Replace != nil && dep.Replace.Version != "" {
+				return dep.Replace.Version
+			}
+			return dep.Version
+		}
+	}
+	return ""
 }
 
 // GetDeliveryProfile — факты доставленного metadata-envelope (FR-008).
@@ -197,18 +259,26 @@ func (a *App) GetDeliveryProfile() (DeliveryProfile, error) {
 	return out, nil
 }
 
-// GetFailoverStatus — снимок сторожа автозащиты.
+// GetFailoverStatus — снимок сторожа автозащиты + машины состояний C1.
 func (a *App) GetFailoverStatus() (FailoverStatus, error) {
 	state, switches, lastErr := a.fpol.snapshot()
+	sm := a.sm.snapshot()
 	runtime_.mu.Lock()
 	watchOn := runtime_.watchOn
 	runtime_.mu.Unlock()
+	smSince := ""
+	if !sm.Since.IsZero() {
+		smSince = sm.Since.Format(time.RFC3339)
+	}
 	return FailoverStatus{
 		Enabled:     watchOn,
 		State:       state,
 		Switches:    switches,
 		LastError:   lastErr,
 		NextCheckIn: a.fpol.nextAttemptIn(time.Now()),
+		SmState:     sm.State,
+		SmSince:     smSince,
+		SmClass:     sm.Class,
 	}, nil
 }
 
@@ -216,54 +286,64 @@ func (a *App) GetFailoverStatus() (FailoverStatus, error) {
 
 // egressFacts — публичный egress-IP и страна: то, что сеть реально видит.
 // Источник фиксируется в ответе (честная ссылка на происхождение факта).
-func egressFacts() (ip, country, origin string) {
-	client := &http.Client{Timeout: 6 * time.Second}
+func egressFacts() (ip, country, origin, isp string) {
+	// Явно отключаем Proxy: «прямой» факт не должен незаметно пройти через
+	// системный прокси, WinHTTP или переменные окружения.
+	client := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: 6 * time.Second}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://ipapi.co/json/", nil)
 	if err != nil {
-		return "", "", ""
+		return "", "", "", ""
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", ""
+		return "", "", "", ""
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if err != nil {
-		return "", "", ""
+		return "", "", "", ""
 	}
 	var payload struct {
 		IP          string `json:"ip"`
 		CountryName string `json:"country_name"`
+		Org         string `json:"org"`
 	}
 	if json.Unmarshal(body, &payload) == nil && payload.IP != "" {
-		return payload.IP, payload.CountryName, "https://ipapi.co/json/"
+		return payload.IP, payload.CountryName, "https://ipapi.co/json/", payload.Org
 	}
 	// Фолбэк: текстовый ответ вида "1.2.3.4".
 	if v := string(body); net.ParseIP(trimSpace(v)) != nil {
-		return trimSpace(v), "", "https://ipapi.co/ip/"
+		return trimSpace(v), "", "https://ipapi.co/ip/", ""
 	}
-	return "", "", ""
+	return "", "", "", ""
 }
 
-// dnsThroughTunnel — факт работающего пути через туннель: HTTPS через
+// tunnelEgressFacts — факт работающего пути через туннель: HTTPS через
 // socks5h://127.0.0.1:1080 (тот же путь, что у protected-probe: если это
-// работает, DNS и egress идут через туннель; если VPN выключен — false).
-func dnsThroughTunnel() bool {
+// работает и вернулся IP, DNS и egress идут через туннель.
+func tunnelEgressFacts() (string, bool) {
 	transport := &http.Transport{
 		Proxy: http.ProxyURL(&url.URL{Scheme: "socks5h", Host: "127.0.0.1:1080"}),
 	}
 	client := &http.Client{Transport: transport, Timeout: 6 * time.Second}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.ipify.org", nil)
 	if err != nil {
-		return false
+		return "", false
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return false
+		return "", false
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64))
-	return resp.StatusCode == http.StatusOK
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "", false
+	}
+	ip := trimSpace(string(body))
+	if net.ParseIP(ip) == nil {
+		return "", false
+	}
+	return ip, true
 }
 
 func trimSpace(s string) string {

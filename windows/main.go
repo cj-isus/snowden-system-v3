@@ -19,6 +19,11 @@ import (
 var assets embed.FS
 
 func main() {
+	// Retired helper invocations must not become GUI launches, even when their
+	// arguments are incomplete. No timer, PID cleanup or firewall effects.
+	if legacyKillSwitchHelperRequested(os.Args[1:]) {
+		return
+	}
 	// Паника на главной горутине не должна уходить молча: пишем crash-лог
 	// (AppData, не рядом с exe — wails build стирает build/bin) и отдаем
 	// стектрейс дальше, чтобы процесс завершился с видимой причиной.
@@ -28,6 +33,22 @@ func main() {
 			panic(rec)
 		}
 	}()
+
+	// V2-080: процесс, запущенный переключением режима TUN↔SOCKS, обязан
+	// ДОЖДАТЬСЯ выхода предыдущего экземпляра. ShellExecuteW «runas» возвращается
+	// сразу, старый процесс ещё держит мьютекс SingleInstance — без ожидания
+	// новый процесс в Wails SetupSingleInstance получает ERROR_ALREADY_EXISTS,
+	// находит окно старого и вызывает os.Exit(0) молча: «приложение вылетело при
+	// нажатии Включить TUN» (доказано live 2026-09-18/20 + повторяемый тест
+	// mutex-race: экземпляр с --tun при живом экземпляре умирал через ~1с).
+	if modeSwitchAwaitRequested() {
+		if ok := awaitSingleInstanceReleased(8 * time.Second); !ok {
+			// Таймаут — стартуем всё равно: молчаливый выход хуже. Предыдущий
+			// процесс уже мёртв (иначе mutex был бы удержан), либо жив держится
+			// аномально долго — SingleInstance защитит от двойного экземпляра.
+			writeCrashLog("переключение режима: предыдущий экземпляр не освободил SingleInstance-мьютекс за 8с — стартую принудительно")
+		}
+	}
 
 	// Один экземпляр: Wails SingleInstanceLock держит именованный мьютекс
 	// (wails-app-<id>sim); второй запуск шлёт WM_COPYDATA первому окну

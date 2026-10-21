@@ -1,61 +1,41 @@
 <script setup lang="ts">
+import PageHeading from '../components/PageHeading.vue'
 /**
  * Сеть (concept): сетевая информация из фактов ОС (GetNetworkFacts), NetGuard
  * и диагностика. Пустой факт = «нет данных», никаких выдуманных провайдеров.
  * Поллинг фактов — общий useInfoFacts (один PowerShell-опрос на всё приложение).
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import type { IconName } from '../components/Icon.vue'
 import HintBox from '../components/HintBox.vue'
 import { api, isBuildPhase, netGuardStatus } from '../api/backend'
-import type { AdaptiveStatus, NetGuardStatus } from '../api/contract'
-import { useBackendState, initBackendState } from '../composables/backendState'
+import { usePolling } from '../composables/polling'
+import { initBackendState } from '../composables/backendState'
 import { useInfoFacts } from '../composables/infoFacts'
 import { useNav } from '../composables/nav'
 import { fmtDateTime } from '../api/labels'
 
-const { isRunning } = useBackendState()
 const { facts, refresh: refreshFacts } = useInfoFacts()
 const { navTo } = useNav()
 
 const factsError = ref('')
-const netGuard = ref<NetGuardStatus | null>(null)
-const adaptive = ref<AdaptiveStatus | null>(null)
 const adaptiveBusy = ref(false)
-const splitList = ref<string[]>([])
+const { data: netGuard, refresh: refreshGuard } = usePolling(netGuardStatus, 30000)
+const { data: splitData, refresh: refreshSplit } = usePolling(api.getSplitDirect, 30000)
+const splitList = computed(() => splitData.value ?? [])
+const { data: adaptive, refresh: refreshAdaptive } = usePolling(api.getAdaptiveStatus, 30000)
 const loading = ref(false)
-let timer: number | undefined
-
-async function refresh(): Promise<void> {
+async function refresh() {
+  if (loading.value) return
   loading.value = true
-  try {
-    if (!isBuildPhase()) splitList.value = await api.getSplitDirect()
-  } catch { /* read-only справка */ }
-  try {
-    if (isBuildPhase()) {
-      factsError.value = 'Биндинги недоступны: приложение запущено вне Wails (предпросмотр).'
-    } else {
-      await refreshFacts()
-      factsError.value = ''
-    }
-  } catch (e) {
-    factsError.value = e instanceof Error ? e.message : String(e)
-  }
-  try {
-    netGuard.value = await netGuardStatus()
-  } catch {
-    netGuard.value = null
-  }
-  try {
-    adaptive.value = await api.getAdaptiveStatus()
-  } catch {
-    adaptive.value = null
-  }
+  await Promise.all([refreshFacts(), refreshGuard(), refreshSplit(), refreshAdaptive()])
+  factsError.value = isBuildPhase() ? 'Данные сети доступны в приложении Windows.' : ''
   loading.value = false
 }
 
 async function runAdaptive(): Promise<void> {
+  if (adaptiveBusy.value) return
   adaptiveBusy.value = true
   try {
     adaptive.value = await api.runAdaptiveCheck()
@@ -65,12 +45,7 @@ async function runAdaptive(): Promise<void> {
   adaptiveBusy.value = false
 }
 
-onMounted(() => {
-  void initBackendState()
-  void refresh()
-  timer = window.setInterval(() => void refresh(), 30000)
-})
-onUnmounted(() => window.clearInterval(timer))
+onMounted(() => { void initBackendState() })
 
 const netClassLabel = computed(() => {
   switch (facts.value?.netClass) {
@@ -92,9 +67,10 @@ const rows = computed<{ icon: IconName; label: string; value: string | null }[]>
     { icon: 'pulse', label: 'Класс сети (автовыбор транспорта)', value: netClassLabel.value },
     { icon: 'pulse', label: 'Название сети', value: f?.ssid || null },
     { icon: 'server', label: 'Локальный IP', value: f?.localIP || null },
-    { icon: 'key', label: 'Провайдер', value: isRunning.value ? 'Скрыт туннелем' : (f?.isp || null) },
+    { icon: 'key', label: 'Провайдер прямой сети', value: f?.isp || null },
     { icon: 'key', label: 'Публичный IP (прямой egress)', value: f?.publicIP || null },
-    { icon: 'shield', label: 'Страна egress', value: f?.country || null },
+    { icon: 'shield', label: 'IP защищённого пути', value: f?.tunnelIP || null },
+    { icon: 'shield', label: 'Страна прямого egress', value: f?.country || null },
     { icon: 'pulse', label: 'Путь через туннель', value: f ? (f.dnsViaTunnel ? 'работает (socks5h)' : 'не работает / VPN выключен') : null },
     { icon: 'pulse', label: 'Проверено', value: f?.checkedAt ? fmtDateTime(f.checkedAt) : null },
   ]
@@ -105,16 +81,7 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
 
 <template>
   <div class="view">
-    <header class="head">
-      <div class="section-title-group">
-        <h2>Сеть</h2>
-        <span v-if="loading" class="pill neutral"><span class="dot"></span>обновление…</span>
-      </div>
-      <p class="sub">
-        Факты о сетевом подключении: адаптер маршрута по умолчанию, SSID, прямой egress.
-        Значения собирает ОС-сборщик (PowerShell/netsh) и HTTP-наблюдение; пусто = «нет данных».
-      </p>
-    </header>
+    <PageHeading title="Контекст сети" description="Текущее подключение, адреса и доступность сервисов. Пустое значение означает отсутствие измерения." ><button class="btn" :disabled="loading" @click="refresh">Обновить факты</button></PageHeading>
 
     <div class="grid">
       <section class="card netinfo">
@@ -136,21 +103,17 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
         </div>
 
         <p v-if="countryOriginNote" class="origin-note mono">источник страны: {{ countryOriginNote }}</p>
-      </section>
 
-      <section class="card">
-        <div class="card-header">
-          <h2>Прямой обход процессов</h2>
-        </div>
-        <p v-if="splitList.length" class="sub">
-          Эти приложения ходят мимо туннеля (правило доставлено подписанным конвертом):
-        </p>
-        <p v-else class="sub">
-          Список пуст: весь трафик идёт через туннель. Изменить список может только владелец —
-          он приходит в подписанном конверте конфигурации, вручную в приложении не редактируется.
-        </p>
-        <div class="split-chips">
-          <span v-for="p in splitList" :key="p" class="adapter-pill mono">{{ p }}</span>
+        <div class="split-panel">
+          <div>
+            <strong>Прямой обход процессов</strong>
+            <small v-if="splitList.length">Исключения из подписанного профиля</small>
+            <small v-else>{{ splitData === null ? 'Список исключений недоступен' : 'Исключения процессов не настроены' }}</small>
+          </div>
+          <div class="split-chips">
+            <span v-for="p in splitList" :key="p" class="adapter-pill mono">{{ p }}</span>
+            <span v-if="!splitList.length" class="split-empty">{{ splitData === null ? 'нет данных' : 'нет исключений' }}</span>
+          </div>
         </div>
       </section>
 
@@ -226,9 +189,9 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
       запрос заблокирован — честно «нет данных», без подстановки предполагаемой страны.
     </HintBox>
     <HintBox kind="warn" title="Приватность">
-      Прямой egress-IP — это то, что видит внешний сервис без туннеля. При работающем VPN
-      «провайдер» для целевых сайтов скрыт туннелем; сам факт прямого egress нужен для
-      диагностики утечек.
+      Прямой egress-IP запрашивается с явно отключённым системным прокси. IP защищённого
+      пути отдельно проверяется через SOCKS5h; пустое значение означает, что backend не
+      смог доказать живой туннельный путь.
     </HintBox>
   </div>
 </template>
@@ -269,7 +232,7 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
 }
 .adaptive-note {
   margin: 4px 0 0;
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 .adaptive .card-header {
@@ -282,7 +245,7 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
   margin-left: auto;
   padding: 3px 9px;
   border-radius: 5px;
-  font-size: 9.5px;
+  font-size: 12px;
   color: #a1b2c0;
   border: 1px solid var(--gray-border);
   background: var(--gray-soft);
@@ -302,7 +265,7 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid #142d40;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .network-row .net-ico {
   width: 16px;
@@ -316,7 +279,10 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
 .network-row strong {
   color: #dce7ee;
   font-weight: 500;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: 55%;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 .network-row strong.no-data {
   color: #55708a;
@@ -328,6 +294,24 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
   color: #55708a;
   font-size: 8.5px;
 }
+
+.split-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 98, 38, .18);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.split-panel > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.split-panel strong { color: #d8e2e9; font-size: 11px; }
+.split-panel small { color: #66798a; font-size: 12px; }
+.split-empty { color: #647789; font-size: 12px; }
 
 .netguard-events {
   margin-top: 10px;
@@ -381,6 +365,7 @@ const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
   .grid {
     grid-template-columns: 1fr;
   }
+  .split-panel { align-items: flex-start; flex-direction: column; }
 }
 </style>
 <style scoped>

@@ -200,8 +200,9 @@ func (a *App) ApplyUpdate(updateDir string) (string, error) {
 	// 2. Останавливаем ядро (TUN/прокси/kill switch) ДО подмены — так новый
 	// процесс стартует в чистом окружении, а системный прокси не останется
 	// указывать на мёртвый порт.
-	if err := a.stopCore(); err != nil {
-		a.appendLog("warn", "update: остановка ядра перед подменой: "+err.Error())
+	if err := a.stopCoreFor(stopRestart); err != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("update: остановка ядра перед подменой: %w", err)
 	}
 
 	// 3. Атомарная подмена: текущий exe → .old, staged → на место exe.

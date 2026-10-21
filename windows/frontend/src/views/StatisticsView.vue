@@ -1,43 +1,39 @@
 <script setup lang="ts">
+import PageHeading from '../components/PageHeading.vue'
 /**
  * Статистика (concept): трафик из фактов ОС (GetNetStats: счётчики адаптера
  * маршрута по умолчанию) + сводка lifecycle. Счётчики абсолютные — дельта
  * считается от момента открытия раздела (честно подписано). Гистограмма —
  * живые замеры дельты, а не выдуманная история. Никаких «ГБ за месяц».
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import HintBox from '../components/HintBox.vue'
 import ProbeReportView from '../components/ProbeReportView.vue'
-import { api, isBuildPhase } from '../api/backend'
-import type { MetricsView, NetStats } from '../api/contract'
+import { api } from '../api/backend'
+import { usePolling } from '../composables/polling'
+import { createTrafficHistory } from '../composables/trafficHistory'
+import type { TrafficPoint } from '../composables/trafficHistory'
 import { useBackendState, initBackendState } from '../composables/backendState'
 import { lifecycleLabels, fmtDateTime } from '../api/labels'
 
 const { state, channels } = useBackendState()
 const probe = computed(() => state.value?.probe ?? null)
 
-const stats = ref<NetStats | null>(null)
-const loadError = ref('')
-let timer: number | undefined
-
-// Базовая точка для дельты (счётчики ОС монотонно растут).
-const baseline = ref<{ inB: number; outB: number; at: number } | null>(null)
-
-async function refresh(): Promise<void> {
-  if (isBuildPhase()) {
-    stats.value = null
-    loadError.value = 'Биндинги недоступны: приложение запущено вне Wails (предпросмотр).'
-    return
-  }
-  try {
-    const s = await api.getNetStats()
-    stats.value = s
-    loadError.value = ''
-    if (s && !baseline.value) baseline.value = { inB: s.inOctets, outB: s.outOctets, at: Date.now() }
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  }
-}
+const { data: stats, error: loadError } = usePolling(api.getNetStats, 3000)
+const { data: metrics } = usePolling(api.getMetrics, 2000)
+const history = createTrafficHistory()
+const points = ref<TrafficPoint[]>([])
+const observedIn = ref<number | null>(null)
+const observedOut = ref<number | null>(null)
+watch(stats, value => {
+  if (!value) return
+  const result = history.observe(value, Date.now())
+  observedIn.value = result.deltaIn
+  observedOut.value = result.deltaOut
+  points.value = result.points
+})
+const deltaIn = computed(() => stats.value ? observedIn.value : null)
+const deltaOut = computed(() => stats.value ? observedOut.value : null)
 
 function fmtBytes(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
@@ -51,83 +47,21 @@ function fmtBytes(n: number | null | undefined): string {
   return `${v >= 100 ? Math.round(v) : v.toFixed(1)} ${units[u]}`
 }
 
-const deltaIn = computed(() => {
-  if (!stats.value || !baseline.value) return null
-  return Math.max(0, stats.value.inOctets - baseline.value.inB)
-})
-const deltaOut = computed(() => {
-  if (!stats.value || !baseline.value) return null
-  return Math.max(0, stats.value.outOctets - baseline.value.outB)
-})
-
 const speed = computed(() => {
   const s = stats.value
   if (!s?.speedBps) return null
   return `${(s.speedBps / 1e9).toFixed(1)} Гбит/с`
 })
 
-// Гистограмма трафика (последние N измерений дельты, живые данные, не выдумка).
-// Таймер живёт только пока открыт раздел: фоновый замер выключен вместе со страницей.
-const barCount = 24
-const bars = ref<number[]>([])
-let measureTimer: number | undefined
-let lastMeasure = 0
-function measure(): void {
-  const dIn = deltaIn.value
-  if (dIn === null) return
-  if (lastMeasure === 0) {
-    lastMeasure = dIn
-    return
-  }
-  const step = Math.max(0, dIn - lastMeasure)
-  lastMeasure = dIn
-  bars.value.push(step)
-  if (bars.value.length > barCount) bars.value.shift()
-}
-
-const maxBar = computed(() => Math.max(1, ...bars.value))
+// Samples are appended only when a fresh counter observation arrives.
 const barHeights = computed(() => {
-  const filled = bars.value.map((b) => Math.max(4, Math.round((b / maxBar.value) * 100)))
-  while (filled.length < barCount) filled.unshift(0)
-  return filled
+  const max = Math.max(1, ...points.value.map(point => point.bytes))
+  return points.value.map(point => point.bytes === 0 ? 0 : Math.max(2, Math.round(point.bytes / max * 100)))
 })
+const axisLabels = computed(() => points.value.length ? [points.value[0], points.value[points.value.length - 1]]
+  .map(point => new Date(point.at).toLocaleTimeString('ru-RU')) : [])
+onMounted(() => { void initBackendState() })
 
-// Ось времени — реальное окно наблюдения: одна точка на 6 замеров (12 с).
-const axisLabels = computed(() => {
-  if (bars.value.length === 0) return []
-  const now = new Date()
-  return [3, 2, 1, 0]
-    .map((i) => {
-      const d = new Date(now.getTime() - i * 6 * 12 * 1000)
-      return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    })
-    .filter((_, idx) => idx === 0 || bars.value.length >= 18 || idx !== 1)
-})
-onMounted(() => {
-  void initBackendState()
-  void refresh()
-  void refreshMetrics()
-  timer = window.setInterval(() => void refresh(), 3000)
-  metricsTimer = window.setInterval(() => void refreshMetrics(), 2000)
-  measureTimer = window.setInterval(measure, 2000)
-})
-onUnmounted(() => {
-  window.clearInterval(timer)
-  window.clearInterval(metricsTimer)
-  window.clearInterval(measureTimer)
-})
-
-// ---------- Живой трафик ядра (V2-048/F12, clash_api read-only) ----------
-const metrics = ref<MetricsView | null>(null)
-let metricsTimer: number | undefined
-async function refreshMetrics(): Promise<void> {
-  if (isBuildPhase()) return
-  try {
-    metrics.value = await api.getMetrics()
-  } catch {
-    /* контроллер мог умереть вместе с ядром — покажем past-value */
-  }
-}
 const coreDown = computed(() => metrics.value?.rateDown ?? 0)
 const coreUp = computed(() => metrics.value?.rateUp ?? 0)
 function fmtRate(bps: number): string {
@@ -145,15 +79,7 @@ function fmtRate(bps: number): string {
 
 <template>
   <div class="view">
-    <header class="head">
-      <div class="section-title-group">
-        <h2>Статистика</h2>
-      </div>
-      <p class="sub">
-        Счётчики сетевого адаптера маршрута по умолчанию (факт ОС). Дельта считается от момента
-        открытия раздела — это наблюдаемое изменение, не обещанный «трафик за период».
-      </p>
-    </header>
+    <PageHeading title="Телеметрия" description="Трафик адаптера и ядра показан раздельно. Измерения собираются, пока открыта эта страница." ></PageHeading>
 
     <section class="card summary">
       <div class="card-header">
@@ -180,12 +106,13 @@ function fmtRate(bps: number): string {
         </div>
       </div>
 
-      <div class="traffic-chart">
+      <div v-if="points.length" class="traffic-chart" role="img" aria-label="Изменение входящего трафика адаптера">
         <div class="chart-grid"></div>
         <div class="chart-bars">
           <span v-for="(h, i) in barHeights" :key="i" :style="{ height: h + '%' }"></span>
         </div>
       </div>
+      <p v-if="!points.length" class="empty">График появится после двух измерений адаптера.</p>
       <div class="chart-axis">
         <span v-for="l in axisLabels" :key="l">{{ l }}</span>
       </div>
@@ -194,12 +121,12 @@ function fmtRate(bps: number): string {
       <p v-else-if="stats?.alias" class="adapter-note mono">адаптер: {{ stats.alias }}<template v-if="speed"> · {{ speed }}</template></p>
     </section>
 
-    <section v-if="metrics" class="card">
+    <section class="card">
       <div class="card-header">
         <h2>Соединения ядра</h2>
-        <span class="adapter-pill mono">через туннель, live</span>
+        <span class="adapter-pill mono">счётчики ядра</span>
       </div>
-      <template v-if="metrics.available">
+      <template v-if="metrics?.available">
         <div class="traffic-summary">
           <div class="traffic-metric">
             <div class="traffic-value"><span class="traffic-arrow down">↓</span> {{ fmtRate(coreDown) }}</div>
@@ -218,7 +145,7 @@ function fmtRate(bps: number): string {
             <div class="traffic-label">отправлено за сессию ядра</div>
           </div>
         </div>
-        <table v-if="metrics.connections.length" class="conn-table">
+        <div v-if="metrics.connections.length" class="table-scroll" tabindex="0" role="region" aria-label="Соединения ядра"><table class="conn-table">
           <thead>
             <tr><th>Хост</th><th>Тип</th><th>Канал</th><th>↓</th><th>↑</th><th>С</th></tr>
           </thead>
@@ -232,14 +159,14 @@ function fmtRate(bps: number): string {
               <td class="mono">{{ c.since }}</td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
         <p v-else class="adapter-note">Соединений пока нет — откройте любой сайт.</p>
         <p class="adapter-note">
           Источник — сам ядро (read-only clash_api на loopback): счётчики от старта ядра,
           скорость — дельта между опросами. Никакой выдуманной истории.
         </p>
       </template>
-      <p v-else class="adapter-note">Метрики недоступны: {{ metrics.note }}</p>
+      <p v-else class="adapter-note">Метрики недоступны: {{ metrics?.note || 'нет ответа от ядра' }}</p>
     </section>
 
     <div class="grid">
@@ -272,7 +199,7 @@ function fmtRate(bps: number): string {
       Windows отдаёт накопленные счётчики адаптера. Привязать их задним числом к «1 часу /
       7 дням» невозможно без собственной истории — вместо выдуманной истории UI показывает
       живую дельту наблюдения и абсолютные счётчики. Столбики гистограммы — живые замеры
-      раз в 2 секунды, пока открыт этот раздел.
+      после каждого завершённого опроса. Смена адаптера или сброс счётчиков начинает новое окно.
     </HintBox>
   </div>
 </template>
@@ -306,7 +233,7 @@ function fmtRate(bps: number): string {
   margin-left: auto;
   padding: 3px 9px;
   border-radius: 5px;
-  font-size: 9.5px;
+  font-size: 12px;
   color: #a1b2c0;
   border: 1px solid var(--gray-border);
   background: var(--gray-soft);
@@ -338,7 +265,7 @@ function fmtRate(bps: number): string {
 .traffic-label {
   margin-top: 2px;
   color: #7e94a8;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .traffic-chart {
@@ -371,19 +298,19 @@ function fmtRate(bps: number): string {
   display: flex;
   justify-content: space-between;
   color: #70879b;
-  font-size: 9px;
+  font-size: 12px;
   margin-top: 5px;
 }
 
 .load-error {
   margin: 10px 0 0;
   color: #ff8a90;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .adapter-note {
   margin: 8px 0 0;
   color: #55708a;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .grid {
@@ -401,7 +328,7 @@ function fmtRate(bps: number): string {
   justify-content: space-between;
   border-bottom: 1px solid #142d40;
   color: #8298ab;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .row strong {
   color: #dbe6ed;

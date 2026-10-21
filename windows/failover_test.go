@@ -126,6 +126,24 @@ func TestFailoverCandidatesOrder(t *testing.T) {
 	}
 }
 
+func TestClassAwareCandidateOrder(t *testing.T) {
+	descs := []render.ChannelDescriptor{
+		{ID: "failed", Protocol: "vless", Transport: "ws", Port: 443},
+		{ID: "reality", Protocol: "vless", Transport: "tcp-reality", Port: 8443},
+		{ID: "hy2", Protocol: "hysteria2", Transport: "quic", Port: 8444},
+	}
+	base := []string{"reality", "hy2"}
+	if got := orderCandidatesForFailure(base, descs, "failed", fcSilentFreeze); got[0] != "hy2" {
+		t.Fatalf("silent freeze должен предпочесть UDP: %v", got)
+	}
+	if got := orderCandidatesForFailure([]string{"hy2", "reality"}, descs, "failed", fcPortBlackholed); got[0] != "hy2" {
+		t.Fatalf("оба кандидата меняют port family; generic order должен сохраниться: %v", got)
+	}
+	if got := orderCandidatesForFailure(base, descs, "failed", fcUnknown); got[0] != "reality" {
+		t.Fatalf("unknown не должен выдумывать контрмеру: %v", got)
+	}
+}
+
 // TestFailoverNoCandidatesBlocked — validated кандидатов нет → fail-closed
 // BLOCKED без попыток и без прямого fallback (FR-001).
 func TestFailoverNoCandidatesBlocked(t *testing.T) {
@@ -139,5 +157,43 @@ func TestFailoverNoCandidatesBlocked(t *testing.T) {
 	switched, blocked := a.tryFailover(nil, map[string]bool{}, "channel-a-vless")
 	if switched || !blocked {
 		t.Fatalf("tryFailover без кандидатов = switched=%v blocked=%v, want false/true", switched, blocked)
+	}
+}
+
+// TestRecordCandidateFailureMarksChannel — V2-075 (аудит D2): провалившийся
+// кандидат получает ФАКТ отказа в реестре эпохи (сильный probe-счётчик →
+// D2 QUARANTINED), иначе следующий инцидент снова выбирает его первым и вторая
+// попытка сгорает на нём же — BLOCKED при живом соседнем канале.
+func TestRecordCandidateFailureMarksChannel(t *testing.T) {
+	a := NewApp()
+	now := time.Now()
+	netEpoch.bump("up", "wifi", now)
+	epoch, _, _ := netEpoch.current()
+	chanHealth.mu.Lock()
+	chanHealth.resetLocked(epoch)
+	chanHealth.mu.Unlock()
+	t.Cleanup(func() {
+		netEpoch.resetForTest()
+		chanHealth.mu.Lock()
+		chanHealth.resetLocked(0)
+		chanHealth.mu.Unlock()
+	})
+
+	a.recordCandidateFailure("chan-x", now)
+	st, ok := chanHealth.stateOf(epoch, "chan-x")
+	if !ok {
+		t.Fatal("факт отказа кандидата не записан в реестр эпохи")
+	}
+	if st.FAIL != 1 || st.ProbeFails != 1 || st.LastClass != fcChannelUnavail {
+		t.Fatalf("запись кандидата неверна: %+v", st)
+	}
+	if d2 := a.quarantineStateOf("chan-x"); d2.State != qsQuarantined {
+		t.Fatalf("сильный отказ обязан карантинить кандидата: %+v", d2)
+	}
+
+	// Пустой id — no-op: реестр не выдумывает записи (AGENTS §3.6).
+	a.recordCandidateFailure("", now)
+	if _, ok := chanHealth.stateOf(epoch, ""); ok {
+		t.Fatal("пустой channelID не должен создавать запись")
 	}
 }

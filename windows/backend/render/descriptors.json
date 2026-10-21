@@ -12,6 +12,8 @@
       "credential_refs": ["vless-uuid"],
       "multiplex": true,
       "probe_targets": ["https://vpn.example.com/ip", "https://api.ipify.org"],
+      "diagnostic_url": "https://vpn.example.com/range",
+      "fd": { "carrier": "cloudflare", "asn": "AS57043" },
       "validation_status": "live-verified",
       "validated_at": "2026-09-09",
       "enabled": true
@@ -28,6 +30,7 @@
       "probe_targets": ["https://vpn.example.com/ip", "https://api.ipify.org"],
       "server_ports": ["443:443", "8444:8444", "40000:41000"],
       "hop_interval": "30s",
+      "fd": { "asn": "AS57043" },
       "validation_status": "live-verified",
       "validated_at": "2026-09-09",
       "enabled": true
@@ -44,7 +47,9 @@
       "uuid_ref": "vless-uuid-c",
       "reality_public_key_ref": "reality-public-key-c",
       "reality_short_id_ref": "reality-short-id-c",
-      "probe_targets": ["https://api.ipify.org", "https://ifconfig.me/all.json"],
+      "probe_targets": ["https://vpn.example.com/ip", "https://api.ipify.org"],
+      "probe_primary_host": "vpn.example.com",
+      "fd": { "asn": "AS57043" },
       "validation_status": "live-verified",
       "validated_at": "2026-09-12",
       "enabled": true
@@ -60,7 +65,9 @@
       "credential_refs": ["vless-uuid-d", "shadowtls-password-d"],
       "uuid_ref": "vless-uuid-d",
       "shadowtls_password_ref": "shadowtls-password-d",
-      "probe_targets": ["https://api.ipify.org", "https://ifconfig.me/all.json"],
+      "probe_targets": ["https://vpn.example.com/ip", "https://api.ipify.org"],
+      "probe_primary_host": "vpn.example.com",
+      "fd": { "asn": "AS57043" },
       "validation_status": "configured",
       "enabled": true
     }

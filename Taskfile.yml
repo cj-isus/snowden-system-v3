@@ -1,0 +1,99 @@
+version: '3'
+
+# No dynamic sh variables, remote includes, dotenv loading or automatic install.
+# Consequently --dry only prints these static commands. Tests never use status-cache.
+vars:
+  PRODUCTION_TAGS: with_utls,with_gvisor,with_quic,with_clash_api
+
+tasks:
+  default:
+    desc: Show the next planned slice; no product execution
+    cmds:
+      - node scripts/harness/project.mjs next
+
+  map:
+    desc: Regenerate the bounded active-code map
+    cmds:
+      - node scripts/harness/project.mjs map
+
+  doctor:
+    desc: Static project diagnostics; no VPN, tests or network
+    cmds:
+      - node scripts/harness/project.mjs doctor
+
+  harness:check:
+    desc: Validate installed harness syntax and structure
+    cmds:
+      - node --check scripts/harness/project.mjs
+      - node --check scripts/harness/map.mjs
+      - node --check scripts/harness/doctor.mjs
+      - node --check scripts/harness/eval.mjs
+      - node scripts/harness/doctor.mjs
+      - node scripts/harness/project.mjs doctor
+
+  frontend:typecheck:
+    desc: Vue/TypeScript typecheck (when requested)
+    dir: windows/frontend
+    cmds:
+      - node node_modules/vue-tsc/bin/vue-tsc.js --noEmit
+
+  frontend:check:
+    desc: Frontend typechecks, offline unit/component tests and production build
+    dir: windows/frontend
+    cmds:
+      - task: frontend:typecheck
+      - node node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.tests.json
+      - node node_modules/vitest/vitest.mjs run
+      - node node_modules/vite/bin/vite.js build
+
+  frontend:browser:
+    desc: All pages and keyboard flows in an isolated Chromium with synthetic data
+    dir: windows/frontend
+    cmds:
+      - task: frontend:check
+      - node node_modules/@playwright/test/cli.js test
+
+  go:unit:
+    desc: Ordinary local Go tests, no live tag (when requested)
+    dir: windows
+    cmds:
+      - go test ./... -count=1 -timeout=120s
+
+  go:tagged:
+    desc: Go tests with the production registration set (when requested)
+    dir: windows
+    cmds:
+      - go test -tags {{.PRODUCTION_TAGS}} ./... -count=1 -timeout=120s
+
+  go:vet:
+    desc: Native Go static vet (when requested)
+    dir: windows
+    cmds:
+      - go vet ./...
+
+  backend:check:
+    desc: Sequential Go local/tagged/vet checks (when requested)
+    cmds:
+      - task: go:unit
+      - task: go:tagged
+      - task: go:vet
+
+  security:staged:
+    desc: Gitleaks scan of staged diff only; blocked if index empty; redacted
+    cmds:
+      - node scripts/harness/project.mjs secrets
+
+  security:vuln:
+    desc: Explicit online Go vulnerability check; contacts vuln.go.dev, never VPS
+    dir: windows
+    platforms: [windows]
+    cmds:
+      - ../.tools/go/govulncheck.exe -tags {{.PRODUCTION_TAGS}} ./...
+
+  tools:versions:
+    desc: Print installed project-local tool versions; no scans
+    platforms: [windows]
+    cmds:
+      - .tools/task/task.exe --version
+      - .tools/gitleaks/gitleaks.exe version
+      - go version -m .tools/go/govulncheck.exe

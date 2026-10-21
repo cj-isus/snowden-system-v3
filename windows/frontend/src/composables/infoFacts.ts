@@ -7,50 +7,41 @@
 import { onUnmounted, ref } from 'vue'
 import { api, isBuildPhase } from '@/api/backend'
 import type { FailoverStatus, NetworkFacts } from '@/api/contract'
+import { createPoller } from './polling'
 
 const facts = ref<NetworkFacts | null>(null)
 const failover = ref<FailoverStatus | null>(null)
 
-let timer: number | undefined
 let users = 0
-
-async function refresh(): Promise<void> {
+const poller = createPoller(async () => {
   if (isBuildPhase()) {
-    facts.value = null
-    failover.value = null
-    return
+    return { facts: null, failover: null }
   }
-  try {
-    facts.value = await api.getNetworkFacts()
-  } catch {
-    facts.value = null
+  const [network, watcher] = await Promise.allSettled([api.getNetworkFacts(), api.getFailoverStatus()])
+  return {
+    facts: network.status === 'fulfilled' ? network.value : null,
+    failover: watcher.status === 'fulfilled' ? watcher.value : null,
   }
-  try {
-    failover.value = await api.getFailoverStatus()
-  } catch {
-    failover.value = null
-  }
-}
+}, value => {
+  facts.value = value.facts
+  failover.value = value.failover
+}, 10000)
 
 function acquire(): void {
   users++
   if (users === 1) {
-    void refresh()
-    timer = window.setInterval(() => void refresh(), 15000)
+    poller.start()
   }
 }
 
 function release(): void {
   users = Math.max(0, users - 1)
-  if (users === 0 && timer !== undefined) {
-    window.clearInterval(timer)
-    timer = undefined
-  }
+  if (users === 0) poller.stop()
 }
 
 /** Использовать внутри setup(): счётчик потребителей снимает поллинг при размонтировании. */
 export function useInfoFacts() {
   acquire()
   onUnmounted(release)
-  return { facts, failover, refresh }
+  return { facts, failover, refresh: poller.refresh }
 }

@@ -61,7 +61,7 @@ func TestPickDefaultChannelRespectsValidationGate(t *testing.T) {
 		t.Fatalf("mobile без HY2 и reality: default = %q, want \"\"", got)
 	}
 	descs[1].ValidationStatus = "live-verified" // HY2 вернуть: пригодится wifi-ветке
-	descs[0].ValidationStatus = "blocked" // wifi: vless+ws выпал
+	descs[0].ValidationStatus = "blocked"       // wifi: vless+ws выпал
 	if got := pickDefaultChannel(descs, "wifi"); got != "channel-a-hy2" {
 		t.Fatalf("wifi без vless: default = %q, want channel-a-hy2 (rank-fallback)", got)
 	}
@@ -92,5 +92,22 @@ func TestPickDefaultChannelStableTieBreak(t *testing.T) {
 func TestTransportKey(t *testing.T) {
 	if got := transportKey(prefDescriptors()[0]); got != "vless+ws" {
 		t.Fatalf("transportKey = %q, want vless+ws", got)
+	}
+}
+
+func TestPreferredChannelForNetworkChangeRequiresDifferentLiveCandidate(t *testing.T) {
+	descs := prefDescriptors()
+	if got := preferredChannelForNetworkChange(descs, "channel-a-vless", "mobile"); got != "channel-a-hy2" {
+		t.Fatalf("mobile preference from vless = %q, want channel-a-hy2", got)
+	}
+	if got := preferredChannelForNetworkChange(descs, "channel-a-hy2", "mobile"); got != "" {
+		t.Fatalf("already preferred mobile channel must be no-op, got %q", got)
+	}
+	if got := preferredChannelForNetworkChange(descs, "channel-a-vless", "satellite"); got != "" {
+		t.Fatalf("unknown network class must be no-op, got %q", got)
+	}
+	descs[1].ValidationStatus = "configured"
+	if got := preferredChannelForNetworkChange(descs, "channel-a-vless", "mobile"); got != "channel-a-reality" {
+		t.Fatalf("non-validated preferred channel must fall back to next live candidate, got %q", got)
 	}
 }

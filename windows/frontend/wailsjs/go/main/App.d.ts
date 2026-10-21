@@ -17,6 +17,8 @@ export function DisableTUN():Promise<void>;
 
 export function EnableTUN():Promise<void>;
 
+export function EpochLabel():Promise<string>;
+
 export function ExportOnboarding(arg1:string):Promise<string>;
 
 export function ExportOnboardingQR(arg1:string):Promise<main.OnboardingQRResult>;
@@ -25,15 +27,23 @@ export function GetAdaptiveStatus():Promise<main.AdaptiveStatus>;
 
 export function GetAutostart():Promise<boolean>;
 
+export function GetChannelHealth():Promise<main.ChannelHealth>;
+
+export function GetChannelIndependence():Promise<Array<main.ChannelIndependenceInfo>>;
+
 export function GetDeliveryProfile():Promise<main.DeliveryProfile>;
 
 export function GetFailoverStatus():Promise<main.FailoverStatus>;
+
+export function GetIncidents():Promise<Array<main.IncidentCluster>>;
 
 export function GetMetrics():Promise<main.MetricsView>;
 
 export function GetNetStats():Promise<main.NetStats>;
 
 export function GetNetworkFacts():Promise<main.NetworkFacts>;
+
+export function GetRuntimeInfo():Promise<main.RuntimeInfo>;
 
 export function GetSplitDirect():Promise<Array<string>>;
 
