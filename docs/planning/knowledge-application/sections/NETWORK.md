@@ -458,8 +458,8 @@ review, а не превратить в очередной транспорт и
 | Дополнительные принятые source ограничения | [DR27-01/02/03/13/15](../../../theory/research/reviews/2026-10-28-DEEP-REVIEW.md): composition, effective TLS floor, projected exporter, proxy/hop и предел egress proof; остальные claims отдельно | TH-01…06, OFF-04/05 |
 
 Нормативный маршрут реализации: [PLAN TH/OFF](../../../PLAN.md),
-[Android AND/A-FR](../../../ANDROID-PLAN.md),
-[adaptive ADP](../../../adaptive/PLAN.md). Последние сопоставленные обновления
+Android AND/A-FR — `docs/ANDROID-PLAN.md`,
+adaptive ADP — `docs/adaptive/PLAN.md`. Последние сопоставленные обновления
 V2-183 и AND-02-S5 не закрывают native/runtime gates и не меняют названные
 сетевые выводы. Дальнейшие библиотечные и полевые вопросы не требуют нового
 каталога исследований до применения этих ограниченных срезов.

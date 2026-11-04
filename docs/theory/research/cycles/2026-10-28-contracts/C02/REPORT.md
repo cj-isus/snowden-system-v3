@@ -240,9 +240,9 @@ Primary: [VLESS outbound](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2
 - Actual EXE/SDK provenance, действующий серверный ECH deployment, профиль/ключи, фактический endpoint, traffic и native protection **UNKNOWN / NOT_RUN**. Не исследовались Android actual caller и полная OS lifecycle.
 - Не установлен готовый complete service-binding selector в текущем caller; наличие miekg RR parser его не доказывает. Без дополнительных предпосылок fixed endpoint и произвольный multi-CDN Service Binding не взаимозаменяемы.
 - Proposed admission предполагает корректные platform producers; на source-only основании нельзя присвоить им runtime T. Ошибочная identity policy, злонамеренный доверенный issuer/admin или неполный validation scope остаются ограничениями модели.
-- Paired HANDOFF Z01/Z02 при адресном чтении 08:53:53Z и конечном review 09:14:54Z отсутствовали; ожидания/сообщений не было. Независимое scientific review руководителя ещё не выполнено.
-- Никаких tests/build/fixtures/simulation/probes/deploy/security scan, смены policy/bindings/dependencies или product statuses не выполнялось. Старые отчёты и общая теория не изменялись.
+- Независимый paired review Z01/Z02 не входил в этот source-срез. Позднейшее появление материалов не означает их автоматического согласования.
+- Никаких tests/build/fixtures/simulation/probes/deploy/security scan, смены policy/bindings/dependencies или product statuses не выполнялось. 
 
 ### Итог документационной сверки
 
-28 remote/local source records совпали; 18 local/baseline inputs без hash drift на 09:14:21Z; матрица содержит15 строк, missing local Markdown links —0. Это статическая provenance/link проверка, **не product test/PASS**. Основной контракт и связанные source/model вопросы конечны; оставшиеся проверки требуют отдельного artifact/native/field назначения. Автор прекращает эту партию до deadline без добавления несвязанных поисков ради длительности.
+28 remote/local source records совпали; 18 local/baseline inputs без hash drift на 09:14:21Z; матрица содержит15 строк, missing local Markdown links —0. Это статическая provenance/link проверка, **не product test/PASS**. Основной контракт и связанные source/model вопросы конечны; оставшиеся проверки требуют отдельного artifact/native/field назначения.

@@ -474,11 +474,11 @@ matches,61 local input hashes; на final comparison59 неизменны пос
 owner/cache/closed-history flavor перечитаны отдельно; product work не изменён.
 Это не atomic snapshot всей рабочей копии и не overlay/artifact attestation.
 
-**Предложение руководителю:** принять A как достаточный условный accounting
+**Предлагаемое решение:** принять A как достаточный условный accounting
 contract, B как узкий source-scoped cancellation defect для отдельного owner
 review. Научное ACCEPTED не выставлено автором.
 
-Последовательность передачи разработчикам после решения руководителя:
+Последовательность применения после принятия применимых выводов:
 
 1. Зафиксировать resource units/custodians, generation/count/byte limits и
    reaping receipts; сохранить platform protection и uncertain-owner barriers.
@@ -491,8 +491,5 @@ review. Научное ACCEPTED не выставлено автором.
 
 Открытое: numerical whole-process/RSS/kernel/native bound; accepted Android
 artifact/toolchain; measured time/CPU/throughput/energy и field workload;
-independent paired handoff и scientific verdict. Приёмочная программа полностью
-**NOT_RUN**, executable fixtures не создавались. Содержание bounded question
-исчерпано; ожидание ради отчётных60 минут не используется. Exact original receipt
-утрачен при compaction; elapsed известных clock stamps не объявляется active
-work/непрерывными60–120 минутами. Следующее действие — scoped review руководителя.
+independent paired review и scientific verdict. Приёмочная программа полностью
+**NOT_RUN**, executable fixtures не создавались.

@@ -32,7 +32,7 @@
 
 Связанные тематические тексты: [transports/ECH-DNS-BOOTSTRAP.md](../transports/ECH-DNS-BOOTSTRAP.md) · [transports/COMPOSITION-AND-TLS-CONTRACTS.md](../transports/COMPOSITION-AND-TLS-CONTRACTS.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Пробел и что не принимается за аксиому; 2. Нормативная база — номер, дата, статус; 3. Принятие ECH, GREASE и retry/fallback; 4. Property matrix: наблюдатель и пределы ECH; 5. R02-013-B — actual Windows CDN/uTLS caller; 6. R02-013-C — доказательства фильтрации и их область; 7. Сильнейшие противоположные примеры; 8. Reuse, цена и адресаты (без реализации); 9. Конечные будущие cases — ВСЕ NOT_RUN; 10. Предлагаемая вставка в канон — только предложение; 11. Проверка и предел сдачи; 12. FUP-1-01 — связь выбранного ECHConfig с endpoint.
+В отчёте: 1. Пробел и что не принимается за аксиому; 2. Нормативная база — номер, дата, статус; 3. Принятие ECH, GREASE и retry/fallback; 4. Property matrix: наблюдатель и пределы ECH; 5. R02-013-B — actual Windows CDN/uTLS caller; 6. R02-013-C — доказательства фильтрации и их область; 7. Сильнейшие противоположные примеры; 8. Reuse, цена и адресаты (без реализации); 9. Конечные будущие cases — ВСЕ NOT_RUN; 10. Предлагаемая вставка в канон — только предложение; 11. Границы проверки; 12. FUP-1-01 — связь выбранного ECHConfig с endpoint.
 
 <a id="author-2"></a>
 
@@ -48,7 +48,7 @@ Lineage процентов/счётчиков, неполная ISP/access matri
 
 Связанные тематические тексты: [methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md](../methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Вопрос, baseline и предел результата; 2. R02-014-A — lineage и область числа важнее количества цитат; 3. R02-014-B — матрица наблюдений с незаполненными ячейками; 4. R02-014-C — область источника и наблюдаемость ограничивают диагноз; 5. Применение к системе без изменения продукта; 6. Адресные предложения руководителю (без записи в общие файлы); 7. Конечные непроведённые cases / остаток; 8. FUP-2-01 / R02-014-D — сопоставимость raw outcomes и summary labels OONI.
+В отчёте: 1. Вопрос, baseline и предел результата; 2. R02-014-A — lineage и область числа важнее количества цитат; 3. R02-014-B — матрица наблюдений с незаполненными ячейками; 4. R02-014-C — область источника и наблюдаемость ограничивают диагноз; 5. Применение к системе без изменения продукта; 6. Предлагаемое применение; 7. Конечные непроведённые cases / остаток; 8. FUP-2-01 / R02-014-D — сопоставимость raw outcomes и summary labels OONI.
 
 <a id="author-3"></a>
 
@@ -64,7 +64,7 @@ Lineage процентов/счётчиков, неполная ISP/access matri
 
 Связанные тематические тексты: [adaptation/INTERVALS-AND-POLICY-EVALUATION.md](../adaptation/INTERVALS-AND-POLICY-EVALUATION.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Что именно проверяется; 2. Словарь: четыре уровня, которые нельзя смешивать; 3. R03-010-A: композиция по фиксированному и счётному семейству; 4. R03-010-B: кредитная модель без ложного «положительного дрейфа»; 5. R03-010-C: минимальный producer-контракт; 6. Reuse только после доказательства; 7. Проверенные источники, русский язык и доказательные ограничения; 8. Конечная будущая программа — всё NOT_RUN; 9. Предлагаемый фрагмент теории (не внесён в общие главы).
+В отчёте: 1. Что именно проверяется; 2. Словарь: четыре уровня, которые нельзя смешивать; 3. R03-010-A: композиция по фиксированному и счётному семейству; 4. R03-010-B: кредитная модель без ложного «положительного дрейфа»; 5. R03-010-C: минимальный producer-контракт; 6. Reuse только после доказательства; 7. Проверенные источники, русский язык и доказательные ограничения; 8. Конечная будущая программа — всё NOT_RUN; 9. Предлагаемый фрагмент теории (не внесён в общие главы).
 
 <a id="author-4"></a>
 
@@ -80,7 +80,7 @@ Scalar Salamander/basicConn путь, scoped sendQueue bound, copies до Add, r
 
 Связанные тематические тексты: [performance/QUIC-ACCOUNTING-AND-LIMITS.md](../performance/QUIC-ACCOUNTING-AND-LIMITS.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Вопрос, baseline и область; 2. R04-010-A — фактический scalar Windows путь, не GSO; 3. R04-010-B — одна корректная граница очереди, не глобальная RAM; 4. Адресный пересмотр прежнего R04-008; 5. R04-010-C — singleflight, graceful drain и настоящий Windows owner; 6. R04-009: что не переносится в новую теорию; 7. Reuse, цена и адресаты; 8. Конечная будущая программа — все NOT_RUN; 9. Предлагаемый фрагмент для главы (не интегрирован автором).
+В отчёте: 1. Вопрос, baseline и область; 2. R04-010-A — фактический scalar Windows путь, не GSO; 3. R04-010-B — одна корректная граница очереди, не глобальная RAM; 4. Адресный пересмотр прежнего R04-008; 5. R04-010-C — singleflight, graceful drain и настоящий Windows owner; 6. R04-009: что не переносится в новую теорию; 7. Reuse, цена и адресаты; 8. Конечная будущая программа — все NOT_RUN; 9. Предлагаемый фрагмент для главы (не интегрирован автором).
 
 <a id="author-5"></a>
 
@@ -90,13 +90,13 @@ Scalar Salamander/basicConn путь, scoped sendQueue bound, copies до Add, r
 
 Ordinary Doze/App Standby, foreground UID и LPS различаются; nominal HY2 10s не равен radio/battery rate. OSS PauseManager caller не доказывает остановку HY2 таймера.
 
-**Область принятия:** READY_FOR_REVIEW, поздняя сдача. Source acquisition до cutoff заявлен автором; device/energy программа NOT_RUN.
+**Статус проверки:** READY_FOR_REVIEW. Происхождение и актуальность source-среза независимо не подтверждены; device/energy программа NOT_RUN.
 
 [REPORT](04-PERFORMANCE/REPORT-011.md) · [SOURCES](04-PERFORMANCE/SOURCES-011.md) · [Handoff](04-PERFORMANCE/handoffs/R04-011.md)
 
 Связанные тематические тексты: [performance/QUIC-ACCOUNTING-AND-LIMITS.md](../performance/QUIC-ACCOUNTING-AND-LIMITS.md) · [android/PLATFORM-AND-UX.md](../android/PLATFORM-AND-UX.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Пробел и точная область; 2. Фактическая Android-интеграция Snowden; 3. R04-011-A — матрица power-режимов, не единый «фон»; 4. R04-011-B — exact source модель 10s HY2 keepalive; 5. R04-011-C — upstream pause caller is not HY2 timer proof; 6. Энергетический вывод без выдуманных чисел; 7. Reuse / adapt / reject; 8. Конечная device-программа — все случаи NOT_RUN; 9. Выводы для руководителя; 10. Предлагаемая вставка в общую теорию (руководитель решает); 11. Остаток знания.
+В отчёте: 1. Пробел и точная область; 2. Фактическая Android-интеграция Snowden; 3. R04-011-A — матрица power-режимов, не единый «фон»; 4. R04-011-B — exact source модель 10s HY2 keepalive; 5. R04-011-C — upstream pause caller is not HY2 timer proof; 6. Энергетический вывод без выдуманных чисел; 7. Reuse / adapt / reject; 8. Конечная device-программа — все случаи NOT_RUN; 9. Выводы для разработки; 10. Предлагаемая вставка в общую теорию (требует отдельной рецензии); 11. Остаток знания.
 
 <a id="author-6"></a>
 
@@ -112,7 +112,7 @@ A/B/C разделяют key attestation, user authentication, Protected Confirm
 
 Связанные тематические тексты: [architecture/RELEASE-EVIDENCE-BOUNDARIES.md](../architecture/RELEASE-EVIDENCE-BOUNDARIES.md) · [architecture/SAFETY-AND-TRUST.md](../architecture/SAFETY-AND-TRUST.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Пробел и проверенный baseline; 2. R05-009-A — четыре разных объекта evidence; 3. R05-009-B — подтверждённый текст, nonce и current authority проверяются отдельно; 4. R05-009-C — ready verifier есть, но generic Success не равен requested assurance; 5. Применение к нашей системе без изменения продукта; 6. Оппонирующая самопроверка; 7. Конечная будущая приёмка — все NOT_RUN; 8. Предлагаемая адресная вставка (не интегрирована); 9. FUP-6-01 / R05-009-D — потери status projection и предел результата; 10. Новая задача 28 октября / завершение source-model остатка FUP-6-01.
+В отчёте: 1. Пробел и проверенный baseline; 2. R05-009-A — четыре разных объекта evidence; 3. R05-009-B — подтверждённый текст, nonce и current authority проверяются отдельно; 4. R05-009-C — ready verifier есть, но generic Success не равен requested assurance; 5. Применение к нашей системе без изменения продукта; 6. Оппонирующая самопроверка; 7. Конечная будущая приёмка — все NOT_RUN; 8. Предлагаемая адресная вставка (не интегрирована); 9. FUP-6-01 / R05-009-D — потери status projection и предел результата; 10. Дополнение 28 октября / source-model contract R05-009-D.
 
 <a id="author-7"></a>
 
@@ -128,7 +128,7 @@ A/B/C разделяют key attestation, user authentication, Protected Confirm
 
 Связанные тематические тексты: [architecture/TRUST-CONTINUITY-AND-AGREEMENT.md](../architecture/TRUST-CONTINUITY-AND-AGREEMENT.md) · [architecture/RELEASE-EVIDENCE-BOUNDARIES.md](../architecture/RELEASE-EVIDENCE-BOUNDARIES.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Область, метод и новая дельта; 2. R05-010-A — persistable predecessor не равен указателю TrustedMetadata; 3. R05-010-B — два ограничения знания offline latest; 4. R05-010-C — bounded recovery contract и готовые механизмы; 5. Цена, falsifiers и конечная приёмка — NOT_RUN; 6. Предлагаемая адресная интеграция руководителю; 7. FUP-7-02 / R05-010-D — основание retention конкретного timestamp.
+В отчёте: 1. Область, метод и новая дельта; 2. R05-010-A — persistable predecessor не равен указателю TrustedMetadata; 3. R05-010-B — два ограничения знания offline latest; 4. R05-010-C — bounded recovery contract и готовые механизмы; 5. Цена, falsifiers и конечная приёмка — NOT_RUN; 6. Предлагаемая интеграция; 7. FUP-7-02 / R05-010-D — основание retention конкретного timestamp.
 
 <a id="author-8"></a>
 
@@ -144,7 +144,7 @@ A/B/C: Android authority sets, Windows CSP/WFP и наблюдаемость. Н
 
 Связанные тематические тексты: [android/UID-ROUTING-AND-OWNERSHIP.md](../android/UID-ROUTING-AND-OWNERSHIP.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Вопрос и метод; 2. Поправки к прежней матрице; 3. R06-012-A — Android: три разных полномочия, не один список исключений; 4. R06-012-B — Windows: профиль MDM, арбитраж WFP и реальные сокеты; 5. R06-012-C — объяснимость ограничивается полномочиями наблюдателя; 6. Reuse, цена и границы; 7. Конечная будущая приёмка — всё NOT_RUN; 8. Предлагаемая вставка и остаток; 9. R06-012-D — UID closure: захват VPN не равен принадлежности app-rule.
+В отчёте: 1. Вопрос и метод; 2. Поправки к прежней матрице; 3. R06-012-A — Android: три разных полномочия, не один список исключений; 4. R06-012-B — Windows: профиль MDM, арбитраж WFP и реальные сокеты; 5. R06-012-C — объяснимость ограничивается полномочиями наблюдателя; 6. Reuse, цена и границы; 7. Конечная будущая приёмка — всё NOT_RUN; 8. Предлагаемая вставка и остаток; 9. R06-012-D — UID closure: захват VPN не равен принадлежности app-rule.
 
 <a id="author-9"></a>
 
@@ -160,7 +160,7 @@ A/B/C: Android authority sets, Windows CSP/WFP и наблюдаемость. Н
 
 Связанные тематические тексты: [adaptation/INTERVALS-AND-POLICY-EVALUATION.md](../adaptation/INTERVALS-AND-POLICY-EVALUATION.md) · [observability/PROBE-PROOF-BOUNDARIES.md](../observability/PROBE-PROOF-BOUNDARIES.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
 
-Разделы REPORT: 1. Пробел и проверка baseline; 2. R06-013-A — два estimand вместо одного двусмысленного recovery rate; 3. R06-013-B — минимальный privacy-preserving local record; 4. Будущая локальная программа — дизайн, не запуск; 5. OSS reference: OONI Probe CLI v3.31.0 — adapt boundary, не код; 6. Цена, оппонирование и предел знания; 7. Предлагаемая вставка руководителю.
+В отчёте: 1. Пробел и проверка baseline; 2. R06-013-A — два estimand вместо одного двусмысленного recovery rate; 3. R06-013-B — минимальный privacy-preserving local record; 4. Будущая локальная программа — дизайн, не запуск; 5. OSS reference: OONI Probe CLI v3.31.0 — adapt boundary, не код; 6. Цена, оппонирование и предел знания; 7. Предлагаемое уточнение.
 
 ## Два времени и два вида проверки
 

@@ -126,8 +126,8 @@ Latest docs содержат возможности вне нашего pin; ф�
 
 Срез от 2026-10-23 углубляет §§7–12;
 требования Windows/общего контура — [PLAN §5.6](../../PLAN.md#reliability-research),
-Android — [ANDROID-PLAN §8.1](../../ANDROID-PLAN.md#android-reliability-depth).
-[Evidence и расчёты](../../evidence/2026-10-23-deep-reliability.md) отделяют прочитанный
+Android — ANDROID-PLAN §8.1 — `docs/ANDROID-PLAN.md#android-reliability-depth`.
+Evidence и расчёты — `docs/evidence/2026-10-23-deep-reliability.md` отделяют прочитанный
 исходник, математический контрпример и будущую native/сетевую приёмку.
 Прочитанный исходник и математическая модель не подтверждают
 работоспособность VPN в реальном окружении.
@@ -309,10 +309,10 @@ path gates; запуск процесса не acknowledgement готовнос�
 
 Исследование 2026-10-24 продолжает §13 и уточняет его открытые source questions.
 Текущие входы: Windows V2-140→141, Android AND-06-S4; обе реализации source-only,
-без native/device acceptance. [Evidence](../../evidence/2026-10-24-transport-recovery.md)
+без native/device acceptance. Evidence — `docs/evidence/2026-10-24-transport-recovery.md`
 содержит exact pins, снимки исходников и пределы доказательства.
 [PLAN §5.7](../../PLAN.md#transport-recovery-research) и
-[Android §8.2](../../ANDROID-PLAN.md#android-transport-recovery) задают будущую приёмку.
+Android §8.2 — `docs/ANDROID-PLAN.md#android-transport-recovery` задают будущую приёмку.
 
 
 <!-- /source-unit: 14 -->
@@ -603,5 +603,5 @@ engine→adapter→controller evidence должны предшествовать
 Общее правило: presence алгоритма и base-interface compatibility не доказывают
 доставку событий, от которых зависит его обещанное поведение. Усиленная компенсация
 увеличивает offered load; скорость, fairness, полезное completion и energy требуют
-отдельной приёмки. Product source/планы не менялись; все execution/native/live
+отдельной приёмки. Все execution/native/live
 gates **NOT_RUN**. Новый transport/самописный controller не предлагается.

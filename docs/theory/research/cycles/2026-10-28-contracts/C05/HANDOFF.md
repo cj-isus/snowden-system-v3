@@ -1,4 +1,5 @@
-# R28-C05 — HANDOFF руководителю
+<a id="r28-c05--handoff-руководителю"></a>
+# R28-C05 — статусное знание и полномочия операции
 
 **Авторский статус:** READY_FOR_REVIEW. 28 октября 2026. Source/spec/model-only; scientific ACCEPTED не присваивается.
 
@@ -43,7 +44,8 @@ deliveryErr. Артефакт в этом countertrace не получает pro
 перед apply повторяются source/proof/current keys/time и purpose-specific version
 checks. Кодовый guard не заменён заявлением об успешной native операции.
 
-## Что разумно передать разработчикам после решения руководителя
+<a id="что-разумно-передать-разработчикам-после-решения-руководителя"></a>
+## Применение к разработке после рецензии
 
 1. **Windows retention:** на имеющемся seam отличать exact prior-accepted B
    от нового C и оценивать C относительно того же SDK workflow/RefTime;
@@ -83,9 +85,8 @@ checks. Кодовый guard не заменён заявлением об ус�
 «rejected incoming vs expired accepted predecessor» и один current consumer path
 до отказа/apply seam разобраны. Future V1–V8 конечны и все **NOT_RUN**.
 
-На review stage09:10:09Z paired Z06/Z07 HANDOFF отсутствовали:
-**AWAITING_INDEPENDENT_INPUT**, без ожидания/polling/messages. Их последующие
-результаты руководитель сопоставляет отдельно; наше согласие с ними не заявлено.
+Независимый paired review Z06/Z07 не входил в этот source-срез.
+Согласие с их позднейшими результатами не установлено данным пакетом.
 
 Не закрыты исполнением: exact runtime/provider/native identity, actual headers/
 status publication time, authenticated UTC, disk durability/power loss, keys K,

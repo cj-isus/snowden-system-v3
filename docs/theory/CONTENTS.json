@@ -1579,5 +1579,10 @@
     "addedSource": "Obsidian Snowden theory copy, 2026-10-27/28",
     "reviewProvenance": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
     "evidence": ".artifacts/research/library-structure/2026-10-28/coverage-correction/vault-comparison.json"
+  },
+  "hashSemantics": {
+    "sourceArchive": "Exact preserved authored archive; sourceBytes/sourceSha256 identify its bytes.",
+    "coverage": "sourceStart/sourceEnd are UTF-16 JavaScript string offsets in the archived UTF-8 decoded text; sourceSha256 hashes the UTF-8 encoding of that slice. bodySha256 records the split-time body, not current page identity.",
+    "relocated": "originalSha256/migratedSha256 are historical migration observations. Current reader edits do not rewrite acquisition lineage."
   }
 }

@@ -519,12 +519,9 @@ RAM/CPU/battery, I/O latency, сроки и token/cost **не измерялис
 
 ### 5.1 Paired review
 
-Один адресный read Z08/Z09 TASK и проверка HANDOFF выполнены на review stage;
-clock receipt после batch: **09:21:32Z**. Оба HANDOFF **NOT_AVAILABLE_AT_REVIEW**.
-Сообщений, ожидания или повторного polling нет. Назначение Z08 совпадает с
-raw→attributed identity/cache seam; Z09 — с исправлением maturity/outcome.
-Ни один неподготовленный результат не заимствован. Независимый peer input остаётся
-неполученным; этот законченный авторский пакет готов для проверки руководителем.
+Независимый paired input Z08/Z09 не входил в этот source-срез.
+Их позднейшие материалы не получают подтверждения по одному совпадению тем:
+raw→attributed identity/cache и maturity/outcome требуют отдельного review.
 
 ## 6. Последовательные предложения платформенным владельцам
 
@@ -561,6 +558,5 @@ raw→attributed identity/cache seam; Z09 — с исправлением maturi
 
 Runtime/tests/fixtures/build/vet/doctor/simulation/benchmarks/security scan/
 native/device/live/admin/VPS/SSH/deploy/OS network — **NOT_RUN**. Никаких новых
-исполняемых acceptance cases. Product code/plans/dependencies/roles/bindings,
-общая theory и прежние отчёты не менялись этим пакетом. Заявления «лучший VPN»,
+исполняемых acceptance cases. Заявления «лучший VPN»,
 «безотказность», «теоретически исчерпан весь максимум» из этого исследования не следуют.

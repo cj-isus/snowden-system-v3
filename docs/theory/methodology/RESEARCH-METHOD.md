@@ -336,10 +336,10 @@ operator-specific reachability anomalies для cloud providers; это осно
 входят исходная теория обхода, TH-00…08, повседневные/рабочие сценарии COM-00…19,
 Android AND-00…18/A-FR-01…18, надёжность RQ-01…20 и уточнения TR-01…06.
 Полный crosswalk **92 нормативных ID**, их реальных статусов, выбранного подхода
-и будущей приёмки: [coverage.json](../../../.artifacts/research/2026-10-24-research-completion/audit/coverage.json).
+и будущей приёмки: `.artifacts/research/2026-10-24-research-completion/audit/coverage.json`.
 Исторические F/E/FR/OFF сохранены отдельным маршрутом, а не объявлены выполненными.
 Отчёт и воспроизводимая проверка документов/источников:
-[research completion](../../evidence/2026-10-24-research-completion.md).
+research completion — `docs/evidence/2026-10-24-research-completion.md`.
 
 Исследование достаточно для последовательной разработки: у каждого заданного
 вопроса есть source/API ответ либо обоснованный reuse/adapt/reference/defer/reject

@@ -279,9 +279,9 @@ R05-010 как source finding для platform owner. Не повышать ег�
 записи T1000, lockout на реальном диске, signature bypass или VPN exploit.
 
 Проверенные seams: [SDK assignment/final check](https://github.com/theupdateframework/go-tuf/blob/f5edbde31e5507f46db2069402dc38903fe6d9d4/metadata/trustedmetadata/trustedmetadata.go#L103),
-[PrepareArtifacts](../../../../../../windows/backend/delivery/client.go#L150),
-[retention caller](../../../../../../windows/update_delivery.go#L87),
-[transaction attempt](../../../../../../windows/delivery_state.go#L41).
+PrepareArtifacts — `windows/backend/delivery/client.go:150`,
+retention caller — `windows/update_delivery.go:87`,
+transaction attempt — `windows/delivery_state.go:41`.
 
 ### 5.2 Противоположная крайность и ограниченное достаточное правило
 
@@ -418,7 +418,8 @@ fixtures, executable cases и команды исполнения не созд�
 | V7 — source/checkpoint/purpose меняются между prepare и apply | Повторный exact source/proof/current purpose gate отказывает до callback; отдельно проверить native/disk effect | NOT_RUN |
 | V8 — attestation/status приемлемы, actual key invalidated/locked/не того purpose | Нет silent replacement/reset или inherited operation permit; typed cancel/auth/re-enrollment требует нужной authority | NOT_RUN |
 
-## 8. Итог по этапам и рекомендация руководителю
+<a id="8-итог-по-этапам-и-рекомендация-руководителю"></a>
+## 8. Итоговые выводы и ограничения
 
 1. **Stage1 выполнен source/model:** independently пройден exact parser →
    projection → checker/provider/caller; выполнен guard crosswalk D.

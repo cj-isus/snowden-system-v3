@@ -73,7 +73,9 @@ floor1000; следующий обычный v11 будет отклонён д�
 Также valid timestamp, принятый до отказа следующего target/application шага,
 остаётся допустимым progress. Контекст происхождения различает эти случаи.
 
-### Решение для руководителя
+<a id="решение-для-руководителя"></a>
+
+### Предлагаемое решение
 
 Уточнить OP-03 и Android T07/KDoc: «сохранить допустимый предшествующий progress
 при final error» не означает «сохранить именно объект, вызвавший error».
@@ -254,14 +256,14 @@ AtomicFile документирует необходимость внешней 
 
 ## 7. Предложение по очередности разработки
 
-1. **TH-03 / AND-04-S4b T05–T11:** руководитель уточняет смысл persistable P,
+1. **TH-03 / AND-04-S4b T05–T11:** нужно уточнить смысл persistable P,
    примеры A1/A2/A3 и разрешённые rotation resets. Это до реализации общего seam.
 2. **Тот же trust owner:** согласует transition/provenance/output contract,
    включая original bytes, bounded ownership, cancellation и partial error.
    Сохранить выбранный Go crypto; не вводить second runtime/canonicalizer.
 3. **Windows owner:** адресно проверяет B1 по captured `PrepareArtifacts` path;
    **Android owner:** принимает согласованный contract в существующий whole
-   libbox adapter. Научный чат не правит эти исходники или планы.
+   libbox adapter.
 4. После разрешения — targeted semantic cases, затем отдельная OS durability/
    process/native/device приёмка. Только после неё можно обсуждать работающую
    recovery/admission систему; сертификат SDK или build этого не доказывает.
@@ -269,9 +271,10 @@ AtomicFile документирует необходимость внешней 
 Новые backlog IDs не создаются. Модель связывает TH-03/07, FR-008/011 и AND-04/13/14;
 исполнение/барьеры — у соответствующих lifecycle владельцев.
 
-## 8. Предлагаемая вставка в THEORY, только для решения руководителя
+<a id="8-предлагаемая-вставка-в-theory-только-для-решения-руководителя"></a>
+## 8. Предлагаемый вывод для общей теории
 
-Место: уточнение §16.3 OP-03; ссылка из §12.5 и §17.6. Сам сборник не менялся.
+Место: уточнение §16.3 OP-03; ссылка из §12.5 и §17.6.
 
 > Сохранение progress при final error требует указания пройденного workflow
 > шага. Внутренний intermediate go-tuf не является разрешением сохранить новый
@@ -699,7 +702,7 @@ Keystore/elapsed/worker остаются Android-owned, одна whole libbox in
 не выбирают удобный cut и не сбрасывают trust/clock history.
 **R06:** UX различает «сохранено», «исход неизвестен», «профиль принят» и «VPN
 допущена». Recovery kit должен содержать нужное независимое основание, а не
-кнопку очистки floors. Вопросы передаются руководителю через handoff, без сообщений.
+кнопку очистки floors.
 
 Цена: дополнительный context/provenance и recovery branches; повторные durable
 барьеры/копии/освобождение mmap требуют реальных resource измерений. Нулевой
@@ -724,10 +727,8 @@ deadline вычисляется для указанного полномочия
 
 ## 10. R05-003 — происхождение сборки, offline verification и разрешение обновления
 
-**READY_FOR_REVIEW, не ACCEPTED.** Исследование начато до deadline окна;
-после контрольного UTC 2026-10-26T06:51:44Z выполняется только сохранение уже
-полученного результата. Новые срезы не открываются. Это desk/source evidence,
-не проверка подписи, установки или VPN. Пакеты R05-001/002 сохраняются.
+**READY_FOR_REVIEW, не ACCEPTED.** Это desk/source evidence,
+не проверка подписи, установки или VPN. Выводы R05-001/002 не отменяются.
 
 ### 10.1. Пробел и утверждение
 
@@ -895,10 +896,9 @@ rendered records. Их hashes — идентичность capture, не хеш�
 Четыре local consumers/plan захвачены при закрытии; это не baseline начала
 исследования и не основание утверждать отсутствие drift за всё окно.
 
-Дальше руководителю: выбрать threat/issuer-vs-client policy и минимальный набор
-expectations; затем отдельно разрешить исследование final artifact/native
-signing→installed/executing image и исторического trust/revocation. После
-deadline эти новые срезы не начаты. Общую теорию и product plans меняет их владелец.
+Открытые вопросы: threat/issuer-vs-client policy и минимальный набор
+expectations; связь final artifact/native signing с installed/executing image;
+историческое trust/revocation. Эти области не проверены данным source-разбором.
 
 <a id="r05-004"></a>
 
@@ -928,7 +928,7 @@ knowledge, profile-specific nextUpdate, условие worst-case freshness дл
 interval, CRL hold/scope counterevidence и негерметичная pTime semantics Windows.
 Уточнены different success rules WinVerifyTrust/CertVerifyCertificateChainPolicy.
 Uptane2.1 — reference с secure-time предпосылкой, не новый продуктовый стек.
-10 future cases NOT_RUN. SDK/реальные OS stores не читались; shared theory не менялась.
+10 future cases NOT_RUN. SDK/реальные OS stores не читались.
 
 <a id="r05-006"></a>
 

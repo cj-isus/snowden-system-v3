@@ -153,7 +153,7 @@ hysteresis/minimum dwell/uncertainty и ручной quiet mode; security revoke
 snapshots, scoped controller/scoring/health/probe/admission/failover source и
 первичные алгоритмы. AD-01…06 — traceability labels уточнений существующих работ.
 Новая реализация controller/SDK, полевые результаты и оптимальность не заявлены.
-[Evidence/снимки](../../evidence/2026-10-25-adaptive-evidence.md).
+Evidence/снимки — `docs/evidence/2026-10-25-adaptive-evidence.md`.
 
 
 <!-- /source-unit: 17 -->

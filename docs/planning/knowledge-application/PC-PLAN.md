@@ -11,11 +11,12 @@
 
 ## 1. От чего продолжаем
 
-- Текущий снимок ПК — V2-196, `source/unverified`. Существующие guards процессов,
+- При принятии этого плана снимок ПК — V2-198, `source/unverified`; V2-199
+  продолжает PC-00/01/03/04 в исходниках. Существующие guards процессов,
   Stop, транзакций и обновлений сохраняем. Старые успешные проверки нельзя
   переносить на изменившийся код.
 - TUN пока намеренно не получает общий допуск: существующий
-  [native boundary](../../../windows/tunnel_boundary.go) возвращает
+  native boundary — `windows/tunnel_boundary.go` возвращает
   `ErrForwardingNotAdmitted`. Это ограничение безопасности, которое нужно
   завершить полноценным протоколом, а не убрать проверку.
 - Отказ от небезопасной композиции ShadowTLS и Windows-local TUF/storage/progress
@@ -116,8 +117,8 @@ owner/session/intent перед общим forwarding. Не заменять э�
 Переходы и outcome описаны source-контрактом; право включить TUN дополнительно
 зависит от будущей Windows/WFP/процессной приёмки.
 
-**Опора:** [Stop ownership](../../tasks/TH-01-STOP-OWNERSHIP.md),
-[TUN lifecycle](../../tasks/TH-01-TUN-LIFECYCLE.md), FR-009/010, OFF-01/02/03/05.
+**Опора:** Stop ownership — `docs/tasks/TH-01-STOP-OWNERSHIP.md`,
+TUN lifecycle — `docs/tasks/TH-01-TUN-LIFECYCLE.md`, FR-009/010, OFF-01/02/03/05.
 
 ### PC-02. Профили, доверие и общий SDK
 
@@ -152,7 +153,7 @@ recovery не обходят approval и transaction. Parity, persistence и nat
 остаются самостоятельной приёмкой.
 
 **Опора:** [trust](sections/TRUST.md), [SDK migration](crosschecks/SDK-MIGRATION.md),
-[Android trust requests](../../android/CHANGE-REQUEST-TRUST-001.md).
+Android trust requests — `docs/android/CHANGE-REQUEST-TRUST-001.md`.
 
 ### PC-03. Рабочий сетевой путь и честные проверки
 
@@ -274,8 +275,8 @@ Ranking/failover мигрировать следующим отдельным с
 `RequiresPlatformGate=true` остаётся обязательной границей всех эффектов.
 Сравнительная польза проверяется позже на сопоставимых path/workload/context.
 
-**Опора:** [API](../../adaptive/API.md), [адаптеры](../../adaptive/ADAPTER-MATRIX.md),
-[первый consumer](../../adaptive/ADP-005-DESIGN.md), FR-012 и ADP-002…008.
+**Опора:** API — `docs/adaptive/API.md`, адаптеры — `docs/adaptive/ADAPTER-MATRIX.md`,
+первый consumer — `docs/adaptive/ADP-005-DESIGN.md`, FR-012 и ADP-002…008.
 
 ### PC-08. Установка, обновление и recovery
 
@@ -293,7 +294,7 @@ fresh admission нужен заново; запуск GUI не означает 
 unsupported для schema2. Не включать public install по наличию исходников.
 Старые клиенты, reparse/ACL/volume aliases, power loss и UAC — отдельные gates.
 
-**Опора:** [pair update](../../tasks/TH-01-UPDATE-PAIR.md),
+**Опора:** pair update — `docs/tasks/TH-01-UPDATE-PAIR.md`,
 [release trust](crosschecks/TRUST-RELEASE.md), FR-011, OFF-04/06/07, TH-08.
 
 ### PC-09. Доказать готовность и выпускать постепенно
@@ -353,6 +354,12 @@ transitive dependencies, поддерживаемый caller, стоимость
 В частности QUIC/Brutal не переносится по одному подходящему методу.
 
 ## 6. Ближайший конкретный срез
+
+ПК-владелец принял **весь PC-00…09**, сохранив прежние FR/TH/OFF/COM/RQ/TR.
+Маршрут исполнения и открытые границы — [реестр §5.11](../../PLAN.md#pc-plan-execution).
+V2-199 уточняет сравнение egress и presentation в
+PC-03 — `docs/tasks/PC-03-EGRESS-SEMANTICS.md`; W4c и его native gate этим не закрыты.
+Абсолютный запрет владельца на тестирование/сборки/исполнение сети сохраняется.
 
 1. ПК-владельцу: закончить W4c original-helper/WFP admission, сохранив закрытый
    TUN gate до доказанной реализации; рядом уточнить egress/leak contract.

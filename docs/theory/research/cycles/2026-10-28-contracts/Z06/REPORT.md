@@ -423,8 +423,6 @@ supersession задаётся существующей platform policy; opaque H
 - F12: admission CAS before external action with simultaneous deny; define in-flight
   outcome and cancel/uncertainty, не double effect from retry function.
 
-Завершён scoped review source/model criteria, без artificial ожидания120мин.
-Не установлены actual endpoints/status/certificates, current production caller,
-whole closure/JVM artifacts/device compatibility, global RSS/CPU/time guarantee,
-доступность сервера и live VPN path. Новые sources/старые главы/общие планы не
-изменены, агенты/расписания не запускались. Итоговая сдача и evidence cut — STATUS.
+Завершён scoped source/model разбор. Не установлены actual endpoints/status/
+certificates, current production caller, whole closure/JVM artifacts/device
+compatibility, global RSS/CPU/time guarantee, доступность сервера и live VPN path.

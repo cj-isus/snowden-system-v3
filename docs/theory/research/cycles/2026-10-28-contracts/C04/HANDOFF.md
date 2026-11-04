@@ -50,7 +50,7 @@ library Close; их нельзя вырезать ради быстрого reco
 **Recommendation:** ACCEPT_SOURCE_SCOPED для отдельного platform/transport owner
 review. Минимальный future slice: bounded shared-carrier producer/handler
 admission и retained slots; actual queue/session cancel и interrupt owner без
-held data-plane mutex. Не «goroutine+timeout+Release». Код здесь не менялся.
+held data-plane mutex. Не «goroutine+timeout+Release».
 
 ## Что можно переиспользовать
 
@@ -66,7 +66,8 @@ held data-plane mutex. Не «goroutine+timeout+Release». Код здесь н�
   proof. Android actual AAR/Go unknown; authority elapsed и transport timer
   clocks/event delivery разведены. Никаких battery-saving процентов.
 
-## Сдача по work stages
+<a id="сдача-по-work-stages"></a>
+## Область выводов и незавершённые проверки
 
 1. Actual declarations/wrapper/caller availability — пройдено; Windows source
    доступен, Android artifact не аттестован.

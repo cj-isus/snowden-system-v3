@@ -5,19 +5,19 @@
 
 ## Происхождение и границы чтения
 
-Новый [source-index](../../../../.artifacts/research/theory-02/2026-10-25-r02-002/source-index.json)
+Новый source-index — `.artifacts/research/theory-02/2026-10-25-r02-002/source-index.json`
 содержит exact pins, URL, размеры и SHA-256 **47 новых source/context файлов**.
 Это число сохранённых файлов, не число полностью аудированных компонентов.
 Проверяемые выводы ограничены указанными ниже branches/callers.
 
-[local-manifest](../../../../.artifacts/research/theory-02/2026-10-25-r02-002/local-manifest.json)
+local-manifest — `.artifacts/research/theory-02/2026-10-25-r02-002/local-manifest.json`
 содержит 13 снимков локальных входов, включая прежний пакет, текущую теорию,
 DEPTH-CYCLE-002, manifest, renderer/validator, Windows preflight и Android guards.
 Снимки не атомарны для всего репозитория. Финальная актуальность —
-[self-review](../../../../.artifacts/research/theory-02/2026-10-25-r02-002/OPPOSITION.md).
+self-review — `.artifacts/research/theory-02/2026-10-25-r02-002/OPPOSITION.md`.
 
 Прежние U01–U04 остаются привязаны к
-[manifest R02-001](../../../../.artifacts/research/theory-02/2026-10-25-r02-01/manifest.json).
+manifest R02-001 — `.artifacts/research/theory-02/2026-10-25-r02-01/manifest.json`.
 Сохранён hash этого manifest; повторная загрузка всех старых зависимостей не
 выдаётся за новую проверку. Существующие captures не перезаписывались.
 
@@ -129,6 +129,6 @@ Cargo package0.10.2. Это **не аттестация установленно
 | Q06 | [Cloudflare, 2025-06-26](https://blog.cloudflare.com/russian-internet-users-are-unable-to-access-the-open-internet/) | Whole-carrier ограничения из собственной CDN-телеметрии как контрпример «правильный cover всегда доступен». Не текущий рейтинг путей |
 
 Q01/Q02 и crate metadata имеют отдельные capture outcomes в
-[references.json](../../../../.artifacts/research/theory-02/2026-10-25-r02-002/references.json).
+`.artifacts/research/theory-02/2026-10-25-r02-002/references.json`.
 Q03 прочитан через web, Q04–Q06 — повторно используемый baseline первого пакета;
 новые raw-копии не заявляются. Современная полевая доступность не измерялась.

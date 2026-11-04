@@ -133,8 +133,7 @@ Current project files прочитаны статически и скопиро�
 ## 6. Captures, неудачи и точность заявлений
 
 - `source-fetch-01.json`…`source-fetch-07.json`: exact URLs, source acquisition
-  begin/end UTC, success/failure и SHA256. Последний raw fetch09:22:44Z;
-  дополнительное чтение уже полученного spec/SDK09:23:16–17Z, до cutoff.
+  begin/end UTC, success/failure и SHA256.
 - `archive-identity.json`: восемь адресных hash comparisons, все same=true;
   ещё три совпадения в `source-fetch-07.json`; не проверка всего репозитория/всех зависимостей.
 - `local-preimage.json`, `local-supplement.json`: исходные source/doc inputs,

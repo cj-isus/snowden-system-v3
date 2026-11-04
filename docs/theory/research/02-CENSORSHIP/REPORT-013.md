@@ -353,8 +353,7 @@ E09 — только проект будущего matched comparison, не те
 
 ## 10. Предлагаемая вставка в канон — только предложение
 
-Место: transports рядом с ECH anti-knowledge и observability bootstrap;
-общие главы автором не изменялись.
+Тематическая связь: ECH anti-knowledge и observability bootstrap.
 
 > ECH определён RFC9849 (March2026, Proposed Standard), DNS-bootstrap —
 > RFC9848, Service Binding — RFC9460. Real-ECH proposal, GREASE-extension,
@@ -367,7 +366,8 @@ E09 — только проект будущего matched comparison, не те
 > содержит GREASE. uTLS adapter state не переносит ECHAccepted, поэтому false
 > без capability/projection metadata не является negative privacy evidence.
 
-## 11. Проверка и предел сдачи
+<a id="11-проверка-и-предел-сдачи"></a>
+## 11. Проверка и пределы выводов
 
 SOURCE_REVIEW ограничен перечисленными captures. Два immutable remote source
 файла sing-box совпали с local cache SHA-256; это не attestation module closure,
@@ -496,7 +496,7 @@ ECH key/config, либо все адреса выбранного TargetName и�
 но не выбранную ServiceMode запись с endpoint/port. Срок cache сам по себе
 не устанавливает правильное соответствие при multi-CDN или смене адреса.
 В этой партии не доказаны все переходы refresh/retry после смены generation;
-они остаются **открытыми**, не дописываются после cutoff как новый результат.
+они остаются **открытыми** и не считаются проверенными.
 
 ### 12.6 Что закрыто и что осталось
 
@@ -507,7 +507,7 @@ ECH key/config, либо все адреса выбранного TargetName и�
   current deployed ECH failure, полная совместимость всех DNS transports,
   корректность всех cache/refresh/retry transitions и фактический endpoint
   после ОС/NAT/proxy обработки.
-- Нет обновлённой проверки нынешних source hashes после cutoff. Capture
+- Актуальность нынешних source hashes не проверена. Capture
   **14:49:39.978416Z** описывает только тогда сохранённые 14 inputs;
   прочитанные после этой capture части `sing/common/network/multi.go` и
   `dns/transport/tcp.go` не получили собственного нового byte-capture.

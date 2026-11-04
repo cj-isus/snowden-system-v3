@@ -54,10 +54,10 @@ endpoint; он не превращает ответ в доказательст�
   updater с явным `Storage` и bounded metadata-only memory adapter. Его следует
   рассматривать как существующий source seam, а не поручать заново. Это ещё не
   опубликованный shared API, не проверка всего SDK и не доказанная behavioral
-  parity/durability. [Текущий срез](../../tasks/TH-01-SDK-STORAGE.md).
+  parity/durability. Текущий срез — `docs/tasks/TH-01-SDK-STORAGE.md`.
 - V2-188 затем добавил начальную Job policy существующему update-check worker.
   Это не изоляция всех profile/pin/export SDK calls и не измеренные RSS/CPU/latency
-  гарантии. [Область source-изменения](../../tasks/TH-01-SDK-RESOURCES.md).
+  гарантии. Область source-изменения — `docs/tasks/TH-01-SDK-RESOURCES.md`.
 - V2-183…186 уже содержат source-изменения coherent capture, selected-file I/O,
   раздельных quarantine/cleanup facts и сохранения факта commit при поздней ошибке.
   Их не следует выдавать как отсутствующие исправления. SDK internal I/O,
@@ -68,8 +68,8 @@ endpoint; он не превращает ответ в доказательст�
 
 Источник: [trust](sections/TRUST.md), [trust/release](crosschecks/TRUST-RELEASE.md),
 [перенос SDK](crosschecks/SDK-MIGRATION.md), текущий
-[QuarantineError](../../../windows/backend/filetxn/journal_io.go) и
-[публикация storage facts](../../../windows/delivery_profile.go).
+QuarantineError — `windows/backend/filetxn/journal_io.go` и
+публикация storage facts — `windows/delivery_profile.go`.
 
 ## 4. Один Android-артефакт, последовательные версии
 
@@ -98,7 +98,7 @@ Stop latency или доказанная полнота UID coverage.
 
 Источник: [Android native](crosschecks/ANDROID-NATIVE.md),
 [SDK migration](crosschecks/SDK-MIGRATION.md),
-[ADR-068](../../../android/decisions/068-validated-child-navigation.md).
+ADR-068 — `android/decisions/068-validated-child-navigation.md`.
 
 ## 5. Производительность и адаптация без подмены safety
 

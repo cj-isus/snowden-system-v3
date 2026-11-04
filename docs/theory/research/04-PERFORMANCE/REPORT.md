@@ -349,8 +349,7 @@ peak combined RSS, Android energy/wakeups. Единый byte budget не при�
 
 ## 9. Предлагаемая вставка в общую теорию
 
-Место: после §14.4, со ссылками на источники этого пакета. Ниже только предложение;
-авторский сборник данным чатом не изменялся.
+Предлагаемое уточнение после §14.4 со ссылками на источники этого пакета.
 
 > Для pinned HY2 отдельно учитывать стоимость cold carrier, local flow acceptance,
 > target connection и useful response: TUN/gVisor TCP использует split proxy path,
@@ -412,7 +411,8 @@ Pin не менялся: quic-go `ccd46ab…`, sing-quic `d83826c…`, sing `7c3
 x/sync `ec11c4a…`; полные версии/лицензии и symbols — [SOURCES §7](SOURCES.md#r04-002-sources).
 Baseline проекта уже другой: захвачены **Windows V2-162 / Android AND-11-S2**,
 вместо V2-157/AND-12-S5 первого пакета. Новый Android reserved-retirement RPC
-прочитан отдельно. Approved AAR/native/device evidence по-прежнему отсутствует.
+прочитан отдельно. На этом датированном срезе approved AAR/native/device evidence отсутствовало;
+позднейшая Android-приёмка учитывается отдельно в текущем плане.
 
 Capture root: `.artifacts/research/theory-04/2026-10-25-hy2-scheduler-v2/`.
 В manifest 31 module source/license, 11 project inputs и три сохранённых документа
@@ -774,8 +774,7 @@ policy/app identity; просмотр микрофона/экрана/содер
 | P1 | Android idle/call+bulk/handover/screen-off; Windows control/retirement; VPS CPU quota contention | Useful-by-deadline/tails, per-class service, RSS/native heap/Go allocations, J/wakeups, negative OS/lifecycle cases |
 
 Численные tolerances и offered load фиксируются до опыта. Изменение размера
-DATAGRAM, class metadata или carrier count требует вопросов R02 и R05 через
-руководителя. Local admission rejection/overload drop не регистрируется как
+DATAGRAM, class metadata или carrier count требует отдельной проверки observation/authority contract. Local admission rejection/overload drop не регистрируется как
 доказанная DPI/network failure; outcome contract согласует R03.
 
 Порядок предложений: (1) finite packet opportunity/ownership regression после
@@ -784,7 +783,8 @@ seam с минимумом STREAM opportunities и bounded classes; (4) comparat
 latency/throughput/energy/native fault matrix. Existing TH-06/FR-012/COM-12,
 RQ-02/03, AND-01/02/11/15 — адреса предложений, их статусы не менялись.
 
-### 10.11. Предлагаемая вставка руководителю
+<a id="1011-предлагаемая-вставка-руководителю"></a>
+### 10.11. Предлагаемый вывод для общей теории
 
 > В pinned HY2 ordinary packet packer рассматривает DATAGRAM перед STREAM.
 > При полном DATAGRAM1200 и packet ceiling1280 после headers остаётся меньше
@@ -838,7 +838,6 @@ Android S3 прочитан как dated context: он уточняет OS-obser
 ## 11. R04-003 — keepalive, часы сна и цена готовности
 
 2026-10-26. **READY_FOR_REVIEW** после source/opposing review; не ACCEPTED.
-Продукт и общая теория не изменялись.
 
 ### 11.1. Новый вопрос и граница знания
 
@@ -1076,7 +1075,8 @@ optional scheduling или core keepalive seam, только если выявл
 Число устройств, интервалы и energy thresholds пока не назначены заочно.
 Не запускались tests/fixtures/build/native/device/benchmark/simulation/live/admin.
 
-### 11.10. Вставка для руководителя и остаток
+<a id="1110-вставка-для-руководителя-и-остаток"></a>
+### 11.10. Предлагаемый вывод и остаток
 
 Предлагаемое дополнение в THEORY13.8–9/14.5 после научного review:
 
@@ -1089,10 +1089,9 @@ optional scheduling или core keepalive seam, только если выявл
 > только внутри совместимых release/deadline windows; измерять local CPU/TUN и
 > physical-radio effects отдельно, включая recovery cost.
 
-Передача через руководителя: R03 — cost/observation domains и optional slack;
+Смежные контракты: R03 — cost/observation domains и optional slack;
 R05 — authority/boot/retirement при resume; R06 — честные local/carrier/target
-статусы; R02 — последствия изменения periodic wire pattern. Сообщений им не было.
-Windows V2-165 и Android AND-03-S9 захвачены как dated source context; всё дерево
+статусы; R02 — последствия изменения periodic wire pattern. Windows V2-165 и Android AND-03-S9 захвачены как dated source context; всё дерево
 и новые платформенные изменения этим пакетом не reviewed. Mbps/CPU/RSS/battery
 выигрыш и безотказность неизвестны. Отдельный вопрос — clock adapter
 в HY2 BBR/NTP; без полного caller trace дефект не устанавливается.
@@ -1124,7 +1123,7 @@ Windows V2-165 и Android AND-03-S9 захвачены как dated source conte
 2026-10-26 около06:14Z:26 выбранных current inputs,30 preserved captures и8 Go
 reference files сверены по SHA256.25 current inputs совпали, включая все19
 module sources/licenses, renderer и NativeCallbackGate. Изменился только общий
-CENSORSHIP-THEORY.md: руководитель добавил §18 по R04-06. Добавление прочитано;
+CENSORSHIP-THEORY.md: добавлен §18 по R04-06. Добавление прочитано;
 оно не меняет анализ clock/keepalive. REPORT/SOURCES прежнего пакета сохранены
 как полные byte prefixes, handoff002 — целиком. `source-drift.json` хранит hashes.
 
@@ -1335,7 +1334,8 @@ health. Общие CPU/link/radio бюджеты нельзя исправить
 live/crypto/network configuration действий не было. Header/source comparisons —
 provenance, не исполнение. Новые requirements/продуктовые статусы не назначались.
 
-### 12.8. Предложение руководителю
+<a id="128-предложение-руководителю"></a>
+### 12.8. Предлагаемый вывод
 
 Дополнение теории после независимой рецензии: distinction injected Clock и actual
 callback clock; отрицательный результат NTP-BBR; acceptance API должен проверять
@@ -1613,11 +1613,11 @@ Ex из R04-004 должно учитывать это же semantics, а не �
    useful completions/recovery/CPU/RSS/wakes/energy, failures included. Finite
    workload/threshold/stop rule заранее; source count caps не считаются time SLO.
 
-Общие планы/код/dependencies не менялись. Нет tests/fixtures/build/vet/doctor/
-simulation/benchmark/crypto/scans/native/device/live/admin/install/SSH/deploy/
-OS-network execution. Ни выигрыш, ни absolute reliability не измерены.
+Tests/fixtures/build/simulation/benchmark/crypto/native/device/live **NOT_RUN**.
+Ни выигрыш, ни absolute reliability не измерены.
 
-### 13.9. Предложение руководителю
+<a id="139-предложение-руководителю"></a>
+### 13.9. Предлагаемый вывод
 
 К RQ/transport resource contract после review: packet event содержит layer/time
 scope и причину loss; local registration/receive timestamp отделяется от wire
@@ -1740,7 +1740,8 @@ Source pin/manual derivation не являются подтверждением 
 [d6-bbr]: https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/congestion_meta2/bbr_sender.go
 [d6-sampler]: https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/congestion_meta2/bandwidth_sampler.go
 
-### 14.5. Закрытие окна и provenance
+<a id="145-закрытие-окна-и-provenance"></a>
+### 14.5. Границы source-среза и provenance
 
 Сохранены13 captures и3 прежних document prefixes;4 prior raw-confirmed hashes
 совпали. Новый sampler raw fetch timeout не выдан за equality. Current source drift

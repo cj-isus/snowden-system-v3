@@ -37,7 +37,7 @@
 
 [Сводка применения знаний](../planning/knowledge-application/README.md) связывает
 содержание с текущим кодом и поэтапным планом. Действующие требования:
-[ПК/общие](../PLAN.md), [Android](../ANDROID-PLAN.md), [adaptive](../adaptive/PLAN.md).
+[ПК/общие](../PLAN.md), Android — `docs/ANDROID-PLAN.md`, adaptive — `docs/adaptive/PLAN.md`.
 Новая сводка ещё не заменяет их статусы.
 
 Markdown-файлы в этой папке — единственный редактируемый экземпляр; Obsidian

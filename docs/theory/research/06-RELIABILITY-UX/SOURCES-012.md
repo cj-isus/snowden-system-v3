@@ -403,5 +403,4 @@ admitted, sandbox leak, полноту UID inventory или atomic enforcement.
 Capture UTF8/base64 extraction — только обработка публичных документов.
 Большие source files/reference downloaded ≠ FULL_TEXT_READ; только названные
 фрагменты analyzed. Русские primary страницы действительно получены и прочитаны,
-не выведены из подстановки ru-RU. Глобальные STATUS/STATE/общее REPORT/планы,
-системные permissions/profiles/MDM/NRPT/WFP/PAC/lockdown не менялись.
+не выведены из подстановки ru-RU. Runtime/device/OS enforcement не проверены.

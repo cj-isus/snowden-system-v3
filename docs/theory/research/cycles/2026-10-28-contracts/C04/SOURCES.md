@@ -20,7 +20,7 @@ Source/spec/manual inference не являются artifact/native/runtime до�
 ## 2. Exact public implementation sources
 
 Public raw captures and acquisition UTC/SHA256:
-[public-source-manifest.jsonl](../../../../../../.artifacts/research/r28-contracts/C04/public-source-manifest.jsonl).
+`.artifacts/research/r28-contracts/C04/public-source-manifest.jsonl`.
 Byte equality against local cache was confirmed for the initial four HY2/QUIC files and both x/sync files; later confirmations recorded separately.
 
 | ID | Pin / source | Read depth |
@@ -85,10 +85,10 @@ local SHA256 provenance. No external endpoint/VPN probe was performed.
 
 ## 5. Local snapshot and moving-input policy
 
-[local-input-manifest.json](../../../../../../.artifacts/research/r28-contracts/C04/local-input-manifest.json)
+`.artifacts/research/r28-contracts/C04/local-input-manifest.json`
 records61 named files with full path/SHA256/length/mtime at09:18:05Z, after their
 source reading. This is provenance; no execution, module resolver or runtime check.
-[public-cache-equality.json](../../../../../../.artifacts/research/r28-contracts/C04/public-cache-equality.json)
+`.artifacts/research/r28-contracts/C04/public-cache-equality.json`
 records11 further exact matches, in addition to the initial six. Native source
 lock/README/NativeWorkerSession were being edited independently during the read
 window; relevant lifecycle/API regions were reread after the snapshot. Additional
@@ -99,9 +99,9 @@ separately, with moving regions/UNKNOWN retained rather than overriding owners.
 
 Final comparison09:24:59Z:59/61 hashes unchanged after the09:18:05Z snapshot;
 changed: native source-lock and README, reflecting in-progress cache/history work.
-[final-input-drift.json](../../../../../../.artifacts/research/r28-contracts/C04/final-input-drift.json)
+`.artifacts/research/r28-contracts/C04/final-input-drift.json`
 records both hashes. Reread09:25:57Z:
-[android-final-declaration.json](../../../../../../.artifacts/research/r28-contracts/C04/android-final-declaration.json)
+`.artifacts/research/r28-contracts/C04/android-final-declaration.json`
 confirms b5ebaa1/core1.13.19, Go/AAR=null, source-only flavor
 `snowden-android-owner-r1-session-cache-r1-closed-history-r1`. No later moving
 platform work is claimed reviewed. Z04/Z05 HANDOFF были недоступны

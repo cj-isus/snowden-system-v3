@@ -1,8 +1,8 @@
 # R28-Z02 — минимальный сопоставимый блок reachability и границы unknown
 
-**Дата: 28.10.2026. Автор: ZCode исследователь2, R28-Z02.**
+**Дата: 28.10.2026. Пакет: R28-Z02.**
 Авторский статус **READY_FOR_REVIEW** для source/spec/manual-model области.
-Источники/область чтения: [SOURCES](SOURCES.md); сдача: [HANDOFF](HANDOFF.md).
+Источники/область чтения: [SOURCES](SOURCES.md); краткие выводы: [HANDOFF](HANDOFF.md).
 
 ## 1. Короткий ответ и новый результат
 
@@ -409,7 +409,7 @@ product status и no code. Остальные trust/action gates остаютс�
 не обязательны, если вывод действительно остаётся на этом уровне.
 
 
-Предложение руководителю:
+Предлагаемые решения:
 - **A принять только как source-bound comparability criterion** и typed passport,
   с разрывами endpoint/time, partial-body и неизвестным backend.
 - **B принять как условный конечный логический вывод** при named D/criteria;

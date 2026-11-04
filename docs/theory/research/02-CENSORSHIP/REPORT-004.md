@@ -116,9 +116,11 @@ License scope Go implementations sing-box/sing-shadowtls/sing-vmess/sing-shadows
 **GPL-3.0-or-later**, сохранены тексты/пины; новый dependency не добавлялся.
 Original Rust ShadowTLS и его отдельная лицензия не подменяют лицензию Go port.
 
-## 6. Применимость и порядок передачи
+<a id="6-применимость-и-порядок-передачи"></a>
 
-**Windows:** предложить руководителю сначала исключить эту конкретную TLS-less
+## 6. Применимость и миграция
+
+**Windows:** предлагается сначала исключить эту конкретную TLS-less
 VLESS→ShadowTLS композицию из protected eligibility до выбора и проверки encrypted
 replacement. Проверить selector default/failover/profile migration согласованно;
 иначе исключённый кандидат может сохраниться через старое состояние. Это предложение
@@ -132,7 +134,7 @@ Source subset не доказывает native execution, AAR availability ил�
 **R03/R05:** зафиксировать security eligibility до оптимизации score: у цепочки
 должна быть проверенная защита реального data path и identity scope. В графе
 недостаточно существования detour, валидной подписи профиля и TLS boolean на
-произвольном соседе. Владельцы определяют контракт; здесь SDK не менялся.
+произвольном соседе. Контракт требует отдельного согласования платформами.
 
 Будущая конечная приёмка — **NOT RUN**, только после явной авторизации:
 
@@ -156,9 +158,8 @@ Source subset не доказывает native execution, AAR availability ил�
 > и camouflage свойства проверяются отдельно. До этой проверки канал не допускается
 > в защищённый набор только за счёт успешного handshake/probe или высокой скорости.
 
-Общая теория и product source не изменялись. До решения руководителя — только
-READY_FOR_REVIEW; live leak не заявлен. Captures, raw/cache equality, local hashes
-и ручной opposing review находятся в собственном artifacts namespace.
+Статус — READY_FOR_REVIEW; live leak не заявлен. Captures, raw/cache equality,
+local hashes и ручной opposing review сохранены в artifacts пакета.
 
 ### Актуальность входов при завершении
 

@@ -26,14 +26,14 @@
 | Android storage | `NativeScratchLease`, `NativeScratchCleanup/Deletion`: lease до смерти worker; один cleanup owner; FIFO8 known + один cold request; bounded traversal и retained uncertainty | Это не глобальная disk quota и не гарантированный rescan. Не добавлять периодический purge и не удалять живые/неопознанные каталоги |
 | Adaptive | API1, `ComposeEvidence`, checked clocks, failover/retry actual-return fields; `PlanAutomaticBackground` — unconnected prototype | Повторный policy engine не нужен. Фактические permits, наблюдения, sockets и исполнение остаются платформам; Android FFI/time mapping не принят |
 
-Source cut и точные hashes: [current source](../../../../.artifacts/planning/knowledge-application/2026-10-28/captures/C04/source-cut.json),
-[module source](../../../../.artifacts/planning/knowledge-application/2026-10-28/captures/C04/module-cut.json).
+Source cut и точные hashes: current source — `.artifacts/planning/knowledge-application/2026-10-28/captures/C04/source-cut.json`,
+module source — `.artifacts/planning/knowledge-application/2026-10-28/captures/C04/module-cut.json`.
 Это последовательные снимки выбранных файлов, не atomic tree или full-module audit.
 Read depth и поздние изменения перечислены в §8.
 
 ## 2. Знания → существующие компоненты → решение
 
-Идентификаторы F01…F15 ниже используются также в полном [coverage](../../../../.artifacts/planning/knowledge-application/2026-10-28/coverage/C04.json).
+Идентификаторы F01…F15 ниже используются также в полном coverage — `.artifacts/planning/knowledge-application/2026-10-28/coverage/C04.json`.
 Одна family может объединять несколько исторических формулировок; научное
 ACCEPTED сохраняет исходный scope и не становится приёмкой реализации.
 
@@ -52,7 +52,7 @@ Worker IPC управляет lifecycle; payload не проходит чере�
 
 **Есть:** Windows `ProbeObservation`/`ProbeReport` с route/stage/body/owner/epoch,
 `AdmitDiagnostic` с отдельным protected lane. Android AND-07-S1 уже описывает
-[MEASUREMENT-NATIVE](../../../android/MEASUREMENT-NATIVE.md) и requested M01…06.
+MEASUREMENT-NATIVE — `docs/android/MEASUREMENT-NATIVE.md` и requested M01…06.
 
 **Дельта / ADAPT, ALREADY_PLANNED:** расширять эти producers минимальными
 stage receipts; не создавать второй probe/RTT engine. Для каждого результата
@@ -356,8 +356,10 @@ ZIP entry-count проверяется после открытия ZipFile и н
 ### F13 — маленький VPS и серверный admission
 
 **ALREADY_PLANNED / DEFER deployment:** COM-12/15, TH-07, RQ-12/19 и AND-13/15.
-Текущий VPS не оплачен; его CPU/RAM/kernel/quota/core version/запущенный сервис
-не известны. Один VPS остаётся одним failure domain. Предлагать distributed
+На исходном срезе 28 октября VPS считался неоплаченным. Позднее владелец
+сообщил о покупке и настройке нового узла; это не независимая проверка
+CPU/RAM/kernel/quota/core artifact и действующего сервиса. Актуальные границы
+операторских сообщений — в [плане ПК](../PC-PLAN.md). Один VPS остаётся одним failure domain. Предлагать distributed
 control plane или обещать достаточность RAM по старой константе нельзя.
 
 У quic-go есть raw1024/accept32, unprocessed/handshake/retry/anti-amplification
@@ -611,8 +613,8 @@ history/cleanup/physical/socket seams и platform retirement sections; shared
 adaptive budget/observer types; current и saved candidate transport symbols.
 Остальные capture files — inventory, не автоматически полный code review.
 
-Поздняя сверка: [final-drift](../../../../.artifacts/planning/knowledge-application/2026-10-28/captures/C04/final-drift.json),
-[read scopes](../../../../.artifacts/planning/knowledge-application/2026-10-28/captures/C04/late-review.json).
+Поздняя сверка: final-drift — `.artifacts/planning/knowledge-application/2026-10-28/captures/C04/final-drift.json`,
+read scopes — `.artifacts/planning/knowledge-application/2026-10-28/captures/C04/late-review.json`.
 В первом closing cut изменились девять selected project/doc files; новых файлов
 в отслеживаемых code seams не было, selected module sources не изменились.
 Пять Android callback/TUN/value-construction diffs прочитаны: generic callbackStep,
@@ -622,10 +624,9 @@ late successful TUN сохраняет owner до postcheck. Это не нов�
 
 Windows STATE/PLAN дошли до **V2-182**: coherent import/recovery/preview source
 guards. Прочитано документационное уточнение; новая import/trust implementation
-вне performance seams **не аудирована этим срезом**, руководителю/PC owner нужно
-использовать её актуальные receipts. RQ/TR/TH-06 и transport module inputs в
-прочитанной области не изменены. Активные владельцы не останавливались; closing
-cut последовательный, последующие правки не покрываются автоматически.
+вне performance seams **не аудирована этим срезом**, для применения нужны
+её актуальные receipts. RQ/TR/TH-06 и transport module inputs в
+прочитанной области не изменены. Closing cut последовательный, последующие правки не покрываются автоматически.
 
 **Следующий конкретный срез разработки:** D0 contract/bundle gate, затем D1
 session cancellation до Add actual return; независимо D3 safe bounded RX owner.

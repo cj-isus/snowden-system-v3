@@ -298,7 +298,7 @@ crypto/network/simulation.
 
 ## 9. Scoped verdict и открытое
 
-**Предложение руководителю:** принять R28-Z01-A как source/model finding в области
+**Предлагаемое решение:** принять R28-Z01-A как source/model finding в области
 пинов и caller'ов: generic implicit ECH wrapper **не доказывает endpoint-bound
 Service Binding plan**; существующие TLS guards предотвращают silent
 unauthenticated application success, но не доказывают общий source/network epoch.

@@ -137,7 +137,7 @@
     {
       "id": "R02-001",
       "topic": "R02",
-      "title": "передача научному руководителю",
+      "title": "контрмеры и границы применимости",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-001.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT.md",
@@ -343,7 +343,7 @@
     {
       "id": "R02-013",
       "topic": "R02",
-      "title": "ECH/SVCB: спецификация, bootstrap и область фильтрации",
+      "title": "Handoff R02-013 — ECH/SVCB: спецификация, bootstrap и область фильтрации",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-013.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-013.md",
@@ -353,7 +353,6 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": {
-        "author": 1,
         "note": "A/B/C ожидают рецензии; D — PARTIAL_AT_CUTOFF."
       },
       "additionalReviews": []
@@ -361,7 +360,7 @@
     {
       "id": "R02-014",
       "topic": "R02",
-      "title": "РФ: качество доказательств сетевых ограничений и OONI",
+      "title": "качество доказательств сетевых ограничений РФ",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-014.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-014.md",
@@ -373,7 +372,6 @@
         "R02-014-A"
       ],
       "nineWindow": {
-        "author": 2,
         "note": "A принят в числовой source-области; B/C/D ожидают рецензии."
       },
       "additionalReviews": []
@@ -381,7 +379,7 @@
     {
       "id": "R03-001",
       "topic": "R03",
-      "title": "пакет научному руководителю",
+      "title": "наблюдения и допустимость адаптивного решения",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-001.md",
       "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
@@ -528,7 +526,7 @@
     {
       "id": "R03-010",
       "topic": "R03",
-      "title": "Последовательная статистика, физические кредиты и журнал попыток",
+      "title": "последовательная статистика и журнал попыток",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-010.md",
       "report": "docs/theory/research/03-ADAPTATION/REPORT-010.md",
@@ -540,7 +538,6 @@
         "R03-010-A"
       ],
       "nineWindow": {
-        "author": 3,
         "note": "Принята выбранная математическая часть A; остальные A/B/C ожидают рецензии."
       },
       "additionalReviews": []
@@ -548,7 +545,7 @@
     {
       "id": "R04-001",
       "topic": "R04",
-      "title": "пакет научному руководителю",
+      "title": "HY2: задержки и ресурсные ограничения",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-001.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
@@ -707,7 +704,7 @@
     {
       "id": "R04-010",
       "topic": "R04",
-      "title": "Windows/HY2: пакетный UDP-путь и границы ресурсов",
+      "title": "Windows/HY2: пакетный путь и ресурсные bounds",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-010.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT-010.md",
@@ -717,7 +714,6 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": {
-        "author": 4,
         "note": "Source/model пакет ожидает независимой рецензии."
       },
       "additionalReviews": []
@@ -725,7 +721,7 @@
     {
       "id": "R04-011",
       "topic": "R04",
-      "title": "Android: Doze/FGS, keepalive и энергия QUIC",
+      "title": "паспорт Android Doze/FGS и энергии QUIC",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-011.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT-011.md",
@@ -735,7 +731,6 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": {
-        "author": 5,
         "note": "Поздняя сдача после cutoff; время acquisition заявлено автором, независимо не аттестовано."
       },
       "additionalReviews": []
@@ -743,7 +738,7 @@
     {
       "id": "R05-001",
       "topic": "R05",
-      "title": "пакет руководителю «Теория»",
+      "title": "доверие, история и право на применение",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-001.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
@@ -878,7 +873,7 @@
     {
       "id": "R05-009",
       "topic": "R05",
-      "title": "Key Attestation: операция, подтверждение и границы доверия",
+      "title": "Key Attestation, операция и подтверждение",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-009.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT-009.md",
@@ -888,7 +883,6 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": {
-        "author": 6,
         "note": "A/B/C pending; D был PARTIAL_AT_CUTOFF, новая задача 28 октября сдана READY_FOR_REVIEW в 06:56:36Z."
       },
       "additionalReviews": []
@@ -896,7 +890,7 @@
     {
       "id": "R05-010",
       "topic": "R05",
-      "title": "Обновления: timestamp, returned Progress и durable authority",
+      "title": "краткие выводы и ограничения",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-010.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT-010.md",
@@ -908,7 +902,6 @@
         "R05-010-A"
       ],
       "nineWindow": {
-        "author": 7,
         "note": "Только timestamp trace A принят; остальные части ожидают рецензии, D — PARTIAL_AT_CUTOFF."
       },
       "additionalReviews": []
@@ -976,14 +969,14 @@
     {
       "id": "R06-005",
       "topic": "R06",
-      "title": "итог дополнительного исследовательского окна",
+      "title": "восстановление, диагностика и рабочие сценарии",
       "kind": "window-summary",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-005.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
       "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Итог окна",
+      "reviewLabel": "Сводка выводов; не отдельное решение",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": []
@@ -1051,14 +1044,14 @@
     {
       "id": "R06-009",
       "topic": "R06",
-      "title": "итог нового2h исследовательского окна",
+      "title": "корпоративные сети, DNS и восстановление",
       "kind": "window-summary",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-009.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
       "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Итог окна",
+      "reviewLabel": "Сводка выводов; не отдельное решение",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": []
@@ -1096,7 +1089,7 @@
     {
       "id": "R06-012",
       "topic": "R06",
-      "title": "VPN/MDM: полномочия и композиция платформенной защиты",
+      "title": "VPN/MDM и полномочия",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-012.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT-012.md",
@@ -1106,7 +1099,6 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": {
-        "author": 8,
         "note": "A/B/C pending; новый D отдельного этапа сдан READY_FOR_REVIEW 28 октября в 06:55:21Z."
       },
       "additionalReviews": []
@@ -1114,7 +1106,7 @@
     {
       "id": "R06-013",
       "topic": "R06",
-      "title": "Полезное восстановление, privacy и локальный пилот",
+      "title": "паспорт полезного восстановления и локального privacy-pilot",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-013.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT-013.md",
@@ -1126,8 +1118,7 @@
         "R06-013-A"
       ],
       "nineWindow": {
-        "author": 9,
-        "note": "A — NEEDS_REVISION; B/OSS/пилот ожидают рецензии. FUP-9-01 не подтверждён как доставленное задание."
+        "note": "A — NEEDS_REVISION; B/OSS/пилот ожидают рецензии."
       },
       "additionalReviews": []
     }
@@ -2005,8 +1996,13 @@
     }
   ],
   "lastEditorialUpdate": {
-    "at": "2026-10-28T12:03:03.998Z",
-    "scope": "Add missing R28 reader-cycle route; preserve legacy totals/entries and scientific verdicts. No new research content or claim acceptance.",
-    "prior": "2026-10-28T10:50:39.258Z"
+    "at": "2026-11-04T10:27:41.329Z",
+    "scope": "Reader subjects synchronized; historical capture hash semantics made explicit. No scientific acceptance or product status change.",
+    "prior": "2026-11-04T10:13:09.090Z"
+  },
+  "hashSemantics": {
+    "sourceObservations": "Historical capture hashes at observedAt, not current reader-file checksums. Editorial changes do not refresh or attest original acquisitions.",
+    "totals": "Legacy family totals at generatedAt; researchCycles and scoped decisions are separate. File counts are not evidence of scientific acceptance.",
+    "currentTitles": "Reader titles synchronized with linked package headings; IDs and review decisions retain their scope."
   }
 }

@@ -1,8 +1,9 @@
-# R28-C02 — передача руководителю
+<a id="r28-c02--передача-руководителю"></a>
+# R28-C02 — допустимость защищённого сетевого пути
 
 28.10.2026.
 
-**Авторский статус: READY_FOR_REVIEW для source/spec/manual-model области.** Это рекомендация научному руководителю, не ACCEPTED, разработка или product/native/live PASS.
+**Авторский статус: READY_FOR_REVIEW для source/spec/manual-model области.** Это рекомендация для отдельного review, не ACCEPTED, разработка или product/native/live PASS.
 
 Основной результат: [REPORT](REPORT.md), точные источники и reading scopes: [SOURCES](SOURCES.md).
 

@@ -145,24 +145,16 @@ URLs, хэши и timestamps последних записей — `acquisition-
 
 ## L1. Реальный проектный baseline и границы read-only source
 
-- Прочитаны: NINE-WINDOW редакция 2 (общие правила, §3, Follow-ups),
-  авторский erratum; README scientific method; CLAIM-FORMAT; MAP;
-  REPORT §§14/17/18; SOURCES адресные pins; shared/adaptive/evidence_types.go
-  (Observation/censoring/custody и MaxReceipts) и фрагменты budget_types.go
+- Прочитаны авторский erratum, научный метод, REPORT §§14/17/18,
+  адресные source pins и shared/adaptive/evidence_types.go
+  (Observation/censoring/custody, MaxReceipts), фрагменты budget_types.go
   (resource reservation/retirement).
-- `STATUS-010.md` создан отдельно; прочие общие files только read-only.
-- 15 scoped local inputs скопированы в own artifacts с SHA-256,
-  `local-source-manifest.json`; capture последовательный, не атомарный.
-- Сверка 13:47:31Z и source cut 13:59:45Z: drift среди этих 15 inputs
-  отсутствовал. Полнота P4 old HTML также сверена с прежним SHA-256.
-- На финальном cut 14:04:43Z изменился **только протокол**: руководитель
-  добавил FUP-7-01 и FUP-2-01 другим исследователям. Раздел Follow-ups прочитан
-  адресно; поручения исследователю 3 нет, срок/слот R03-010 не изменились.
-  Остальные 14 scoped source/baseline inputs совпали. Первоначальный capture
-  протокола сохранён; новая запись не подменяет старый hash.
-  Даже no source drift не product/runtime proof.
-- Историческое STATE родителя не является собственным ownership. Bind,
-  platform code/manifest update, LESSONS/общие STATE/REVIEW-QUEUE не выполнялись.
+- 15 scoped local inputs сохранены с SHA-256 в `local-source-manifest.json`;
+  capture последовательный, не атомарный.
+- На сверках 13:47:31Z и 13:59:45Z эти inputs не изменились; полнота P4 old HTML
+  сверена с прежним SHA-256. Последующая правка организационного протокола
+  не меняет 14 substantive source/baseline inputs. Исходные hashes не подменены.
+- Отсутствие source drift не является product/runtime proof.
 
 ## Неудачные/непригодные retrieval: их нельзя превращать в источники
 

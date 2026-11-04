@@ -4,8 +4,8 @@
 рабочей связи: понятное подключение, надёжное восстановление, объяснимые правила,
 бережное использование ресурсов и доказанная защита в заявленном режиме.
 
-Это следующий порядок разработки. [Действующий реестр Android](../../ANDROID-PLAN.md)
-и [STATE](../../../android/STATE.md) сохраняют статусы AND/A-FR и находятся у
+Это следующий порядок разработки. Действующий реестр Android — `docs/ANDROID-PLAN.md`
+и STATE — `android/STATE.md` сохраняют статусы AND/A-FR и находятся у
 Android-владельца. [План ПК](PC-PLAN.md) использует общие trust/adaptive/server
 контракты, но его Windows-реализация и приёмка не блокируют независимые Android-срезы.
 
@@ -13,7 +13,7 @@ Android-владельца. [План ПК](PC-PLAN.md) использует о�
 
 ### Уже полученный результат
 
-По [матрице 30 октября](../../android/LOCAL-VALIDATION-2026-10-30.md) есть целый
+По матрице 30 октября — `docs/android/LOCAL-VALIDATION-2026-10-30.md` есть целый
 libbox 1.13.19/sourceRevision4, одобренный debug AAR, собранный APK, 17 профильных
 unit tests и три Compose navigation tests на одном API36/arm64 устройстве.
 Проверены девять номинальных страниц и сохранение одного дочернего выбора после
@@ -27,7 +27,7 @@ recreate. Точные hashes и команды находятся в этой �
 
 ### Следующий настоящий разрыв
 
-В [SnowdenApplication](../../../android/app/src/main/kotlin/org/snowden/android/app/SnowdenApplication.kt)
+В SnowdenApplication — `android/app/src/main/kotlin/org/snowden/android/app/SnowdenApplication.kt`
 пока нет production `ProfileTrustDriver` и accepted runtime source. Это нужно
 соединить с существующим whole core. Нельзя разблокировать Connect по наличию
 файла, parse-success, marker/hash или успешному импорту в SFA.
@@ -100,7 +100,7 @@ trust authority. Неизвестное или несовместимое ост
 конфигом. Выбор WS/HY2/httpupgrade/REALITY следует из совместимости и проверки
 нужного маршрута, а не из списка доступных protocol names.
 
-**Опора:** [BUILDING](../../../android/BUILDING.md),
+**Опора:** BUILDING — `android/BUILDING.md`,
 [native review](crosschecks/ANDROID-NATIVE.md), [client/server](crosschecks/CLIENT-SERVER.md).
 
 ### ANDR-01. Production trust driver и полный offline import
@@ -135,7 +135,7 @@ cache не объявлять durable step barrier. Поддержку боле�
 истории; ошибки invalid/expired/revoked/unsupported/uncertain различимы.
 Только после этого строится accepted-only runtime projection/renderer.
 
-**Опора:** [trust requests](../../android/CHANGE-REQUEST-TRUST-001.md),
+**Опора:** trust requests — `docs/android/CHANGE-REQUEST-TRUST-001.md`,
 [SDK migration](crosschecks/SDK-MIGRATION.md), [trust](sections/TRUST.md).
 
 ### ANDR-02. Native/JNI conformance без преждевременного VPN
@@ -152,8 +152,8 @@ source idle и применимого retirement/process-death receipt. Timeout 
 Это ещё не Android VPN consent, TUN, правильный routing или protected path.
 Начальную conformance-приёмку можно подготовить независимо от готовности VPS.
 
-**Опора:** [native](../../../android/native/README.md),
-[corebridge](../../../android/corebridge/), C2/C5 и AND-01/02/11.
+**Опора:** native — `android/native/README.md`,
+`android/corebridge/`, C2/C5 и AND-01/02/11.
 
 ### ANDR-03. Первый ручной защищённый путь
 
@@ -177,7 +177,7 @@ TLS ошибки не обходить `skip verify` или импортом ori
 недоступным или операция заканчивается честным blocked/unknown.
 
 **Опора:** AND-02…07, A-FR-01…06,
-[измерения](../../android/MEASUREMENT-NATIVE.md), [network](sections/NETWORK.md).
+измерения — `docs/android/MEASUREMENT-NATIVE.md`, [network](sections/NETWORK.md).
 
 ### ANDR-04. Stop, revoke, смена сети и холодное восстановление
 
@@ -198,7 +198,7 @@ Always-on, lockdown, reboot, direct boot и sticky restart — отдельны�
 не обещана непрерывность звонка или старого TCP без отдельного доказательства.
 Notification permission/display не подменяет состояние FGS/защиты.
 
-**Опора:** [VpnService boundary](../../../android/vpn/README.md),
+**Опора:** VpnService boundary — `android/vpn/README.md`,
 AND-02/03/05/11, A-FR-01/02/04/10.
 
 ### ANDR-05. Приложения, DNS, сайты и рабочие сети
@@ -299,9 +299,9 @@ baseline/parity/negative gates. `RequiresPlatformGate` не теряется п�
 Дальнейший ranking/cooldown выбирается отдельным срезом после сопоставимых
 observations и измерения пользы/цены переключений.
 
-**Опора:** [adaptive API](../../adaptive/API.md),
-[adapter matrix](../../adaptive/ADAPTER-MATRIX.md),
-[measurement requests](../../android/CHANGE-REQUEST-TRUST-002-MEASUREMENTS.md).
+**Опора:** adaptive API — `docs/adaptive/API.md`,
+adapter matrix — `docs/adaptive/ADAPTER-MATRIX.md`,
+measurement requests — `docs/android/CHANGE-REQUEST-TRUST-002-MEASUREMENTS.md`.
 
 ### ANDR-09. Проверки, выпуск и эксплуатация
 

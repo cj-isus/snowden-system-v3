@@ -151,16 +151,15 @@ runtime/device evidence. Полученные временные snapshots ис�
 ## 6. Итоговая статическая сверка
 
 На **2026-10-27T13:51:09Z** пять scoped Android source inputs совпали с
-сохранёнными hashes; relative local paths восьми ссылок пакета существуют.
-Это не полный anchor/external-link/crypto test. Итоговый metadata review и
-hashes собственных deliverables — `review-ready.json` / `output-seal.json` в
-своих artifacts. Follow-ups редакции 2 на этой партии не содержали нового
-поручения исследователю 6. Прочие исследования/документы/реестры не менялись.
+сохранёнными hashes; relative local paths восьми ссылок пакета существовали.
+Это не полный anchor/external-link/crypto test. Metadata review и hashes
+сохранены в `review-ready.json` / `output-seal.json` artifacts пакета.
 
 Предлагаемые выводы R05-009-A/B/C в REPORT не повышают статус никакого старого
 пакета. Общие STATE/REPORT/SOURCES/индексы/планы и чужие файлы read-only.
 
-## 7. FUP-6-01 — status projection: scoped повторное чтение до cutoff
+<a id="7-fup-6-01--status-projection-scoped-повторное-чтение-до-cutoff"></a>
+## 7. FUP-6-01 — проверка status projection
 
 Дополнение от **27 октября 2026**: source/schema партия примерно
 14:45–14:50Z. **PARTIAL_AT_CUTOFF**: законченный consumer-adapter/error/freshness
@@ -203,7 +202,9 @@ Malformed/null/wrong-type semantics Gson не исследованы полно�
 остались незавершёнными. Результат D — bounded source/model clarification,
 не ACCEPTED/bypass/native PASS. Latest status/реальные цепочки не запрашивались.
 
-## 8. Новая ограниченная задача 28 октября: Gson и HTTP cache contract
+<a id="8-новая-ограниченная-задача-28-октября-gson-и-http-cache-contract"></a>
+
+## 8. Дополнение 28 октября: Gson и HTTP cache contract
 
 Дополнение от **28 октября 2026** относится к остатку FUP-6-01.
 Исторический §7 и его **PARTIAL_AT_CUTOFF** сохраняются отдельно.

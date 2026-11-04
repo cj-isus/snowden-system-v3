@@ -31,4 +31,4 @@ acceptance, SS/TLS independent protections, no HTTPS decryption. Для min-vers
 trace — Chrome133/non-ECH branch; не обобщать на ECH/STD/все presets.
 
 Лицензии scoped: Go core/ShadowTLS GPL-3.0-or-later, uTLS BSD-3-Clause. Public code
-captured только как исследовательский material, product не модифицировался.
+captured как исследовательский material, не аттестация product binary.

@@ -330,7 +330,7 @@ numerical, native/OS/device, field и release — разные уровни; п�
 - [INTERVALS-AND-POLICY-EVALUATION](../../../theory/adaptation/INTERVALS-AND-POLICY-EVALUATION.md), [DR27-08/09](../../../theory/research/reviews/2026-10-28-DEEP-REVIEW.md): conditional model scope.
 - [C03](../../../theory/research/cycles/2026-10-28-contracts/C03/REPORT.md), [Z03](../../../theory/research/cycles/2026-10-28-contracts/Z03/REPORT.md), [R28-REV-01/02](../../../theory/research/cycles/2026-10-28-contracts/REVIEW-01.md): algebra/source приняты; full producer/storage/model не приняты автоматически.
 - [Corpus quality](../../../theory/methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md), [research method](../../../theory/methodology/RESEARCH-METHOD.md), [competitor mechanisms](../../../theory/ux/COMPETITOR-FEATURES.md).
-- Existing [adaptive PLAN](../../../adaptive/PLAN.md), [API](../../../adaptive/API.md), [adapter matrix](../../../adaptive/ADAPTER-MATRIX.md), [consumer request](../../../adaptive/CHANGE-REQUEST.md), [Windows PLAN](../../../PLAN.md), [Android PLAN](../../../ANDROID-PLAN.md), [measurement boundary](../../../android/MEASUREMENT-NATIVE.md).
+- Existing adaptive PLAN — `docs/adaptive/PLAN.md`, API — `docs/adaptive/API.md`, adapter matrix — `docs/adaptive/ADAPTER-MATRIX.md`, consumer request — `docs/adaptive/CHANGE-REQUEST.md`, [Windows PLAN](../../../PLAN.md), Android PLAN — `docs/ANDROID-PLAN.md`, measurement boundary — `docs/android/MEASUREMENT-NATIVE.md`.
 
 Номера строк относятся к captured source cut; исходники развиваются параллельно.
 Адресная provenance, все unit dispositions и late-input reconciliation находятся

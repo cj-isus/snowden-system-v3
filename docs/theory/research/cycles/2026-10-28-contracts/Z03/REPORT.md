@@ -480,4 +480,4 @@ Paired C03 HANDOFF при собственном review-stage09:13:49Z отсу�
 симуляций crash, root keys, device operations или package changes.
 Законченный ответ относится к доказательной базе и smallest adapter contract,
 а исполнение/native/field safety, numerical models и реальные storage budgets
-остаются unknown. Соседние файлы и TASK не изменялись.
+остаются unknown.

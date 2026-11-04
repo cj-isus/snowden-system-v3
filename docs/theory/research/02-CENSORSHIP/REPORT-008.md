@@ -78,7 +78,7 @@ dependencies/product patches не вводились.
 Windows: это server/transport compatibility при future encrypted replacement,
 не текущий online health. Android ShadowTLS graph пока не принимает; общий core
 pin не создаёт server/native поддержку. Передача R05/R06 — resource/failure scope,
-R03 — не превращать observed close в подтверждённое DPI. Общие планы не менялись.
+R03 — не превращать observed close в подтверждённое DPI.
 
 После отдельного разрешения: (1) один/two/many TLS records при том же полном CH;
 (2) разные TCP segmentation при неизменных records; (3) coalescing и early EOF;

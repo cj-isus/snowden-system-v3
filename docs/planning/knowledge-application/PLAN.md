@@ -3,7 +3,7 @@
 28 октября 2026. Редакция KA-1. Это сводная последовательность задач для
 существующих владельцев; она не подтверждает реализацию или работу VPN.
 Статусы требований остаются в [ПК-плане](../../PLAN.md),
-[Android-плане](../../ANDROID-PLAN.md) и [adaptive-плане](../../adaptive/PLAN.md).
+Android-плане — `docs/ANDROID-PLAN.md` и adaptive-плане — `docs/adaptive/PLAN.md`.
 Владельцы добавляют туда свои конкретные срезы; этот документ связывает их,
 не копирует журналы и не закрывает требования за другую платформу.
 
@@ -117,7 +117,7 @@ seam. Отсутствие регистрации блокирует тольк�
 
 **Android, параллельно source-подготовка:** сохранять AND-02/03/05/06/11 guards,
 последние package-manager step checkpoints и единый actual-return owner; закрывать
-следующий доступный P0 по [source-readiness](../../android/SOURCE-READINESS-2026-10-28.md).
+следующий доступный P0 по source-readiness — `docs/android/SOURCE-READINESS-2026-10-28.md`.
 Не писать fake trust driver/accepted source и не включать Connect по marker.
 
 **Выход:** source deltas с конкретным blocked/unknown/retained outcome, code review

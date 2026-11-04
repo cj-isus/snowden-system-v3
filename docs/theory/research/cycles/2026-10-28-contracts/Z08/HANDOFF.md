@@ -116,5 +116,4 @@ old-owner fenced replacement получает актуальную installation.
 текущий overlay уже accepted runtime artifact. Физические/OEM/socket
 incarnation/old-flow/network proof не заменяются design note.
 
-Этот handoff — конечная сдача. Старые файлы/соседние пакеты/платформенные plans,
-roles/deps/bindings/settings, модели/limits, git history не менялись.
+

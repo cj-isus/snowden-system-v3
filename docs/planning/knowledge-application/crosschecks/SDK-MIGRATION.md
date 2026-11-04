@@ -1,5 +1,9 @@
 # Общий trust SDK: минимальный состав и безопасная миграция
 
+Предлагаемая граница SDK относится к source-срезу 28 октября,
+не к полному inventory текущих реализаций. Порядок извлечения и подключения —
+в [плане ПК](../PC-PLAN.md) и [плане Android](../ANDROID-PLAN.md).
+
 ## 1. Рекомендуемая граница
 
 **Выделять существующий verifier по функциям, а не переносить Windows packages
@@ -19,10 +23,10 @@ Current source даёт основу, но не runtime-приёмку:
   `prepareAcceptedProfile`. Статический source cut включает OS-bound loaders.
 - Android имеет `ProfileTrustDriver.inspect/verifyForApply`, coordinator/store/
   checkpoint fences, но **production driver отсутствует**; `SnowdenApplication`
-  его не создаёт ([source](../../../../android/app/src/main/kotlin/org/snowden/android/app/SnowdenApplication.kt):76).
+  его не создаёт (source — `android/app/src/main/kotlin/org/snowden/android/app/SnowdenApplication.kt`:76).
 - `shared/adaptive` уже существует как отдельный pure Go module/API1; trust
-  module/роль **не зарегистрированы** в [.harness/ownership.json](../../../../.harness/ownership.json).
-  Proposal [FIVE-STREAMS/TRUST](../../../tasks/FIVE-STREAMS/TRUST.md) — prerequisite,
+  module/роль **не зарегистрированы** в `.harness/ownership.json`.
+  Proposal FIVE-STREAMS/TRUST — `docs/tasks/FIVE-STREAMS/TRUST.md` — prerequisite,
   не разрешение создать роль или код.
 
 ### Минимальный dependency graph
@@ -51,18 +55,18 @@ Manager. Adaptive не импортирует trust/verifier; платформе
 
 | Семейство знания / сохранённый источник | Current code и план | Разница / решение |
 |---|---|---|
-| Exact original bytes, отдельный application canonical digest. [OP-03](../../../theory/architecture/SAFETY-AND-TRUST.md#source-16-3), R05-010§2, archive§16.3 | [onboarding/delivery.go](../../../../windows/backend/onboarding/delivery.go):15–37; [metadata.go](../../../../windows/backend/metadata/metadata.go):137–162; TH-03-TUF-INTEGRATION, WIN-SDK-001-T, AND-04-S4b T01/T05/T08 | **Already source-implemented / reuse.** ProfileBytes/TUF metadata base64 byte arrays остаются original; Envelope.Canonical — отдельный исторический wire contract. Не заменять JCS/сортировкой/пересериализацией Kotlin |
-| Принятый predecessor ≠ rejected SDK pointer ≠ durable commit ≠ artifact permit. Accepted [R05-001 review](../../../theory/research/reviews/2026-10-27-R05-001-PROGRESS.md)§3, R05-010§7 | [retained_state.go](../../../../windows/backend/delivery/retained_state.go):16–79, [model.go](../../../../windows/backend/delivery/model.go):314–414; TH-03/FR-008/011, T07/T11 | **Change required before shared freeze.** Current pointer-to-original binding не доказательство final-step acceptance. Сохранять valid predecessor при позднем отказе, но не новый offending T/S; criterion/receipt provenance решить на существующем seam, не фильтровать все errors/progress |
-| ResetAllowed, surviving quorum и post-reset acceptance. [Continuity](../../../theory/architecture/TRUST-CONTINUITY-AND-AGREEMENT.md)§1–3, R28-Z07§3–5 | [retained_inputs.go](../../../../windows/backend/delivery/retained_inputs.go):61–99, material-set OR across intermediate roots; retainedState reset+continuation; TH-03, AND T05/T07 | **Adapt explicit contract.** Threshold-only/material diff/root version не один смысл. Current exact-byte continuation/continuity guards сохраняются. Выбрать поддерживаемые rotations; новое поле требуется лишь если существующие coherent images не различают необходимые histories |
-| Profile/update/recovery полномочия, original issuer/target/source. [R05-004](../../../theory/research/05-TRUST-SAFETY/R05-004.md)§1–2, TH-03-TRUST | [trust_policy.go](../../../../windows/backend/metadata/trust_policy.go):154–214; [profile_recovery.go](../../../../windows/backend/metadata/profile_recovery.go):138–231; [onboarding_authority.go](../../../../windows/onboarding_authority.go):71–210 | **Reuse value policy, extraction needed.** Schema1 даёт только profile-role, retired key не promote/revive; explicit recovery/epoch/enroll ветви не объединять bool. Store I/O отделить от решения |
-| Epoch/counter/equivocation и same-source batch. R05-002§9.2, R05-007§2–5 | [epoch_grant.go](../../../../windows/backend/metadata/epoch_grant.go):120–204; [accepted_profile.go](../../../../windows/backend/metadata/accepted_profile.go):263–445; T08/T11, TH-03-EPOCHS | **Already source-implemented / reuse.** Profile+grant proofs должны иметь один source/next cut; UInt64 epoch/counter нельзя свести к Kotlin Long/Double. Application history сохраняется вне TUF role reset |
-| Независимые root+policy approvals, latest-known custody, не global latest. OP-06, R05-010§3–4 | [onboarding_bootstrap.go](../../../../windows/onboarding_bootstrap.go):19–59; [onboarding_public.go](../../../../windows/onboarding_public.go):14–94; TH-03/07/COM-13 | **Current Windows guard / compatibility gap Android.** Android ProfileImportApproval имеет root/target, но отдельный independently approved first pin-policy digest не представлен. T02/T04 и authorityFence недостаточны, если approval для baseline не получено отдельно. Нужен Android contract change, не inbound auto-approval |
-| Clock/reference/purpose, exclusive authority deadline, старые flows. R05-002§9.6; Release boundaries§1 | [SessionValidity](../../../../windows/backend/metadata/validity.go):18–61; [ProfileClock](../../../../android/profile/src/main/kotlin/org/snowden/android/profile/ProfileClock.kt):81–103; preparedRuntime authority vs preparation TTL | **Reuse; no deadline unification.** TUF fixed start не authenticated UTC и не срок runtime. Не продлевать ранее выданную validity при extraction/reconnect; platform wall/elapsed mapping вне SDK |
-| Coherent cut/CAS/custody/actual-return и неизвестный commit. R05-002§9.2/9.5/9.7 | [delivery_state.go](../../../../windows/delivery_state.go):41–119; [EncryptedProfileStore](../../../../android/profile/src/main/kotlin/org/snowden/android/profile/EncryptedProfileStore.kt):55–145; T01/T11/T12 | **Keep platform-owned.** Existing four-target transaction и один encrypted checkpoint предпочтительнее новой БД. Ошибка/timeout не значит no write; decrypted/Loaded не accepted. Keys/enrollment/history не reset автоматически |
+| Exact original bytes, отдельный application canonical digest. [OP-03](../../../theory/architecture/SAFETY-AND-TRUST.md#source-16-3), R05-010§2, archive§16.3 | onboarding/delivery.go — `windows/backend/onboarding/delivery.go`:15–37; [metadata.go](../../../../windows/backend/metadata/metadata.go):137–162; TH-03-TUF-INTEGRATION, WIN-SDK-001-T, AND-04-S4b T01/T05/T08 | **Already source-implemented / reuse.** ProfileBytes/TUF metadata base64 byte arrays остаются original; Envelope.Canonical — отдельный исторический wire contract. Не заменять JCS/сортировкой/пересериализацией Kotlin |
+| Принятый predecessor ≠ rejected SDK pointer ≠ durable commit ≠ artifact permit. Accepted [R05-001 review](../../../theory/research/reviews/2026-10-27-R05-001-PROGRESS.md)§3, R05-010§7 | `windows/backend/delivery/retained_state.go`:16–79, `windows/backend/delivery/model.go`:314–414; TH-03/FR-008/011, T07/T11 | **Change required before shared freeze.** Current pointer-to-original binding не доказательство final-step acceptance. Сохранять valid predecessor при позднем отказе, но не новый offending T/S; criterion/receipt provenance решить на существующем seam, не фильтровать все errors/progress |
+| ResetAllowed, surviving quorum и post-reset acceptance. [Continuity](../../../theory/architecture/TRUST-CONTINUITY-AND-AGREEMENT.md)§1–3, R28-Z07§3–5 | `windows/backend/delivery/retained_inputs.go`:61–99, material-set OR across intermediate roots; retainedState reset+continuation; TH-03, AND T05/T07 | **Adapt explicit contract.** Threshold-only/material diff/root version не один смысл. Current exact-byte continuation/continuity guards сохраняются. Выбрать поддерживаемые rotations; новое поле требуется лишь если существующие coherent images не различают необходимые histories |
+| Profile/update/recovery полномочия, original issuer/target/source. [R05-004](../../../theory/research/05-TRUST-SAFETY/R05-004.md)§1–2, TH-03-TRUST | `windows/backend/metadata/trust_policy.go`:154–214; `windows/backend/metadata/profile_recovery.go`:138–231; `windows/onboarding_authority.go`:71–210 | **Reuse value policy, extraction needed.** Schema1 даёт только profile-role, retired key не promote/revive; explicit recovery/epoch/enroll ветви не объединять bool. Store I/O отделить от решения |
+| Epoch/counter/equivocation и same-source batch. R05-002§9.2, R05-007§2–5 | `windows/backend/metadata/epoch_grant.go`:120–204; `windows/backend/metadata/accepted_profile.go`:263–445; T08/T11, TH-03-EPOCHS | **Already source-implemented / reuse.** Profile+grant proofs должны иметь один source/next cut; UInt64 epoch/counter нельзя свести к Kotlin Long/Double. Application history сохраняется вне TUF role reset |
+| Независимые root+policy approvals, latest-known custody, не global latest. OP-06, R05-010§3–4 | `windows/onboarding_bootstrap.go`:19–59; `windows/onboarding_public.go`:14–94; TH-03/07/COM-13 | **Current Windows guard / compatibility gap Android.** Android ProfileImportApproval имеет root/target, но отдельный independently approved first pin-policy digest не представлен. T02/T04 и authorityFence недостаточны, если approval для baseline не получено отдельно. Нужен Android contract change, не inbound auto-approval |
+| Clock/reference/purpose, exclusive authority deadline, старые flows. R05-002§9.6; Release boundaries§1 | SessionValidity — `windows/backend/metadata/validity.go`:18–61; ProfileClock — `android/profile/src/main/kotlin/org/snowden/android/profile/ProfileClock.kt`:81–103; preparedRuntime authority vs preparation TTL | **Reuse; no deadline unification.** TUF fixed start не authenticated UTC и не срок runtime. Не продлевать ранее выданную validity при extraction/reconnect; platform wall/elapsed mapping вне SDK |
+| Coherent cut/CAS/custody/actual-return и неизвестный commit. R05-002§9.2/9.5/9.7 | `windows/delivery_state.go`:41–119; EncryptedProfileStore — `android/profile/src/main/kotlin/org/snowden/android/profile/EncryptedProfileStore.kt`:55–145; T01/T11/T12 | **Keep platform-owned.** Existing four-target transaction и один encrypted checkpoint предпочтительнее новой БД. Ошибка/timeout не значит no write; decrypted/Loaded не accepted. Keys/enrollment/history не reset автоматически |
 | Verified artifact ≠ OS signer/staged/installed/executing/adopted. [Release evidence](../../../theory/architecture/RELEASE-EVIDENCE-BOUNDARIES.md)§2–4; R05-004§3–6 | Windows backend/update native pair/accepted-image/floor, App apply; Android PackageManager/installer/worker owners; TH-08/OFF-06/AND-14 | **Keep native and install policy platform-owned.** Portable manifest verification не запускает EXE/APK, не аттестует whole process/DLL/splits и не даёт VPN Ready |
 | Revocation acquisition/schema/status/freshness/chain/operation раздельны. R05-009/C05 status contracts | Current shared verification driver отсутствует; будущие Android status/provider и Windows trust/provider gate; AND-04/14 | **Defer optional adapter, needs review.** Не включать Google/Sigstore/PKI engine как обязательный минимум SDK. ChainResult/statusAsOf не permit. Frozen R05-009 snapshot SHA conflict указан в coverage; детальные claims не становятся требованиями по mismatched corpus |
 | Metadata multirepo agreement не mapping authority/custom/governance. R05-006/007, continuity§4–6 | Current ordinary delivery single-repo, retained root/caches; no production multirepo caller established | **Defer.** Не новая mandatory subsystem. Если выбран required multi-approval, отдельно explicit artifact identity/all required descriptors/whole mapping authority; plain Hashes.Equal не protocol-wide agreement |
-| Existing eligibility/evidence/budgets. [adaptive API](../../../adaptive/API.md) | shared/adaptive Eligible/Rank/Prefer/ComposeEvidence/PlanFailover/SettleFailover/retry/background; ADP-002…006 | **Reuse, do not duplicate.** Trust предоставляет authority/restriction outputs; platform передаёт existing adaptive DTO. Нет второго scorer, schedule, observer, health-history DB или общего “trust confidence” |
+| Existing eligibility/evidence/budgets. adaptive API — `docs/adaptive/API.md` | shared/adaptive Eligible/Rank/Prefer/ComposeEvidence/PlanFailover/SettleFailover/retry/background; ADP-002…006 | **Reuse, do not duplicate.** Trust предоставляет authority/restriction outputs; platform передаёт existing adaptive DTO. Нет второго scorer, schedule, observer, health-history DB или общего “trust confidence” |
 
 ## 3. Component-level extraction, без замены клиента
 
@@ -427,9 +431,9 @@ strict no-default driver. Не выбрасывать их ради «общег
 
 ## 9. Основные источники применения
 
-- [FIVE-STREAMS/TRUST](../../../tasks/FIVE-STREAMS/TRUST.md),
-  [WIN-SDK-001](../../../tasks/CHANGE-REQUEST-WINDOWS-SDK-001.md),
-  [Android T01…14](../../../android/CHANGE-REQUEST-TRUST-001.md).
+- FIVE-STREAMS/TRUST — `docs/tasks/FIVE-STREAMS/TRUST.md`,
+  WIN-SDK-001 — `docs/tasks/CHANGE-REQUEST-WINDOWS-SDK-001.md`,
+  Android T01…14 — `docs/android/CHANGE-REQUEST-TRUST-001.md`.
 - [SAFETY-AND-TRUST](../../../theory/architecture/SAFETY-AND-TRUST.md)§16.3/16.6,
   [Trust continuity](../../../theory/architecture/TRUST-CONTINUITY-AND-AGREEMENT.md)§1–3,
   [Release boundaries](../../../theory/architecture/RELEASE-EVIDENCE-BOUNDARIES.md)§1–4.
@@ -437,9 +441,9 @@ strict no-default driver. Не выбрасывать их ради «общег
   [R05-002](../../../theory/research/05-TRUST-SAFETY/REPORT.md)§9,
   [R05-010](../../../theory/research/05-TRUST-SAFETY/REPORT-010.md)§2/7,
   [R28-Z07](../../../theory/research/cycles/2026-10-28-contracts/Z07/REPORT.md)§3–5.
-- [Adaptive API1](../../../adaptive/API.md), ADP-002…006,
+- Adaptive API1 — `docs/adaptive/API.md`, ADP-002…006,
   [PLAN](../../../PLAN.md) TH-03/TH-08/OFF-04/06,
-  [ANDROID-PLAN](../../../ANDROID-PLAN.md) AND-04-S4b/AND-13/14.
+  ANDROID-PLAN — `docs/ANDROID-PLAN.md` AND-04-S4b/AND-13/14.
 
 Применение основано на **81 реально прочитанном frozen unit** с exact IDs/body
 ranges и отдельных current source cuts; это scoped SDK crosscheck, не полный

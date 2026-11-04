@@ -484,7 +484,7 @@ window instructions captured. Secrets/env/real profiles/runtime logs не чит
 
 Отдельно захэшированы sent_packet_history.go и sent_packet_handler.go
 (см. artifacts). Remote byte equality не заявлена; никакого build/test/run.
-Зависимости/код продукта не менялись. Все future execution cases NOT_RUN.
+Все future execution cases NOT_RUN.
 
 ## 14. R04-009 — fairness/admission sources
 

@@ -36,7 +36,7 @@ planning; полный текст здесь не разбирался и нов
 ## 2. Public source captures и provenance
 
 Снимки сохранены в ignored
-[.artifacts/research/theory-06](../../../../.artifacts/research/theory-06).
+`.artifacts/research/theory-06`.
 Это чужой публичный текст для чтения, не добавленные зависимости/fixtures и не
 код, выполненный при исследовании. SHA256 относится к сохранённым UTF-8 bytes.
 
@@ -62,8 +62,8 @@ Gitiles ref metadata: `aosp16-ref.json`; immutable comparison metadata:
 
 ## 3. Локальные inputs и точная область source review
 
-Начальные fingerprints: [inputs-start.json](../../../../.artifacts/research/theory-06/inputs-start.json).
-Дополнительные dated fingerprints: [inputs-extra.json](../../../../.artifacts/research/theory-06/inputs-extra.json).
+Начальные fingerprints: `.artifacts/research/theory-06/inputs-start.json`.
+Дополнительные dated fingerprints: `.artifacts/research/theory-06/inputs-extra.json`.
 Это метаданные прочитанных/навигационных входов, не снимок всего дерева.
 Наличие hash не означает полный аудит каждой строки.
 
@@ -71,14 +71,14 @@ Gitiles ref metadata: `aosp16-ref.json`; immutable comparison metadata:
 |---|---|
 | [THEORY](../../README.md) | §7.3/5, §12.8, §13.10, §15.3/5–6, §16.4–6, §17.3–4 и точечный поиск overlap. Это baseline, не новый полный аудит всего сборника |
 | [PLAN](../../../PLAN.md) | §5.4 COM/контракты и точечные требования recovery; продуктовые статусы не изменялись |
-| [ANDROID-PLAN](../../../ANDROID-PLAN.md) | State model, A-FR/AND ownership, AND-08…12, §5 UX flows/usability, текущая шапка. На чтении: AND-12-S5/AND-03-S8 source unverified; не бинарная приёмка |
+| ANDROID-PLAN — `docs/ANDROID-PLAN.md` | State model, A-FR/AND ownership, AND-08…12, §5 UX flows/usability, текущая шапка. На чтении: AND-12-S5/AND-03-S8 source unverified; не бинарная приёмка |
 | [COMPETITOR-FEATURES](../../ux/COMPETITOR-FEATURES.md) | §6 baseline/reuse pins/comfort flows; старые superiority claims не использованы |
 | [configs/README](../../../../configs/README.md), [INFRASTRUCTURE](../../../INFRASTRUCTURE.md) | Template/production parity disclaimer и post-verify contract; датированные service/domain/failure-domain metadata. Не secrets и не live read |
 | [netwatch](../../../../windows/netwatch.go), [autoretry](../../../../windows/autoretry.go) | `run/tunRequested` guard, delivery branches/существующая retry scheduling и custody guards; не весь Windows lifecycle |
 | [Dashboard](../../../../windows/frontend/src/views/DashboardView.vue), [contract](../../../../windows/frontend/src/api/contract.ts) | Hero lifecycle/protection wording, failClosed/retry, AppState/probe timestamps. Рендер/сборка/browser не проверялись |
-| [ConnectionState](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/ConnectionState.kt), [ConnectionPresentation](../../../../android/app/src/main/kotlin/org/snowden/android/app/ui/ConnectionPresentation.kt), `NotificationPresentation.kt` (исторический путь R06-001; позднее отсутствует, см. §4.2) | Phase/issue/scope, no invented READY, observation dating и resource projection |
-| [PhysicalNetworkState](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/PhysicalNetworkState.kt), [PhysicalNetworkMonitor](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/PhysicalNetworkMonitor.kt) | OS hints/epoch/context, portal wait reason, process-scoped selection; не path attestation |
-| [VpnSessionRepository](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/VpnSessionRepository.kt), [SessionJournal](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/SessionJournal.kt) | Точечные `emit/retry/recovery/clearHistory`, bounded process-local journal, не production profile/verifier driver |
+| ConnectionState — `android/vpn/src/main/kotlin/org/snowden/android/vpn/ConnectionState.kt`, ConnectionPresentation — `android/app/src/main/kotlin/org/snowden/android/app/ui/ConnectionPresentation.kt`, `NotificationPresentation.kt` (исторический путь R06-001; позднее отсутствует, см. §4.2) | Phase/issue/scope, no invented READY, observation dating и resource projection |
+| PhysicalNetworkState — `android/vpn/src/main/kotlin/org/snowden/android/vpn/PhysicalNetworkState.kt`, PhysicalNetworkMonitor — `android/vpn/src/main/kotlin/org/snowden/android/vpn/PhysicalNetworkMonitor.kt` | OS hints/epoch/context, portal wait reason, process-scoped selection; не path attestation |
+| VpnSessionRepository — `android/vpn/src/main/kotlin/org/snowden/android/vpn/VpnSessionRepository.kt`, SessionJournal — `android/vpn/src/main/kotlin/org/snowden/android/vpn/SessionJournal.kt` | Точечные `emit/retry/recovery/clearHistory`, bounded process-local journal, не production profile/verifier driver |
 | `android/STATE.md`, `windows/backend/core/manager.go`, Android `HomeScreen/SystemScreen` | Навигационные/status fingerprints и выбранные presentation declarations; не источник заявления о готовности всего backend/Android |
 
 Исходное дерево untracked. Own write set: только REPORT/SOURCES/STATE/handoff
@@ -131,8 +131,8 @@ release. GPG/signature validation не выполнялась.
 | `go.mod`, `LICENSE` | go1.25.8/toolchain1.25.10, BSD2-Clause; полный binary/dependency graph не проверялся |
 | `doc/045_working_with_repos.rst`, `cmd/restic/main.go` | Documentation comparison/CLI navigation, не дополнительный audited call graph |
 
-**11 public text captures** в [cycle-002](../../../../.artifacts/research/theory-06/cycle-002).
-SHA256/bytes: [public-captures.json](../../../../.artifacts/research/theory-06/cycle-002/public-captures.json);
+**11 public text captures** в `.artifacts/research/theory-06/cycle-002`.
+SHA256/bytes: `.artifacts/research/theory-06/cycle-002/public-captures.json`;
 GitHub ref/tag/tree metadata: `restic-ref.json`, `restic-tag.json`,
 `restic-selected-tree.json`. Hashes — source metadata, не crypto release
 verification или проверка crypto реализации. HTTPS text прочитан как данные;
@@ -220,7 +220,7 @@ Commit установлен из release link, затем подтвержден
 - `windows/corebridge.go` SelectChannel → `windows/failover.go` switchChannelCoreFor/selectorOnlyChange/Constrain(oldCC.Validity)/rollback → `windows/backend/core/manager.go` SwitchChannel → `windows/backend/core/engine.go` SwitchDefaultContext; `worker_child.go` switch command. Полный Reload закрывает old box до нового start/rollback.
 - `windows/backend/render/render.go` selector literal → `windows/backend/config/config.go` zero bool/omitempty; `windows/go.mod` v1.13.19. `windows/frontend/src/api/contract.ts` AppState.activeChannel и `views/DashboardView.vue` scalar current channel — не per-flow census.
 - `android/vpn/.../PhysicalNetworkMonitor.kt`, WorkerProcess.kt → `android/corebridge/.../NativeWorkerSession.kt`, PhysicalNetworkBinding.kt, ProtectedSocketControl.kt, AndroidTunFactory.kt: selected/pinned physical context, borrowed socket protect/bind и underlying reporting. Контекст/fault boundaries рассмотрены; вся native интеграция/SDK/OEM/device работа не audited.
-- PLAN COM-09/17, OFF-03 и THEORY handover caveats адресно сопоставлены. Предлагаемые выводы не новые закрытые requirement IDs, общие планы не менялись.
+- PLAN COM-09/17, OFF-03 и THEORY handover caveats адресно сопоставлены. Предлагаемые выводы не новые закрытые requirement IDs, 
 
 T9/T10 REPORT — ручные допустимые source traces при явно указанных предпосылках,
 не выполненная симуляция или подтверждённая runtime vulnerability. Более сильный
@@ -248,7 +248,6 @@ frozen draft/edit/share revision checks → `ControllerReportScreen.kt` preview
 существует, он не записан как input; фактический `android/vpn/build.gradle.kts`
 и WorkerBinding.kt добавлены metadata2, всего10selected local paths.
 `kotlinx-captures.json` сохраняет **оба timeout**, не successful source pin.
-Повторно одинаковый raw запрос после deadline не делался.
 
 Итоговый metadata review: изменились VpnSessionRepository и PLAN. Relevant
 journal callers адресно перечитаны при финальном consistency review: validated
@@ -317,8 +316,8 @@ Actual chain reviewed: Manager.Start/restoreProxy→ProxyManager.Snapshot/SetPro
 Restore; config isProtectedOutboundType/detour admission; box HTTP NewOutbound→
 sing client. Android physical context metadata→bound socket protect; весь service/
 JNI/credential/OS gate code здесь не audited. Peer/guard authority proposals
-не объявлены существующим API. Старые REPORT/SOURCES/STATE baseline сохранены
-до добавления нового окна; общая теория/планы/старые указатели не изменялись.
+не объявлены существующим API. Датированный baseline сохранён отдельно; последующие правки source
+не получают автоматического подтверждения этим разбором.
 
 Timeouts не превращены в факт отсутствия upstream capability; вывод про текущий
 client помечен cache-source scoped. Нужны независимый file pin и platform evidence

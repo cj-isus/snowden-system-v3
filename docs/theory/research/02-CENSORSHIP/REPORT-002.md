@@ -339,7 +339,8 @@ user traffic direct. Admission/profile epochs должны пережить time
 и не запускались. Статистический дизайн J1 должен быть принят R03; performance
 инструментирование R04, OS/native/RF checks остаются отдельной авторизацией.
 
-## 10. Предлагаемая вставка руководителю и последовательность
+<a id="10-предлагаемая-вставка-руководителю-и-последовательность"></a>
+## 10. Предлагаемый вывод для общей теории и последовательность
 
 В §2.4/§9.3 и E-04, без удаления материала R02-001:
 
@@ -364,9 +365,9 @@ user traffic direct. Admission/profile epochs должны пережить time
 
 ## 11. Самостоятельное оппонирование и граница знания
 
-[OPPOSITION](../../../../.artifacts/research/theory-02/2026-10-25-r02-002/OPPOSITION.md)
+OPPOSITION — `.artifacts/research/theory-02/2026-10-25-r02-002/OPPOSITION.md`
 содержит явные возражения/коррекции и final relevant source drift.
 Нет доказательства, что данный joint classifier развёрнут в РФ; нет победителя
 по защите/скорости/энергии или практически рассчитанного detection probability.
 Полный Naive server/certificate path и Maybenot/GotaTun native integrations не
-аудированы. Статус **READY_FOR_REVIEW**, решение ACCEPTED остаётся руководителю.
+аудированы. Статус **READY_FOR_REVIEW**, отдельное решение ACCEPTED не получено.

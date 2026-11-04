@@ -4,7 +4,7 @@
 Область — выбранные source/model выводы из готовых пакетов. Приём всей работы
 по числу файлов, совпадению ответов моделей или авторскому READY не проводился.
 
-[Очередь остальных выводов](APPLICABILITY-LIMITS.md) · [Состояние цикла](../../../../archive/theory-organization-2026-10-28/r28/STATE.md).
+[Очередь остальных выводов](APPLICABILITY-LIMITS.md) · Состояние цикла — `docs/archive/theory-organization-2026-10-28/r28/STATE.md`.
 
 ## Решения и границы
 
@@ -159,10 +159,8 @@ primary файла совпали с author captures. Hash не является
 
 Все контрпримеры разобраны в тексте вручную; никакие tests/fixtures/simulations,
 библиотечные/криптографические вызовы, native/live или чтение реальных статусов,
-ключей, profiles, vault и пользовательских логов не выполнялись. Product code,
-PLAN, bindings/deps, авторские файлы и прежние решения не менялись.
+ключей, profiles, vault и пользовательских логов не выполнялись. 
 
-Следующая проверка — C02 backend identity/first-write и C04 cancellation/reap,
-затем пары с новыми Z01/Z04/Z05/Z07/Z08/Z09 по мере фактической сдачи. Появление
-файла не означает READY, READY не означает ACCEPTED. Новые исследования и
-поручения не начинаются автоматически из этого документа.
+C02 backend identity/first-write, C04 cancellation/reap и Z01/Z04/Z05/Z07/Z08/Z09
+требуют отдельных scoped решений. Появление файла не означает READY,
+READY не означает ACCEPTED.

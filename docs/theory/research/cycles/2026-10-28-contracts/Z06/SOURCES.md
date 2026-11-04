@@ -14,9 +14,9 @@ verifier/Gson доступны, свежие источники получены
 Android .kt/.kts targeted search нет consumer описанного Google status verifier.
 Это не отсутствие возможной интеграции во всех dependency/artifact/runtime.
 
-История этого чата содержит авторство baseline D. Новая byte/source проверка
-и opposing model не называется внешней независимой рецензией; independent
-решение руководителя/C05 отдельно. Одна модель/согласие авторов не primary evidence.
+Baseline D и его повторная проверка имеют общее авторство. Новая byte/source
+проверка и opposing model не являются внешней независимой рецензией;
+решения C05 и отдельного review учитываются только в их собственной области.
 
 Статусы ниже FULL_TEXT_READ (короткие files), SECTIONS_READ (конкретные части),
 FETCH_FAILED различаются. Publication date UNKNOWN, если источник не даёт её;

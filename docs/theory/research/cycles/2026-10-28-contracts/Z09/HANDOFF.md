@@ -25,7 +25,7 @@ Author status: **READY_FOR_REVIEW**.
   registered cohort и endpoint-protected system ITT при явных producer assumptions.
 - **B/privacy/OSS/pilot:** `DEFER/ADAPT`; не принимать по аналогии. Current journal
   не complete registry/task producer; OONI reference-only; user pilot NOT_RUN.
-- Это предложение руководителю, не научный ACCEPTED и не product/native/live PASS.
+- Это предложение для отдельного review, не научный ACCEPTED и не product/native/live PASS.
 
 ## Formulas
 

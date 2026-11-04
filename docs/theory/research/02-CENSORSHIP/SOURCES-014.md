@@ -503,10 +503,8 @@ blocking=null/status control-unreachable. Или consistent→inconsistent DNS
 при одном request → reason=dns. Это conditional source reasoning;
 не четвёртая запись, не fixture, не выполненный classifier тест.
 
-До append сохранены исходные prefixes REPORT/SOURCES/handoff в
+Исходные prefixes REPORT/SOURCES/handoff сохранены в
 `fup2-baseline-*.snapshot` и `fup2-baseline-manifest.json`. Точные URLs,
-raw hashes/время получения source в `fup-*.meta.json`; body кодовых страниц
-не исполнялся. Итоговый preservation-check — собственный artifact,
-никакие общие индексы/STATE/главы не менялись. A остаётся ровно с прежними
-формулировками и руководительским ограничением принятия.
+raw hashes и время получения source — в `fup-*.meta.json`; body кодовых страниц
+не исполнялся. Scope принятия A сохраняется без расширения на B/C/D.
 

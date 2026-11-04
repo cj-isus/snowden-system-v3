@@ -328,4 +328,4 @@ GPL-кода автоматически согласовано. Текущий r
 
 ### 6.8. Итог исследования
 
-2026-10-24: [THEORY§15](../roadmap/RESEARCH-HANDOFF.md#source-15)/[PLAN§5.8](../../PLAN.md#research-completion) сводят весь desk scope. Все20 COM имеют disposition/canonical route/future gate в [92-ID coverage](../../../.artifacts/research/2026-10-24-research-completion/audit/coverage.json). Историческое сравнение §§1–5 не становится current market claim. Research завершён; implementation/native/UX/comparative и выбор optional scenario остаются по плану.
+2026-10-24: [THEORY§15](../roadmap/RESEARCH-HANDOFF.md#source-15)/[PLAN§5.8](../../PLAN.md#research-completion) сводят весь desk scope. Все20 COM имеют disposition/canonical route/future gate в 92-ID coverage — `.artifacts/research/2026-10-24-research-completion/audit/coverage.json`. Историческое сравнение §§1–5 не становится current market claim. Research завершён; implementation/native/UX/comparative и выбор optional scenario остаются по плану.

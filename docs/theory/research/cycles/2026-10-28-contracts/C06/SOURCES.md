@@ -6,10 +6,10 @@
 
 Root: `D:/SNOWDEN-SYSTEM-V3/`. Начальный manifest создан **09:11:35Z**;
 точное время хранится в JSON, это время pin, не первого чтения каждого файла.
-[inputs-start.json](../../../../../../.artifacts/research/r28-contracts/C06/inputs-start.json)
+`.artifacts/research/r28-contracts/C06/inputs-start.json`
 содержит SHA256/bytes/LastWriteTime32 адресных inputs;
-[добавочные inputs](../../../../../../.artifacts/research/r28-contracts/C06/inputs-additional.json)
-содержат ещё4. [Сверка09:42:19Z](../../../../../../.artifacts/research/r28-contracts/C06/freshness-review.json):
+добавочные inputs — `.artifacts/research/r28-contracts/C06/inputs-additional.json`
+содержат ещё4. Сверка09:42:19Z — `.artifacts/research/r28-contracts/C06/freshness-review.json`:
 36/36 inputs неизменны,8 проверенных на том шаге local links существуют.
 Финальная сверка ссылок/четырёх выходных документов — `document-review-final.json`
 в том же C06 artifact namespace. HEAD не выдаётся за идентичность untracked tree.
@@ -78,7 +78,7 @@ Official googlesource TEXT responses декодированы в private C06 sou
 в этом пакете не проверялась. Не утверждается, что это source конкретного устройства.
 
 Metadata/hashes:
-[public-source-index.json](../../../../../../.artifacts/research/r28-contracts/C06/public-source-index.json).
+`.artifacts/research/r28-contracts/C06/public-source-index.json`.
 Fetch times09:11:50–09:11:58Z; все четыре FETCHED. Headers Apache-2.0 прочитаны.
 
 | Source | Exact URL / прочитанные строки | SHA256 decoded source |

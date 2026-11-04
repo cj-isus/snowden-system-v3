@@ -518,7 +518,6 @@ offline parity, не ready Go/Kotlin adapter, не численно провер
 > разрешает switch и не доказывает будущую работоспособность пути.
 
 Адресаты: ADP-004/006/008 и TH-02/04/06 — только согласование контрактов;
-Windows/Android владеют producers, retirement и admission. Пакет исследователя 9
-может использовать §§2–5.1 как математическую базу для denominator/selection,
-не общий reported-only rate и не старое произведение §18. Записи в чужие
-файлы, REPORT.md/STATE.md/REVIEW-QUEUE, platform source и registry не делались.
+Windows/Android владеют producers, retirement и admission. При определении task recovery
+можно использовать §§2–5.1 как математическую базу для denominator/selection,
+не общий reported-only rate и не старое произведение §18.

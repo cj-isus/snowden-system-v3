@@ -12,11 +12,10 @@ UTC checks и metadata captures; mtime не точное время acquisition.
 
 | ID | Источник / read scope | Что разрешено выводить |
 |---|---|---|
-| B1 | COMMON.md и Z03/TASK.md цикла2026-10-28-contracts, FULL_TEXT_READ | Новое окно120мин от собственного receipt; собственные4 files; source-only/no codes/fixtures; два обязательных продолжения |
 | B2 | [NINE-2026-10-27-R03-010-A](../../../reviews/NINE-2026-10-27-R03-010-A.md), FULL_TEXT_READ | ACCEPTED для sum union/A1/A2/countable composition/postselection/min-example/covered subset; не bbolt/producer/FDR/whole package |
 | B3 | [R03-010 REPORT](../../../03-ADAPTATION/REPORT-010.md), SECTIONS_READ §§5–6 + ранее доступное доказательство §3 | Предложенный registration/ledger baseline не current implementation |
 | B4 | [INTERVALS-AND-POLICY-EVALUATION](../../../../adaptation/INTERVALS-AND-POLICY-EVALUATION.md), SECTIONS_READ §§1–5 и границы§6–7 | Joint envelope, finite denominator, unknown hidden H, α_stat+β accounting; ITT включает failures/retries/cost |
-| Rules | Root AGENTS, Windows AGENTS, docs AGENTS адресно; MAP из доступного контекста, LESSONS тематический поиск | Научная роль не platform binding. Product code/plans и общие docs не изменялись |
+
 
 B2 — существующее решение руководителя, не самостоятельная новая рецензия
 этого исполнителя. R28-Z03 предлагает только scope решения по новым claims.

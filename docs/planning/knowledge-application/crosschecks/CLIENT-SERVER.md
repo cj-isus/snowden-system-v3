@@ -32,14 +32,20 @@ apply/rollback. Поэтому source-capability клиента шире вос�
 
 ## 1. Актуальный source cut и версии
 
+Матрица исходно составлена 28 октября. Статусы Android уточнены по
+сборке/UI 30 октября — `docs/android/LOCAL-VALIDATION-2026-10-30.md` и
+частичному JNI-срезу 4 ноября — `docs/android/NATIVE-CONFORMANCE-2026-11-04.md`.
+Новые исходники не наследуют прежнюю приёмку. Покупка/настройка VPS сообщены
+владельцем/оператором; независимый protected-path gate остаётся открытым.
+
 | Слой | Фактический источник | Статус знания |
 |---|---|---|
 | Windows core | `windows/go.mod`: Go 1.26, `sing-box v1.13.19`, `uTLS v1.8.4`, `sing-quic v0.6.4-…d83826c`, `quic-go v0.59.0-sing-box-mod.4`, `sing-shadowtls v0.2.1`, `sing-vmess v0.2.8-…3aed1551` | Точный source pin; не текущий EXE/native PASS |
 | Windows renderer | `windows/backend/render/render.go`, `metadata.Channel`, built-in `descriptors.json` | Четыре render branches; строгая client-side форма |
-| Android core | `android/native/source-lock.json`: core commit `b5ebaa1…`; adaptation revision3; `aarSha256=null` | Source candidate; stock AAR несовместим, approved AAR отсутствует, build/device не проверены |
+| Android core | `android/native/source-lock.json`: core commit `b5ebaa1…`; adaptation revision4; exact debug AAR SHA закреплён | Whole core/debug APK собраны и одобрены в узкой области 30 октября; UI проверен на одном телефоне. JNI частично проверен отдельно; protected traffic/release не приняты |
 | Server binary | `docs/INFRASTRUCTURE.md` декларирует sing-box 1.13.19 | Историческое описание; deploy/verify не enforce exact version/commit/artifact hash |
 | Public server template | `configs/singbox/server-combined.json` | Минимальный WS+HY2 baseline, не полная production копия |
-| Deployed состояние | сентябрьские записи FR-006/INFRASTRUCTURE | Историческое live evidence; VPS сейчас не оплачен, current availability unknown |
+| Deployed состояние | сентябрьские FR-006/INFRASTRUCTURE и поздние операторские отчёты о купленном VPS | Исторические и reported результаты разных узлов/путей; current availability и protected path требуют отдельного receipt |
 
 Source cut анализа: 30 публичных project/upstream-файлов, зафиксированных в
 `.artifacts/planning/knowledge-application/2026-10-28/captures/Z01/source-cut.json`.
@@ -60,7 +66,7 @@ Frozen theory coverage: 75 substantive units из corpus snapshot; архивн�
 
 | Функция / контракт | Windows client | Android client | Доступный server template | Итоговый статус | Минимальный совместимый change / gate |
 |---|---|---|---|---|---|
-| Common core identity | `sing-box 1.13.19`, production tags закреплены | Тот же commit, но adaptation не применена; approved AAR отсутствует | Версия только в документации, не в deploy receipt | **PARTIAL** | OFF-09: full server manifest с core version/commit/artifact digest; Android AND-01 exact approved AAR отдельно |
+| Common core identity | `sing-box 1.13.19`, production tags закреплены | Тот же commit, adaptation revision4 применена и exact debug AAR одобрен; protected-path gate открыт | Версия только в документации, не в deploy receipt | **PARTIAL** | OFF-09: full server manifest с core version/commit/artifact digest; Android AND-01 exact approved AAR отдельно |
 | VLESS/WS over CDN | Renderer: server IP/host, TLS SNI, WS `/ws`, early data2048, header | Graph поддерживает VLESS+WS source-only | Template имеет VLESS/WS loopback:8443; nginx example проксирует 9443; FR-006 ожидает9443 | **PAIR-TEMPLATE DRIFT** | Один полный server render задаёт 9443 и nginx relation; client/server path/header проверяются одним compatibility receipt |
 | WS h2mux+padding | Descriptor `multiplex=true`; renderer h2mux/padding | Graph source позволяет transport, mux whole-runtime не принят | `server-combined.json` multiplex не задаёт; README утверждает historical deployed mux | **CLIENT-SOURCE** | Добавить exact server inbound mux в full template; несовпадение fail до Start, не EOF в probe |
 | WS first-write / early data | Первый VLESS Write содержит UUID/destination и может включать payload; до2048 bytes уходят в `Sec-WebSocket-Protocol` | Source candidate, AAR/runtime unknown | Template и WS server source умеют тот же header/max; nginx его форвардит | **PAIR-SOURCE, DISCLOSURE GATE OPEN** | Зафиксировать carrier/terminator disclosure policy до credentials; probe не ретроактивное разрешение. Early-data on/off — отдельная pair capability, не confidentiality fix |
@@ -124,8 +130,8 @@ flow/endpoint facts; user/system traffic остаётся blocked. Это platfo
    TLS identity/pin generation, hopping ranges, probe endpoint semantics.
 3. Deploy: stage → exact binary version check → `sing-box check` → backup → atomic
    apply → restart → post-verify → rollback. Не scp-overwrite production config.
-4. Пока VPS отсутствует — только offline template/source result; historical
-   listener evidence не становится current readiness.
+4. До current deployment receipt — только template/source result; факт покупки
+   VPS и historical listener evidence не становятся current readiness.
 
 **Opposing guard:** `sing-box check` полезен и остаётся, но валидирует один JSON,
 не совместимость с client profile, nginx, firewall/DNAT и probe responses.
@@ -177,14 +183,16 @@ current tuple. Pair mismatch блокирует Engine.Start **до credentials*
 
 ### Stage 4 — Android parity, не перенос Windows статуса
 
-Android имеет pinned source candidate `v1.13.19`, но approved whole AAR отсутствует,
-strict-owner adaptation не применена/не собрана. NativeGraphSecurity допускает
-VLESS/REALITY/HY2 и explicit ECH config, но не ShadowTLS. Поэтому:
+Android использует pinned `v1.13.19` с применённой adaptation revision4 и
+одобренным exact debug AAR; историческая сборка/UI и частичный JNI-срез имеют
+раздельные датированные evidence. NativeGraphSecurity допускает VLESS/REALITY/HY2
+и explicit ECH config, но не ShadowTLS. Поэтому:
 
-- все transport rows на Android остаются **source candidate/unverified**;
+- transport compatibility и protected-path rows остаются **unverified**;
+  build/UI/JNI результаты признаются только в своей точной области;
 - compatibility manifest/attempt-plan contract можно переиспользовать как schema,
   но execution owner — Android service/corebridge;
-- необходимые existing gates: AND-01 approved AAR, AND-04 accepted profile,
+- необходимые existing gates: AND-01 exact artifact continuity, AND-04 accepted profile,
   AND-05 physical epoch/handover, AND-06 whole graph/strict owner, AND-07 protected
   probes, AND-11 resources, AND-15 native/device acceptance;
 - нельзя объявлять server compatibility по одному Kotlin parser success.

@@ -32,7 +32,7 @@
 | THEORY §12.8, §15.3/5–6; [PLAN §5.4](../../../PLAN.md) COM-01…15 | Task profiles, readiness, quiet, portal, LAN, support и update уже запланированы | Единый эпизод задачи, явные условия окончания, три независимые оси состояния и проверяемые действия |
 | THEORY §16.4–6 | Journal ограничен, приватность до записи, offline custody требует независимого основания | Не превращать ring-журнал в историю доступности; отдельно определить знаменатель recovery SLI и предел сохранённого окна |
 | THEORY §17.3–4 | Слабый измеритель, таймауты, censoring и selection bias | Применить эти ограничения к **пользовательскому эпизоду**, а не объявлять ещё один алгоритм оценки каналов |
-| [Android §5](../../../ANDROID-PLAN.md) | Страницы, consent, portal/grants, split, recovery, a11y и будущая usability-приёмка | Привязать обещание действия к доступным полномочиям ОС; проверить реальный статус portal API |
+| Android §5 — `docs/ANDROID-PLAN.md` | Страницы, consent, portal/grants, split, recovery, a11y и будущая usability-приёмка | Привязать обещание действия к доступным полномочиям ОС; проверить реальный статус portal API |
 | [configs/README](../../../../configs/README.md), [INFRASTRUCTURE](../../../INFRASTRUCTURE.md) | Baseline сервера не полная production parity; исторически общий VPS/CF account | Не принимать историческое состояние за живую инфраструктуру; предъявлять restore prerequisites и provenance |
 
 ### 2.1. Существенные source-факты нашего клиента
@@ -48,15 +48,15 @@
    восстановления под TUN этим чтением не установлена. [autoretry](../../../../windows/autoretry.go)
    уже имеет backoff, `NextRetryAt`, единственный begin и запреты повтора при
    unresolved custody. Второй retry daemon здесь не нужен.
-3. [Android ConnectionState](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/ConnectionState.kt)
+3. Android ConnectionState — `android/vpn/src/main/kotlin/org/snowden/android/vpn/ConnectionState.kt`
    разделяет intent/phase/issue/protection/network и намеренно не придумывает READY.
-   [ConnectionPresentation](../../../../android/app/src/main/kotlin/org/snowden/android/app/ui/ConnectionPresentation.kt)
+   ConnectionPresentation — `android/app/src/main/kotlin/org/snowden/android/app/ui/ConnectionPresentation.kt`
    учитывает возраст worker/parent observations; `UI_FACTS_RECENT_MS=5000` —
    presentation aging, не security deadline или измеренное SLO.
-4. [PhysicalNetworkState](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/PhysicalNetworkState.kt)
+4. PhysicalNetworkState — `android/vpn/src/main/kotlin/org/snowden/android/vpn/PhysicalNetworkState.kt`
    уже различает OS validation, captive/partial/metered/roaming и process-scoped
    epoch; его комментарий запрещает считать validation результатом VPN/service.
-   [VpnSessionRepository](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/VpnSessionRepository.kt)
+   VpnSessionRepository — `android/vpn/src/main/kotlin/org/snowden/android/vpn/VpnSessionRepository.kt`
    имеет budgeted recovery/retirement и journal. Production `RuntimeSourceProvider`
    остаётся отдельным gate; никакого работающего Android VPN этот отчёт не подтверждает.
 
@@ -231,9 +231,11 @@ Android lockdown мешает excluded apps/LAN, тогда как desktop seman
 
 Основание принципа предварительной подготовки — AWS static stability
 [E02](https://aws.amazon.com/builders-library/static-stability-using-availability-zones/).
-Текущие цены/провайдеры не выбирались; INFRASTRUCTURE датирован 2026-09-24,
-по сообщению владельца VPS не оплачен. Адресаты: COM-13/14/15, TH-03/07/08;
-AND-04/13/14/17; infra — предложения через руководителя.
+Цены/провайдеры здесь не сравнивались. На исходном исследовательском срезе
+INFRASTRUCTURE был датирован 2026-09-24, а VPS считался неоплаченным. Позднейшая
+покупка и операторские отчёты не меняют приведённый принцип готового резерва;
+их актуальная область описана в [плане ПК](../../../planning/knowledge-application/PC-PLAN.md).
+Связанные требования: COM-13/14/15, TH-03/07/08; AND-04/13/14/17.
 
 ## 4. Три дополнительных вывода
 
@@ -518,15 +520,13 @@ reader/крупный шрифт; выборку/критерии определ
 | 4. Подготовить recoverability | COM-13/14/15, TH-03/07/08; AND-13/14/17 + infra/R05 | Один inventory prerequisite graph и допустимый independently accessible runbook/packet, без admin keys в клиенте | A09…13/20/22; future restore drill и source→native→path evidence |
 | 5. Измерить пять сценариев | FR-012; AND-15/16/17, разрешённый QA/field | Предварительно заданные cohort/workload/D, S/F/U/coverage, tails и user comprehension | Сначала local/native/device, затем оплаченная разрешённая полевая инфраструктура |
 
-Это адресные предложения научному руководителю, **не изменение PLAN статусов**,
-не поручение другим чатам и не разрешение на выполнение. Новые numbered product
-requirements не создаются. Не начинать дизайн-декор, ML или новый transport
+Это предложения к существующим требованиям, **не изменение их статусов**
+и не разрешение на выполнение. Не начинать дизайн-декор, ML или новый transport
 вместо незакрытых protection/lifecycle/authority gates.
 
 ## 7. Предлагаемая вставка в общий сборник
 
-Только после решения руководителя: дополнение к §12.8 и §13.10 со ссылками на
-§16.4–6/§17; не переписывать исходный авторский материал. Возможный текст:
+Предлагаемое дополнение к §12.8 и §13.10 со ссылками на §16.4–6/§17:
 
 > Эксплуатационная приёмка относится к эпизоду пользовательской задачи:
 > intent → применимая защита → актуальное наблюдение пути/цели → полезный исход.
@@ -555,7 +555,9 @@ requirements не создаются. Не начинать дизайн-дек�
 Первоисточники вставки: SOURCES E01/02/03/06…13/17…19. Это **проектный синтез**,
 его научная/продуктовая приёмка остаётся открытой до рассмотрения и будущих проверок.
 
-## 8. Ограничения и следующий исследовательский вопрос
+<a id="8-ограничения-и-следующий-исследовательский-вопрос"></a>
+
+## 8. Ограничения и открытые вопросы
 
 - Исследованы документы и указанные source slices, не весь security/lifecycle
   контур; текущие изменения платформ могут сделать часть снимка устаревшей.
@@ -569,9 +571,8 @@ requirements не создаются. Не начинать дизайн-дек�
   всех OEM, актуальная стоимость multi-country резерва и эффективность UX.
 - Источники зрелых VPN показывают применимые приёмы и ограничения, не отсутствие
   аналогов. Число функций и стран не является критерием превосходства.
-- Следующий срез R06: после замечаний руководителя детализировать один сценарий
-  S2 либо S5 до согласованной платформенной последовательности и измерительной
-  спецификации. Самостоятельный переход к продуктовой реализации не разрешён.
+- Сценарии S2/S5 требуют согласованной платформенной последовательности
+  и измерительной спецификации; этот материал не доказывает их реализацию.
 
 ---
 
@@ -622,16 +623,16 @@ Unknown возможность нельзя объявлять ни доказа
 | Server restore | `deploy-vps.sh` → substitution → scp в active path → remote validation; restart отдельный | Это не готовый unattended transactional restore: shared SSH/scp `-p`, upload до validation, нет автоматического backup/atomic apply/rollback; WS template8443 против NGINX9443. Существование скрипта не заполняет node «server restored» |
 
 Pointers: [onboarding_import](../../../../windows/onboarding_import.go),
-[onboarding_authority](../../../../windows/onboarding_authority.go),
-[profile_recovery](../../../../windows/backend/metadata/profile_recovery.go),
-[runtime_profile](../../../../windows/backend/metadata/runtime_profile.go),
-[clock](../../../../windows/backend/metadata/clock.go),
-[render snapshot](../../../../windows/backend/render/snapshot.go),
+onboarding_authority — `windows/onboarding_authority.go`,
+profile_recovery — `windows/backend/metadata/profile_recovery.go`,
+runtime_profile — `windows/backend/metadata/runtime_profile.go`,
+clock — `windows/backend/metadata/clock.go`,
+render snapshot — `windows/backend/render/snapshot.go`,
 [corebridge](../../../../windows/corebridge.go),
 [DPAPI source](../../../../windows/backend/secretvault/crypto_windows.go),
-[Android manifest](../../../../android/vpn/src/main/AndroidManifest.xml),
-[ConnectionState](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/ConnectionState.kt),
-[OsProtection](../../../../android/vpn/src/main/kotlin/org/snowden/android/vpn/OsProtection.kt),
+Android manifest — `android/vpn/src/main/AndroidManifest.xml`,
+ConnectionState — `android/vpn/src/main/kotlin/org/snowden/android/vpn/ConnectionState.kt`,
+OsProtection — `android/vpn/src/main/kotlin/org/snowden/android/vpn/OsProtection.kt`,
 [deploy source](../../../../configs/deploy-vps.sh). Ничего из этого не исполнялось.
 DPAPI внешнее основание: [E26](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata).
 Android storage/boot: [E27](https://developer.android.com/privacy-and-security/direct-boot).
@@ -970,7 +971,9 @@ device evidence, usable authority/custody и обоснованных time/durat
 RTO или вероятность успеха Snowden. Отсутствующий оператор — реальная внешняя
 зависимость; новый алгоритм не устраняет необходимость заранее выданных полномочий.
 
-## 15. R06-002 — конечные будущие проверки и передача
+<a id="15-r06-002--конечные-будущие-проверки-и-передача"></a>
+
+## 15. R06-002 — будущая приёмка и применение
 
 Все проверки — **не выполнены**. Сейчас разрешены только ручной source/doc
 review и derivation; нет tests/fixtures/build/vet/doctor/crypto/simulation/
@@ -1002,8 +1005,7 @@ episode, required interventions, S/F/U/coverage и actual stage/restore timings;
 поздние application gates; Windows FR-009…011/TH-03/COM-13…15 и Android
 AND-03/04/13/14/17 — соответствующие adapters; infra — prepared B/restore parity;
 R03 — bounded decision на доступных prerequisites, R04 — реальные stage/resource
-bounds. Это вопросы/предложения для руководителя, не сообщения другим чатам,
-реализация или изменение статусов PLAN.
+bounds. Это предложения, не реализация или изменение статусов PLAN.
 
 Предлагаемая дельта общей теории после review: recovery graph должен учитывать
 exact source identity, actor/permission, необратимые effects и stage-specific
@@ -1195,8 +1197,7 @@ production accepted provider/device runtime остаётся отдельным 
 | «Always reload решает всё» | Он помогает retirement, но увеличивает disruption, не отменяет cleanup uncertainty/OS gate и не повторяет безопасно remote transaction |
 | «Anchor даёт отсутствие отказов» | Перенос underlay и смерть anchor разные F. Резерв anchor/state/authority/cost нуждается в своей модели, R06-002 cuts остаются |
 
-Следующие **12 случаев не выполнялись**; это предложения платформам через
-руководителя, без новых тестовых fixtures/code:
+Следующие **12 случаев не выполнялись**; это будущие критерии приёмки:
 
 | ID | Будущий случай | Конечный критерий |
 |---|---|---|
@@ -1217,9 +1218,11 @@ production accepted provider/device runtime остаётся отдельным 
 разрешении сравнивать interruption/reconnect/task success и цену переключений.
 Численные SLO/скорость/процент сохранения sessions этим чтением не установлены.
 
-## 21. R06-003 — предлагаемая вставка и передача
+<a id="21-r06-003--предлагаемая-вставка-и-передача"></a>
 
-Предложение для руководителя (общие THEORY/PLAN не изменены):
+## 21. R06-003 — предлагаемое уточнение и применение
+
+Предлагаемое уточнение:
 
 > Непрерывность задаётся отдельно для protection, selected default, ранее
 > допущенных потоков и пользовательской задачи. Selector switch и подтверждённый
@@ -1280,7 +1283,7 @@ worker fact. Text cap32768 ASCII — bound одного результата, н
 проверяет десятиминутный access expiry. Это **не timed memory wipe** и не recall
 уже отправленного текста. `ControllerReportScreen` готовит снимок из history.value,
 показывает preview/filter/строки и вызывает onShare(preview). Весь системный
-recipient/native share flow этим срезом **не audited**; ничего не отправлялось.
+recipient/native share flow этим срезом **не проверен**.
 
 ### 22.2. Шесть разных границ, которые нельзя называть одной «потерей логов»
 
@@ -1394,7 +1397,7 @@ provider/native/device proof остаётся открытым. Windows OFF-05/C
 | D09 | Единственный timeout или отсутствие protected receipt | Нет cause DPI/no-leak/task-success assertion; admissible targeted next action |
 | D10 | Export event ID повторился после нового процесса/копии чужого текста | Нет глобального join/signature claim; privacy scope и trust source обозначены |
 
-Предложение руководителю для THEORY/COM-05 (общие документы не менялись):
+Предлагаемое уточнение THEORY/COM-05:
 
 > Диагностический пакет является проекцией наблюдений с явными coverage и
 > потерями. Observer gaps, semantic dedup, retention, delivery conflation и
@@ -1646,7 +1649,9 @@ Proxy-Authorization/PAC URL query/realm identifiers в generic errors/export.
 | W14 | Keyboard/screen reader/background repeated auth | Понятный status/action/cancel, нет focus loop; actual usability неизвестна до проверки |
 | W15 | Proxy challenges/credential/PAC query попали в error | Allowlist projection не экспортирует secrets/организационные identifiers |
 
-## 30. R06-006 — предложение руководителю
+<a id="30-r06-006--предложение-руководителю"></a>
+
+## 30. R06-006 — следствия для корпоративного proxy
 
 Существующие COM-03/04/07/09/10/OFF-03/05 и Android platform/UX требования
 нужно дополнить **рабочим upstream-proxy contract**, а не засчитать одной
@@ -1837,10 +1842,11 @@ latency/battery/CPU/resource gains не измерены; это совмест�
 | N11 | Address race на слабом radio, loser/cancel/Stop | Bounded resource policy, no late success; реальные затраты требуют измерения |
 | N12 | Call/RDP+new default family/remote transaction unknown | Нет continuity/all-flow/transaction-success обещания по одному probe |
 
-## 35. R06-007 — передача
+<a id="35-r06-007--передача"></a>
 
-Предложение руководителю для существующих COM-04/07/09/TH-02/04 и Android
-DNS/platform roadmap; requirement statuses/общая теория не изменялись:
+## 35. R06-007 — DNS и translation в recovery contract
+
+Предлагаемое уточнение COM-04/07/09/TH-02/04 и Android DNS/platform roadmap:
 
 > Совместимость family определяется замкнутым bootstrap и фактическим network
 > context. DNS64, CLAT и local synthesis — разные ветки; numeric address может
@@ -1927,7 +1933,9 @@ metadata и дополнительные finite cases; бюджет ресурс
 к реальному local socket; Builder.setHttpProxy не создаёт CONNECT leg. Actual
 JNI/service/guard интеграция этих предложений не выполнена и не принята.
 
-## 38. R06-008 — оппонирование и конечная передача
+<a id="38-r06-008--оппонирование-и-конечная-передача"></a>
+
+## 38. R06-008 — контрпримеры и пределы применения
 
 | Возражение | Граница |
 |---|---|
@@ -1947,9 +1955,8 @@ JNI/service/guard интеграция этих предложений не вы
 | J05 | N/P/profile change между auth P и auth E/probe | Late leg receipts не подтверждают новый составной path |
 | J06 | CONNECT/auth успешны, app/task или guard unknown | UX не публикует all-device/no-leak/continuity/business-success обещание |
 
-Предложение руководителю: в accepted recovery/observation contracts фиксировать
-placement DNS/translation и per-leg identity/authority. Общие планы/теория не
-изменены. Модель не доказывает performance/reliability конкретной сети и не
+Предлагаемое уточнение: в accepted recovery/observation contracts фиксировать
+placement DNS/translation и per-leg identity/authority. Модель не доказывает performance/reliability конкретной сети и не
 устраняет missing adapter/native evidence. Внешний source pin limit наследуется;
 новых credentials/settings/profile/live данных не читалось.
 

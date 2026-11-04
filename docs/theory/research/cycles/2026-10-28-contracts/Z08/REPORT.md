@@ -353,7 +353,7 @@ GPL-3.0-or-later. OS API use не требует copying AOSP framework. Ник�
 у platform owner. Цена не измерена в рублях/ms/CPU/энергии; отсутствие measurement
 не записано нулём.
 
-**Рекомендуемый verdict руководителю:** A/B/C `ACCEPTED` только в точно
+**Предлагаемый verdict:** A/B/C `ACCEPTED` только в точно
 указанном source/API/model scope **как предложение**, не авторская приёмка;
 product-wide atomic signer-bound app enforcement `DEFERRED`. Current strict-owner
 source seam — positive counterevidence к прежнему stock-cache finding. Выводы
@@ -383,13 +383,11 @@ crypto/signature operations или builds не запускались.
 
 ## 9. Пройденные work stages, paired scope и остановка
 
-Пройдены TASK1 D trace/fresh pins, TASK2 public version matrix,
-TASK3 package→epoch→cache→admission→old-flow/retirement,
-TASK4 minimal seam+reuse/licence/cost, оба пункта продолжения (UID reuse/shared
-visibility и IKEv2 refresh). Source failures заменены независимой частью или
-проверенным own immutable capture; не выдаются за новые reads/execution.
-C06 TASK прочитан адресно; HANDOFF не существовал при review-stage — independent
-paired result unavailable, не waited/polled. Соседние файлы не изменялись.
+Рассмотрены D trace/fresh pins, public version matrix,
+package→epoch→cache→admission→old-flow/retirement, minimal seam/reuse/licence/cost,
+UID reuse/shared visibility и IKEv2 refresh. Source failures заменены доступной
+частью или проверенным immutable capture и не выдаются за новые reads/execution.
+Независимый paired review C06 не входил в этот source-срез.
 
 Открыто: artifact/SDK/API-level/OEM validation, actual socket incarnation and
 atomic identity enforcement, chosen mixed metadata/selector design, channel

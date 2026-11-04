@@ -1,10 +1,10 @@
 # R03-001 — прослеживаемость адаптивного решения и пределы его оценки
 
 **2026-10-25 · READY_FOR_REVIEW · Теория 3.**
-Назначение: исследовательский пакет главному научному руководителю. Это source /
+Метод: source /
 literature / ручной математический анализ, не реализация policy, эксперимент,
 результат тестов или доказательство работы VPN. Источники: [SOURCES](SOURCES.md).
-Снимки и SHA256: `.artifacts/research/theory-03/`. Входы развиваются параллельно.
+Снимки и SHA256: `.artifacts/research/theory-03/`. Дальнейший source drift требует адресной перепроверки.
 
 ## 1. Вопрос и отличие от уже известного
 
@@ -350,8 +350,7 @@ R06: единица service episode/deadline и цена ошибочного/з
 
 ## 9. Предлагаемая вставка в общую теорию
 
-**Для интеграции руководителем после review**, после §17.8 отдельным уточнением
-«Прослеживаемость решения». Общий файл этим исследователем не изменялся.
+**Предлагаемое дополнение к §17.8: прослеживаемость решения.**
 
 > Финальное ranking правило следует выводить из всей композиции фильтров и
 > stable passes. В рассмотренном Windows failover late recent-attempt partition
@@ -649,9 +648,10 @@ TH-04/AND-07/11 — deadline/admission/owner/criticality contract;
 TH-06/FR-012/RQ-19/20 и AND-16 — actual costs/coverage/detection tails и comparative
 оценка только на разрешённом стенде. Общий adaptive слой получает ограниченные
 facts/advice; ADP-003 — budget effects, ADP-004 — temporal evidence contract.
-Платформы исполняют и публикуют. Существующие статусы этим чатом не менялись.
+Платформы исполняют и публикуют.
 
-### 11.6. Готовая вставка руководителю и границы вывода
+<a id="116-готовая-вставка-руководителю-и-границы-вывода"></a>
+### 11.6. Предлагаемый вывод для общей теории и границы вывода
 
 Предлагается после R03-001 либо как уточнение §17.1/17.3/17.8, без перезаписи
 авторского материала:
@@ -678,7 +678,7 @@ facts/advice; ADP-003 — budget effects, ADP-004 — temporal evidence contract
 контрпримеры, условия необходимой нагрузки. **Не установлено:** частота проявления,
 вред реальным пользователям, оптимальный scheduler, замеры CPU/RAM/energy или
 bounded Windows/Android native completion. Не обнаружен/не доказан security
-bypass по clock counterexample; product code/тесты/сеть не менялись.
+bypass по clock counterexample.
 
 **Input drift при завершении:** cut14:22:08Z выявил изменения только двух из
 первоначальных22 captured файлов: общий PLAN (Windows V2-158/source SDK request)
@@ -1056,7 +1056,9 @@ R06 — конкретное действие пользователя, гори
 local model evaluation, отдельно device и field comparison. Сейчас все execution
 criteria **NOT RUN**. Нет simulation-derived optimum, throughput или energy цифр.
 
-### 12.11. Адресная передача и предлагаемая вставка
+<a id="1211-адресная-передача-и-предлагаемая-вставка"></a>
+
+### 12.11. Следствия для наблюдений и решений
 
 - **ADP-004/006:** reuse exact clock/identity/capability/outcome/custody; model/ref
   может быть научной надстройкой, не новый Required bypass. Existing source APIs
@@ -1077,7 +1079,7 @@ criteria **NOT RUN**. Нет simulation-derived optimum, throughput или energ
 - **AND-16:** российский field/model/correlation/held-out calibration и сравнение
   только после оплаченной infra/отдельного live-разрешения; paper не заменяет его.
 
-**Proposed insertion для руководителя после THEORY17, не direct edit:**
+**Предлагаемое уточнение THEORY17:**
 
 > Выбор измерения привязывается к конкретному безопасному действию и горизонту.
 > Required proof нельзя убрать из-за малой expected utility. Для optional работы
@@ -1096,9 +1098,7 @@ criteria **NOT RUN**. Нет simulation-derived optimum, throughput или energ
 > не наследует их optimality/error guarantees. Minimax и expected utility — разные
 > objectives; выбор и conservative unknown должны быть явными.
 
-Решение об ACCEPTED/NEEDS_REVISION/REJECTED/DEFERRED принимает руководитель по
-каждому R03-06/07. Межтематические вопросы переданы через handoff, без сообщений
-чужим чатам. Общая THEORY/PLAN и product sources этим срезом не изменены.
+R03-06/07 требуют отдельного scoped решения; авторский статус не является ACCEPTED.
 
 ## 13. R03-004 — как идентифицировать эффект новой policy
 
@@ -1405,7 +1405,9 @@ Self-review, не независимое scientific ACCEPTED:
 | Q15 | Lost trace/export data меняет completeness bound, не фильтруется невидимо |
 | Q16 | Privacy/scoped refs/retention и observer cost входят в comparison; no secret/raw user history |
 
-### 13.8. Адресная передача и THEORY insertion proposal
+<a id="138-адресная-передача-и-theory-insertion-proposal"></a>
+
+### 13.8. Предлагаемое уточнение теории
 
 **ADP-004/006/008:** reused trace/typed outcomes полезны, но не randomized ledger.
 Для будущего design требуется explicit estimand/unit/assignment version/e/follow-up;
@@ -1418,7 +1420,7 @@ design; не запускать две policies параллельно чере�
 добавочно radio/metered/foreground/pending Binder/resource costs; device и field
 acceptance отдельны. Ни один platform PLAN пункт этим пакетом не закрыт.
 
-> Предложение руководителю после THEORY17: сравнительное доказательство новой
+> Предлагаемое уточнение THEORY17: сравнительное доказательство новой
 > policy начинается с unit/estimand, не с estimator. One-step value на историях
 > baseline не равен эффекту новой адаптивной системы, меняющей будущие истории.
 > Assignment, admission, execution, task outcome и actual resource return —
@@ -1456,8 +1458,7 @@ Lifecycle `failoverPolicy.hardReset` — существующий control-state 
 реализованным. Предложение относится к **будущему** evaluator, который иначе
 может неверно переносить sequential guarantees на lifecycle epochs.
 
-9 local inputs сохранены в cycle-005. Prior004 handoff зафиксирован как input;
-старые пакеты не менялись. Raw user logs/native runtime не использовались.
+9 local inputs сохранены в cycle-005. Prior004 handoff зафиксирован как input. Raw user logs/native runtime не использовались.
 
 ### 14.2. R03-10 — disclosure process входит в measurement model
 
@@ -1596,7 +1597,9 @@ reuse proof, не утверждение математической/implementa
 accounting. Простые bounds могут быть широкими. Никакой новый solver/dependency
 не нужен для ручных F1…F5, и никакого numerical выигрыша здесь не измерено.
 
-### 14.6. Самокритика, future cases и передача
+<a id="146-самокритика-future-cases-и-передача"></a>
+
+### 14.6. Контрпримеры и будущая приёмка
 
 Оппонент: completion order **может** быть допустим при обоснованном observation
 model/conditional mean; F1 не универсальный запрет. Contiguous prefix —
@@ -1640,7 +1643,6 @@ receipt не новый protected permit; device/field acceptance остаётс
 > каждого анализа и не является полномочием safety controller.
 
 Scientific claims R03-10/11 — READY, не ACCEPTED. Все12 execution cases NOT RUN.
-После cutoff новые срезы не начинать; ограниченно завершить сохранение/итог.
 
 ## 15. R03-006 — решение с горизонтом, дрейфом и ценой перехода
 
@@ -1929,7 +1931,7 @@ R02 даёт threat/change mechanisms, R04 — cost/time/interference, R05 — h
 R06 — task/loss/horizon; результаты за них не выдуманы. Full experiment/device/
 field execution не разрешён и все14 cases **NOT_RUN**.
 
-> Proposed insertion в adaptation chapter для руководителя: optional switch
+> Предлагаемое уточнение adaptation chapter: optional switch
 > сравнивается по полезной экспозиции после actual transition delay и полной цене
 > попытки на объявленном horizon. Statistical window, delivery age, drift/bias и
 > failure-to-apply uncertainty дают разные поправки. Большой H не всегда помогает
@@ -2179,7 +2181,7 @@ production measurement. **R04:** real amount/duration/tail/cost producer,
 **R05:** hard gate/receipt semantics, **R06:** A/U goal/competing intent/horizon.
 Ничего за другие роли не реализовано/не запущено, их планы не закрыты.
 
-> Proposed insertion для руководителя: risk полной попытки относится к одной
+> Предлагаемое уточнение: risk полной попытки относится к одной
 > assigned когорте/goal/clock и complete branch schema. Conditional stage pass
 > probabilities можно перемножать по chain rule без independence; произвольные
 > marginal reliability rates — нельзя. Control counter reset не успех опыта.
@@ -2187,12 +2189,11 @@ production measurement. **R04:** real amount/duration/tail/cost producer,
 > Confidence от past trials не future drift guarantee. Deadline-success probability
 > не mean cost/retirement bound; хвост за horizon и custody остаются явно открыты.
 
-R03-13/14 READY, не ACCEPTED.12future cases NOT_RUN. Перед cutoff только
-закончить review/evidence текущего среза; после cutoff новых исследований нет.
+R03-13/14 READY, не ACCEPTED. Двенадцать будущих проверочных сценариев NOT_RUN.
 
 ## 17. R03-008 — producer observations → interval или abstain
 
-2026-10-26. Новое разрешённое окно10:44:16Z→14:44:16Z; предыдущие окна закрыты.
+Source-срез от 26 октября 2026 года.
 **R03-15 / R03-16 READY_FOR_REVIEW.** Это научный proposal, source/manual evidence;
 никаких изменений estimator/producer/product или выполнения. Passport —
 [handoff008](handoffs/R03-008.md); primary/source provenance — SOURCES§10 и cycle-008.
@@ -2465,8 +2466,8 @@ producer и использовать bounded finite intervals/typed reasons. Э�
 Windows адресат — owned observations/optional preference seam006, не замена
 hard recovery. Android — сначала useful-task/outcome/cost producers. ADP — pure
 bound kind/model/applicability review, не расширение unconnected ADP005 по умолчанию.
-R05 owns source/authority, R04 physical budget, R06 task definition; статусы этих
-ролей не менялись. Следующий разрешённый существенный вопрос: pre-work registration
+Source/authority, physical budget и task definition задаются отдельными контрактами.
+Открытый вопрос: pre-work registration
 и exploration allowance при дешёвом ложном успехе — как feedback не должен
 сам себе открывать новые попытки/кредит. Это не повтор chain-rule/tail007.
 

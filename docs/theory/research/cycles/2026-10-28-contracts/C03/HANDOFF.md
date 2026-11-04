@@ -1,8 +1,7 @@
 # R28-C03 — HANDOFF
 
 28 октября 2026.
-**READY_FOR_REVIEW; claims PROPOSED.** Научное принятие и интеграция — решение
-руководителя. Код/продуктовые планы этим пакетом не изменены.
+**READY_FOR_REVIEW; claims PROPOSED.** Научное принятие и интеграция требуют отдельного scoped решения.
 
 Основной аргумент: [REPORT](REPORT.md). Pins/read depth: [SOURCES](SOURCES.md).
 

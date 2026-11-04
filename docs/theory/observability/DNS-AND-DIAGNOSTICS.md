@@ -79,7 +79,7 @@ Pool reuse не продлевает срок сертификата/профи�
 OP-01…06 ниже — labels уточнений существующих TH/RQ/COM/AND, не ещё один backlog.
 Source reads и стандарты не доказывают реальные запросы, SDK/crypto, leak/скорость,
 устройства или удобство. Артефакты/снимки/проверка:
-[evidence](../../evidence/2026-10-24-observation-proof.md).
+evidence — `docs/evidence/2026-10-24-observation-proof.md`.
 
 
 <!-- /source-unit: 16 -->

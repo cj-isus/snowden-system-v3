@@ -5,17 +5,17 @@
 
 ## Воспроизводимость
 
-[Manifest снимков](../../../../.artifacts/research/theory-02/2026-10-25-r02-01/manifest.json)
+Manifest снимков — `.artifacts/research/theory-02/2026-10-25-r02-01/manifest.json`
 содержит 10 локальных файлов и 22 файла upstream: пути, точные commits, URL,
 SHA-256 и совпадение с прочитанным Go module cache. Все 22 downloaded файла
 совпали с cache побайтно по SHA-256. Это проверка происхождения прочитанного
 текста, **не сборка или исполнение кода**, не аудит всей цепочки зависимостей.
 Снимки отдельных файлов не являются атомарным snapshot всего репозитория.
 
-Литература: [references.json](../../../../.artifacts/research/theory-02/2026-10-25-r02-01/references.json).
+Литература: `.artifacts/research/theory-02/2026-10-25-r02-01/references.json`.
 Успешный web read и успешное сохранение raw-копии различаются; ошибки capture
 не превращаются в подтверждение содержания. Окончательное состояние — в
-[audit.md](../../../../.artifacts/research/theory-02/2026-10-25-r02-01/audit.md).
+`.artifacts/research/theory-02/2026-10-25-r02-01/audit.md`.
 
 ## Закреплённые исходники
 
@@ -45,7 +45,7 @@ MetaCubeX/utls — корневой LICENSE с тремя BSD-условиями
 | L07 | android/native/source-lock.json | Тот же core pin как source candidate; AAR hash null, stock AAR несовместим с обязательной source adaptation; native PASS не установлен |
 | L08 | android/corebridge/.../configuration/NativeGraphSecurity.kt | Allowlist принимает пустой flow и xtls-rprx-vision. Это принятие поля, не доказательство native Vision или полного wire profile |
 
-Полные локальные пути и хеши находятся в manifest. Общие документы не изменялись.
+Полные локальные пути и хеши находятся в manifest.
 
 ## Первичные исследования и спецификации
 

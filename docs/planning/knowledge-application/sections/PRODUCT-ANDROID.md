@@ -11,10 +11,10 @@
 Текущий Android имеет Compose-навигацию, controller/service/IPC, policy compiler,
 ограниченный импорт, локальную историю и быстрые поверхности. Это **source unverified**:
 нет принятого adapted AAR, production `ProfileTrustDriver`, accepted-profile producer,
-рабочего APK и подтверждённого VPN. [HomeScreen](../../../../android/app/src/main/kotlin/org/snowden/android/app/ui/HomeScreen.kt)
-и [WorkspaceScreens](../../../../android/app/src/main/kotlin/org/snowden/android/app/ui/WorkspaceScreens.kt)
+рабочего APK и подтверждённого VPN. HomeScreen — `android/app/src/main/kotlin/org/snowden/android/app/ui/HomeScreen.kt`
+и WorkspaceScreens — `android/app/src/main/kotlin/org/snowden/android/app/ui/WorkspaceScreens.kt`
 правильно оставляют Connect и импорт недоступными. Последний просмотренный
-[Android STATE](../../../../android/STATE.md) содержит AND-05-S4: same-binding TUN
+Android STATE — `android/STATE.md` содержит AND-05-S4: same-binding TUN
 admission; AND-02-S5 callback value-step guards и AND-01-S4 cleanup staging
 артефактов сохранены. Эти guards не нужно планировать заново.
 
@@ -22,8 +22,8 @@ admission; AND-02-S5 callback value-step guards и AND-01-S4 cleanup staging
 Их следует развивать. Реальные отличия от требований остались в proxy ownership,
 NetGuard copy и доступности некоторых сетевых сценариев. Срез ниже относится к
 прочитанным компонентам; сборка, OS/device, внешний capture и live-путь не проверялись.
-Точные байты и глубина чтения — [source cut](../../../../.artifacts/planning/knowledge-application/2026-10-28/captures/C06/current-source-manifest.json),
-учтённые изменения планов — [source deltas](../../../../.artifacts/planning/knowledge-application/2026-10-28/captures/C06/late-diff.json).
+Точные байты и глубина чтения — source cut — `.artifacts/planning/knowledge-application/2026-10-28/captures/C06/current-source-manifest.json`,
+учтённые изменения планов — source deltas — `.artifacts/planning/knowledge-application/2026-10-28/captures/C06/late-diff.json`.
 
 <a id="evidence"></a>
 ## 1. Основания и правила переноса — F00

@@ -137,7 +137,7 @@ SQLite — reference транзакционной семантики, не об�
 или сохранности credentials в обычной DB/WAL. Для production понадобятся
 конкретные platform binary/driver pins и подтверждённый режим.
 
-Неразрешённые вопросы руководителю: точный ResetAllowed при intermediate
+Неразрешённые вопросы контракта: точный ResetAllowed при intermediate
 rotation/threshold changes; требование per-root durable barrier против per-return
 progress; purpose применимость TUF expiry после принятия профиля; local storage
 adversary/independent recovery anchor и требуемая automatic liveness.
@@ -158,9 +158,8 @@ R05-001 REPORT/SOURCES как неизменённые prefix и прежний 
 
 ## R05-003 — release provenance / offline transparency
 
-Получено публичным web/source чтением в текущем срезе; после deadline только
-упаковка уже полученного материала. Утверждения относятся к указанному pin,
-не к любой будущей версии. Код/зависимости не копировались в продукт.
+Утверждения относятся к указанным публичным источникам и exact pin,
+не к любой будущей версии. Интеграция кода и зависимостей в продукт не проверялась.
 
 | ID | Первоисточник | Использование / ограничение |
 |---|---|---|
@@ -187,7 +186,7 @@ Local closing inputs: windows/updateapp.go, windows/update_readiness.go,
 windows/update_pair.go, docs/ANDROID-PLAN.md. Hashes/copies — closing-inputs.json
 и local-closing/. Это post-read closing capture, не initial snapshot; полной
 доказанной drift-free истории этих четырёх inputs нет. SDK source, saved states,
-credentials, raw user logs не читались. Общая THEORY не изменялась.
+credentials, raw user logs не читались.
 
 NOT_RUN: Sigstore/TUF криптография, build/tests/fixtures, installer/image/native
 signing, Android device, network/runtime/performance и реальные обновления.
@@ -275,10 +274,9 @@ multirepoupdater не являлось доказательством имени
 API продуктом не утверждается. Opposing review и границы — §последний R05-006.md.
 10 future cases NOT_RUN. Shared theory/product plans/SDK не изменены.
 
-Финальная source партия10:00:39Z→10:01:49Z вернулась до deadline: TAP4 copyright
-Public Domain и old-client ignore compatibility подтверждены. types.go получен
-как capture, но внутренний Hashes.Equal audit не завершён и не объявлен
-выполненным. Сохранение после10:03:26Z не включало новые source requests.
+В TAP4 указаны Public Domain и old-client ignore compatibility. `types.go`
+сохранён как source capture, но внутренний аудит `Hashes.Equal` не завершён
+и не объявляется выполненным.
 
 <a id="sources-r05-007"></a>
 
@@ -306,7 +304,7 @@ multirepo/types/config, exact TAP4, GitHub pin/tree metadata и web records.
 config refetch SHA совпал с R05-001: web line labels удаляют blank lines и не
 заменяют raw source line references. Некоторые early bundled web/API attempts
 дали connection failure; native public HTTP затем дал valid pin/source. Failed
-records не считаются доказательством содержимого. Git/network settings не менялись.
+records не считаются доказательством содержимого.
 
 Source hashes/manifest фиксируют bytes, не runtime behavior. Local-inputs.json
 содержит4 initial snapshots; onboarding.go — supplemental capture после чтения

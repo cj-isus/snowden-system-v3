@@ -2,7 +2,7 @@
 
 ## Краткий вывод
 
-Будущий единственный VPS следует вводить как **runtime endpoint**, а не как новый
+Единственный VPS следует использовать как **runtime endpoint**, а не как новый
 control plane, publisher или хранилище root/admin-ключей. Минимально достаточный
 первый rollout — один exact-version sing-box, nginx для WS-front и два доказуемых
 канала: **VLESS/WS** и **HY2 direct 8444**. REALITY добавляется отдельным stage
@@ -18,16 +18,26 @@ Prometheus/Grafana или собственный control plane.
 
 ## 1. Текущее состояние и реальные расхождения
 
+Исходный source-срез — 28 октября. Покупка и настройка нового узла сообщены
+оператором позднее; их ограничения разобраны в [плане ПК](../PC-PLAN.md).
+Android-сборка и узкая проверка интерфейса датированы 30 октября; последующий
+частичный JNI-срез — 4 ноября — `docs/android/NATIVE-CONFORMANCE-2026-11-04.md`.
+Эти результаты не доказывают совместимость серверной пары или защищённый путь.
+
 | Область | Фактическое состояние | Практическое решение |
 |---|---|---|
-| VPS | `PLAN` и `STATE`: VPS не оплачен; сентябрьский `INFRASTRUCTURE.md` — исторический live-срез | Новый узел считать отсутствующим до отдельной покупки и current receipt. Не наследовать IP/health/listeners |
+| VPS | Новый VPS куплен по сообщению владельца; настройка/CDN сообщены оператором. Сентябрьский `INFRASTRUCTURE.md` описывает другой исторический срез | Нужен current receipt точного узла и каждого пути. Не наследовать IP/health/listeners или считать операторский отчёт независимой приёмкой |
 | Server template | `server-combined.json` содержит только WS+HY2; WS loopback8443 | Не применять как production copy. Первый full render фиксирует edge443→nginx→loopback9443 и HY2:8444 |
 | Client demands | descriptors: WS443, HY28444+hopping, REALITY8443, ShadowTLS8445 | Compatibility manifest перечисляет enabled server capabilities. Отсутствующий channel остаётся disabled/configured, не `live-verified` |
 | Deploy | `deploy-vps.sh` рендерит secrets через `sed`, затем `scp` прямо в active path; `scp` получает SSH `-p`, хотя порт у scp — `-P` | OFF-09 change required: structured SSH/SCP argv, safe JSON rendering, stage/check/backup/atomic apply/rollback |
 | Restart | намеренно ручной; config check выполняется уже после overwrite active file | Сохранить explicit activation, но validation выполнять над staging до замены active path |
 | Verify | service/config/final/listeners + `/ip`; `/range` и firewall частично WARN | Разделить structural/activation/path gates; WARN не promoted в Ready. Версия binary и template hash должны входить в receipt |
 | Release/profile publisher | Windows tooling уже имеет bounded publisher backup/restore source | Не размещать private publisher/root/signing/admin keys на VPS. Server-config backup и publisher backup — разные процедуры |
-| Android | source candidate v1.13.19, approved AAR отсутствует | Server receipt schema можно переиспользовать; Android runtime compatibility остаётся отдельным gate |
+| Android | Whole core v1.13.19/sourceRevision4 и точный debug AAR одобрены 30 октября; APK и ограниченная UI-проверка выполнены. Protected path не принят | Server receipt schema можно переиспользовать; exact artifact/profile и Android runtime compatibility остаются отдельными gates |
+
+В публичном baseline `route.rules[0]` содержит безусловный `hijack-dns`.
+Оператор сообщил об удалении этого правила на VPS; репозиторный шаблон и
+развёрнутая копия не считаются синхронизированными без точного receipt.
 
 `route.final=direct` на сервере и запрет `direct` в protected client selector —
 разные роли и должны сохраняться одновременно.
@@ -272,7 +282,9 @@ HTTP publication не равен client acceptance. Drill сначала на л
 - Не считать оплату, открытый порт, active service, `sing-box check` или HTTP200
   взаимозаменяемыми доказательствами health.
 
-## 8. Остаток и передача владельцам
+<a id="8-остаток-и-передача-владельцам"></a>
+
+## 8. Остаток и ответственность компонентов
 
 | Deliverable | Existing owner / ID | Статус после этого crosscheck |
 |---|---|---|

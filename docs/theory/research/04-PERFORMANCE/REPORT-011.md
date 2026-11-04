@@ -202,7 +202,8 @@ Privacy: collect local redacted counters and manual export only; no domains,
 credentials, app inventory or traffic content. ODPM device-level noise and
 censoring/missing outcomes are retained, not imputed to zero.
 
-## 9. Выводы для руководителя
+<a id="9-выводы-для-руководителя"></a>
+## 9. Выводы для разработки
 
 ### R04-011-A — OS power-mode contract
 
@@ -226,7 +227,8 @@ pause/wake integration, but pinned PauseManager does not establish HY2/quic-go
 timer suppression; direct HY2 registration was not found in named source scope.
 Reference/adapt, not copy/drop-in.
 
-## 10. Предлагаемая вставка в общую теорию (руководитель решает)
+<a id="10-предлагаемая-вставка-в-общую-теорию-руководитель-решает"></a>
+## 10. Предлагаемый вывод для общей теории
 
 > Android VPN foreground service, App Standby active status, Doze network
 > allowance, power allowlist and Low Power Standby are separate contracts. In

@@ -284,8 +284,7 @@ fixtures/tests. Текущее workstation/профиль пользовател
 
 ## 8. Предлагаемая вставка и остаток
 
-Адресат — руководитель, тематическая Android-глава и UX/Windows safety crosswalk;
-вставка не выполнена:
+Предлагаемое уточнение Android-главы и UX/Windows safety crosswalk:
 
 > Capture set, always-on owner, lockdown exception set и фактический egress —
 > разные объекты. Полномочия обычного VPN-provider ограничены его user/profile

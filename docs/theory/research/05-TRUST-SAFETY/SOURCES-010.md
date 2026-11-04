@@ -173,10 +173,11 @@ SDK-owned state, known prior acceptance/context и strict final predicate.
 Это **derived certificate**, не публичный upstream receipt, не криптография,
 не допуск артефакта и не platform durability proof.
 
-### Закрытие после cutoff — 28 октября2026
+<a id="закрытие-после-cutoff--28-октября2026"></a>
+### Границы source-среза 27–28 октября 2026
 
-Итоговый `fup-7-02/review.json` оформлен **28 октября 2026 после исследовательского
-среза**. Сдача D и source-drift проверка до исходного cutoff **не подтверждены**;
+Итоговый `fup-7-02/review.json` оформлен **28 октября 2026**. Актуальность
+исходников на момент итогового оформления **не подтверждена**;
 связанные excerpts о snapshot стадиях не включены в D.
 
 `fup-7-02/review.json` фиксирует только post-cutoff own output hashes, local-file
