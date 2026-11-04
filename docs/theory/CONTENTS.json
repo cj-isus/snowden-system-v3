@@ -1,0 +1,1583 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-26",
+  "source": "docs/CENSORSHIP-THEORY.md",
+  "sourceArchive": "docs/theory/archive/CENSORSHIP-THEORY-before-split-2026-10-26.md",
+  "sourceBytes": 319169,
+  "sourceSha256": "a70114d7bef534c348e0e0c5296721cab7d781f2fe7057979406235564c37ad7",
+  "coverage": [
+    {
+      "id": "overview",
+      "title": "Исходная постановка",
+      "sourceStart": 0,
+      "sourceEnd": 1208,
+      "sourceSha256": "22ea9692553caae1f30cc60d64e4c9f44b14a471b685aed3483a2e1ac309031c",
+      "file": "docs/theory/OVERVIEW.md",
+      "anchor": "source-overview",
+      "bodySha256": "43d7a523f33715d7ff3dce6097f15863efe6001d1138632ca587868a63bb2ca8"
+    },
+    {
+      "id": "0",
+      "title": "0. Инженерная поправка 2026-10-19",
+      "sourceStart": 1208,
+      "sourceEnd": 3799,
+      "sourceSha256": "fdde159bd352e27c1da6a9517d5e8b1a4015f2907a9cd7bcfc0acd81efedb1df",
+      "file": "docs/theory/foundations/THREAT-MODEL.md",
+      "anchor": "source-0",
+      "bodySha256": "fdde159bd352e27c1da6a9517d5e8b1a4015f2907a9cd7bcfc0acd81efedb1df"
+    },
+    {
+      "id": "1",
+      "title": "1. Модель цензуры: слои атаки",
+      "sourceStart": 3799,
+      "sourceEnd": 5079,
+      "sourceSha256": "cecec5941d9e6bc826d259d329bec1e3c472794eb753fe1377ddff9c01ff2d3c",
+      "file": "docs/theory/foundations/THREAT-MODEL.md",
+      "anchor": "source-1",
+      "bodySha256": "cecec5941d9e6bc826d259d329bec1e3c472794eb753fe1377ddff9c01ff2d3c"
+    },
+    {
+      "id": "2.8",
+      "title": "2.8. ТСПУ: что известно о самой машине",
+      "sourceStart": 14707,
+      "sourceEnd": 19087,
+      "sourceSha256": "3b56968e634ddb248f913bca0b86ff79b906de85c4947c0994c8b57bf6404190",
+      "file": "docs/theory/foundations/THREAT-MODEL.md",
+      "anchor": "source-2-8",
+      "bodySha256": "3b56968e634ddb248f913bca0b86ff79b906de85c4947c0994c8b57bf6404190"
+    },
+    {
+      "id": "2.9",
+      "title": "2.9. Как операторы мешают VPN: каталог методов с фактчекингом",
+      "sourceStart": 19087,
+      "sourceEnd": 26661,
+      "sourceSha256": "873aab1c59b1f141c38d6437f8d2419f4fbf5f1c2891f4739bb6dd84db33b214",
+      "file": "docs/theory/foundations/THREAT-MODEL.md",
+      "anchor": "source-2-9",
+      "bodySha256": "873aab1c59b1f141c38d6437f8d2419f4fbf5f1c2891f4739bb6dd84db33b214"
+    },
+    {
+      "id": "7",
+      "title": "7. Строгая модель: что именно мы оптимизируем",
+      "sourceStart": 52970,
+      "sourceEnd": 53020,
+      "sourceSha256": "1f13e2ca0bbd91f13460bf9dac623f2a9cf9e2a258aef4d8f9a91283f1c0a7d3",
+      "file": "docs/theory/foundations/THREAT-MODEL.md",
+      "anchor": "source-7",
+      "bodySha256": "1f13e2ca0bbd91f13460bf9dac623f2a9cf9e2a258aef4d8f9a91283f1c0a7d3"
+    },
+    {
+      "id": "7.1",
+      "title": "7.1. Противник, доверие и предел обещаний",
+      "sourceStart": 53020,
+      "sourceEnd": 54877,
+      "sourceSha256": "eb5623eabc00ea5479089f997b1910ce6f5084e353e79d0f20e9fac077c79f1f",
+      "file": "docs/theory/foundations/THREAT-MODEL.md",
+      "anchor": "source-7-1",
+      "bodySha256": "eb5623eabc00ea5479089f997b1910ce6f5084e353e79d0f20e9fac077c79f1f"
+    },
+    {
+      "id": "7.2",
+      "title": "7.2. Поверхность наблюдения и экономическая модель",
+      "sourceStart": 54877,
+      "sourceEnd": 56391,
+      "sourceSha256": "32ae4dc29be252ee79f65b3fd161ef6b97ce7e9d1cf38c9fe352c1927a2ad003",
+      "file": "docs/theory/foundations/THREAT-MODEL.md",
+      "anchor": "source-7-2",
+      "bodySha256": "32ae4dc29be252ee79f65b3fd161ef6b97ce7e9d1cf38c9fe352c1927a2ad003"
+    },
+    {
+      "id": "7.3",
+      "title": "7.3. Независимость — граф, а не число протоколов",
+      "sourceStart": 56391,
+      "sourceEnd": 57811,
+      "sourceSha256": "b44a4388dd4d98e8a4cec579d05f205cfdc022b0e922c3a6a9baf896a8308981",
+      "file": "docs/theory/foundations/THREAT-MODEL.md",
+      "anchor": "source-7-3",
+      "bodySha256": "b44a4388dd4d98e8a4cec579d05f205cfdc022b0e922c3a6a9baf896a8308981"
+    },
+    {
+      "id": "2",
+      "title": "2. Слой за слоем: механизмы и контрмеры",
+      "sourceStart": 5079,
+      "sourceEnd": 5123,
+      "sourceSha256": "95e2fd404b8a76fdf9ace3cc97b5eb165bc8da133074e6491659be621e74707e",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2",
+      "bodySha256": "95e2fd404b8a76fdf9ace3cc97b5eb165bc8da133074e6491659be621e74707e"
+    },
+    {
+      "id": "2.1",
+      "title": "2.1. DNS (L1)",
+      "sourceStart": 5123,
+      "sourceEnd": 6145,
+      "sourceSha256": "510c0084c8746b8cef03d961ca1083b25e261fe6a0b44753c2bb1221ba0a5866",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-1",
+      "bodySha256": "510c0084c8746b8cef03d961ca1083b25e261fe6a0b44753c2bb1221ba0a5866"
+    },
+    {
+      "id": "2.2",
+      "title": "2.2. IP/ASN/CDN (L2)",
+      "sourceStart": 6145,
+      "sourceEnd": 6870,
+      "sourceSha256": "fd1fcbbf5c0d6bedafd7b7e9908aef5e52e0bc8a4093b011ff2f9f16eca141ce",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-2",
+      "bodySha256": "fd1fcbbf5c0d6bedafd7b7e9908aef5e52e0bc8a4093b011ff2f9f16eca141ce"
+    },
+    {
+      "id": "2.3",
+      "title": "2.3. HTTP/TLS/SNI (L3)",
+      "sourceStart": 6870,
+      "sourceEnd": 8174,
+      "sourceSha256": "f0a8d15995159be859106fbb6571d02825b8522abd47ea6b4afc5e637d804c5c",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-3",
+      "bodySha256": "f0a8d15995159be859106fbb6571d02825b8522abd47ea6b4afc5e637d804c5c"
+    },
+    {
+      "id": "2.4",
+      "title": "2.4. DPI/протокольный fingerprint (L4)",
+      "sourceStart": 8174,
+      "sourceEnd": 12824,
+      "sourceSha256": "a3ba55e147fc23ad23da96ef75b90dc87af8968a1e64efb0d531fda9d8e78fd8",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-4",
+      "bodySha256": "a3ba55e147fc23ad23da96ef75b90dc87af8968a1e64efb0d531fda9d8e78fd8"
+    },
+    {
+      "id": "2.5",
+      "title": "2.5. QUIC/UDP (L1.5)",
+      "sourceStart": 12824,
+      "sourceEnd": 13576,
+      "sourceSha256": "3dafcd1228aab0129efade8e12fb41452b25604c76290776ca36d78e38767bf9",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-5",
+      "bodySha256": "3dafcd1228aab0129efade8e12fb41452b25604c76290776ca36d78e38767bf9"
+    },
+    {
+      "id": "2.6",
+      "title": "2.6. Throttling (L5)",
+      "sourceStart": 13576,
+      "sourceEnd": 13808,
+      "sourceSha256": "3ed75bd30d9b8d002f80c9b93ea85b273adfce0f4e761d5f06019a4bebdf37c7",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-6",
+      "bodySha256": "3ed75bd30d9b8d002f80c9b93ea85b273adfce0f4e761d5f06019a4bebdf37c7"
+    },
+    {
+      "id": "2.7",
+      "title": "2.7. Allowlist и shutdown (L6/L7)",
+      "sourceStart": 13808,
+      "sourceEnd": 14707,
+      "sourceSha256": "9efbb02795419ea170a42f58a43e0ed904a481542036da31aac5581650f5db5e",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-7",
+      "bodySha256": "9efbb02795419ea170a42f58a43e0ed904a481542036da31aac5581650f5db5e"
+    },
+    {
+      "id": "2.10",
+      "title": "2.10. Контрмеры: как противостоять каждой механике ТСПУ",
+      "sourceStart": 26661,
+      "sourceEnd": 37233,
+      "sourceSha256": "61c71ca4aa50ae48be3e47945a69192645680bc4ae1f84d30b11e67bce2b5faf",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-10",
+      "bodySha256": "61c71ca4aa50ae48be3e47945a69192645680bc4ae1f84d30b11e67bce2b5faf"
+    },
+    {
+      "id": "2.11",
+      "title": "2.11. Дополнение из стороннего AI-обзора (GPT-5): что принято, что опровергнуто",
+      "sourceStart": 37233,
+      "sourceEnd": 42008,
+      "sourceSha256": "7427af469d72274c423b97ba4114e2bfd7adb202e77ec0cbac81809e10e3e6f3",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "source-2-11",
+      "bodySha256": "7427af469d72274c423b97ba4114e2bfd7adb202e77ec0cbac81809e10e3e6f3"
+    },
+    {
+      "id": "3",
+      "title": "3. Архитектурные принципы защищённого клиента (выводы из практики)",
+      "sourceStart": 42008,
+      "sourceEnd": 45516,
+      "sourceSha256": "ec4f1828af9925f0eb179a18f4b2b0634559edca8d7fb652d232d3ce469630fa",
+      "file": "docs/theory/architecture/SAFETY-AND-TRUST.md",
+      "anchor": "source-3",
+      "bodySha256": "ec4f1828af9925f0eb179a18f4b2b0634559edca8d7fb652d232d3ce469630fa"
+    },
+    {
+      "id": "7.4",
+      "title": "7.4. Что в коде сейчас, а что ещё целевой контракт",
+      "sourceStart": 57811,
+      "sourceEnd": 59643,
+      "sourceSha256": "8cebf2d51034918a623223d1712585777f48ba56896bd7cdc695f08ca30d4404",
+      "file": "docs/theory/architecture/SAFETY-AND-TRUST.md",
+      "anchor": "source-7-4",
+      "bodySha256": "aae8e0672d80e7cb8eba8b77fa0b5ab3c6f4683ebda97cc84322383941295379"
+    },
+    {
+      "id": "7.5",
+      "title": "7.5. Control plane, ключи и автономность",
+      "sourceStart": 59643,
+      "sourceEnd": 60990,
+      "sourceSha256": "5ec8e5b5854b12a84368f5f2f6cb5cf4ba9a6f04c2f1ae21083de2fccc5449af",
+      "file": "docs/theory/architecture/SAFETY-AND-TRUST.md",
+      "anchor": "source-7-5",
+      "bodySha256": "5ec8e5b5854b12a84368f5f2f6cb5cf4ba9a6f04c2f1ae21083de2fccc5449af"
+    },
+    {
+      "id": "13.9",
+      "title": "13.9. Windows: барьер, существующие потоки и время",
+      "sourceStart": 127631,
+      "sourceEnd": 129191,
+      "sourceSha256": "7bc11f6114bbc3f995bd811d06525515cd0333ecaf85f61702a32496d777b4a0",
+      "file": "docs/theory/architecture/SAFETY-AND-TRUST.md",
+      "anchor": "source-13-9",
+      "bodySha256": "7bc11f6114bbc3f995bd811d06525515cd0333ecaf85f61702a32496d777b4a0"
+    },
+    {
+      "id": "15.3",
+      "title": "15.3. Trust, эксплуатация и повседневный UX: окончательные решения",
+      "sourceStart": 157440,
+      "sourceEnd": 161887,
+      "sourceSha256": "10c97553f06377270e8257cc3f10b71b0893eb3c60faf6701ef90130642e8f5c",
+      "file": "docs/theory/architecture/SAFETY-AND-TRUST.md",
+      "anchor": "source-15-3",
+      "bodySha256": "10c97553f06377270e8257cc3f10b71b0893eb3c60faf6701ef90130642e8f5c"
+    },
+    {
+      "id": "16.3",
+      "title": "16.3. OP-03 — portable TUF: конфигурацией diskless режим не получить",
+      "sourceStart": 194057,
+      "sourceEnd": 197879,
+      "sourceSha256": "8749da9fc42daf96d165a66405b18aaf0b1f462dfa187b323d204e176203a85e",
+      "file": "docs/theory/architecture/SAFETY-AND-TRUST.md",
+      "anchor": "source-16-3",
+      "bodySha256": "8749da9fc42daf96d165a66405b18aaf0b1f462dfa187b323d204e176203a85e"
+    },
+    {
+      "id": "16.6",
+      "title": "16.6. OP-06 — first policy SHA и custody нельзя получить из того же пакета",
+      "sourceStart": 201004,
+      "sourceEnd": 202748,
+      "sourceSha256": "74ae1f8340cf3de4bfe34b645df839ce41d7225c01a2bd09cee3ab6968fb818c",
+      "file": "docs/theory/architecture/SAFETY-AND-TRUST.md",
+      "anchor": "source-16-6",
+      "bodySha256": "74ae1f8340cf3de4bfe34b645df839ce41d7225c01a2bd09cee3ab6968fb818c"
+    },
+    {
+      "id": "8",
+      "title": "8. Адаптация при неполных и меняющихся данных",
+      "sourceStart": 60990,
+      "sourceEnd": 61040,
+      "sourceSha256": "b487ccc328b7d70ded2e6edf4267524b12916eb361f1c9f29887fe50d84a3267",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-8",
+      "bodySha256": "b487ccc328b7d70ded2e6edf4267524b12916eb361f1c9f29887fe50d84a3267"
+    },
+    {
+      "id": "8.1",
+      "title": "8.1. Состояние и наблюдения",
+      "sourceStart": 61040,
+      "sourceEnd": 62144,
+      "sourceSha256": "273f657626c3232387dd74dc2ed28c60d5a5f67358148c99b97e7e228661a37b",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-8-1",
+      "bodySha256": "273f657626c3232387dd74dc2ed28c60d5a5f67358148c99b97e7e228661a37b"
+    },
+    {
+      "id": "8.2",
+      "title": "8.2. Правило решения и защитные инварианты",
+      "sourceStart": 62144,
+      "sourceEnd": 63313,
+      "sourceSha256": "426daf7f82d96263ebbcda4996eefd54052efdbdc9286351b0f7a1bd57aaea91",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-8-2",
+      "bodySha256": "426daf7f82d96263ebbcda4996eefd54052efdbdc9286351b0f7a1bd57aaea91"
+    },
+    {
+      "id": "8.3",
+      "title": "8.3. Колебания, бюджет и обучение",
+      "sourceStart": 63313,
+      "sourceEnd": 64506,
+      "sourceSha256": "5b3c43fc77e3593aab61ecd3bbb159b35b87b2a37a537e9ee783a7f0c03a903d",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-8-3",
+      "bodySha256": "5b3c43fc77e3593aab61ecd3bbb159b35b87b2a37a537e9ee783a7f0c03a903d"
+    },
+    {
+      "id": "13.6",
+      "title": "13.6. Управление восстановлением без самоперегрузки",
+      "sourceStart": 121615,
+      "sourceEnd": 123510,
+      "sourceSha256": "3f6de06c9c0db2ea6a8759af1d1e3a315c8af0b493f20d4092e9e3863ba277c3",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-13-6",
+      "bodySha256": "3f6de06c9c0db2ea6a8759af1d1e3a315c8af0b493f20d4092e9e3863ba277c3"
+    },
+    {
+      "id": "17",
+      "title": "17. Адаптация под неопределённостью: доказательства, причинность и цена решения",
+      "sourceStart": 203717,
+      "sourceEnd": 204302,
+      "sourceSha256": "f023a00a45eceb3244852eac9c1c7c21a92e6a725f177084ba26f4871da00a5b",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17",
+      "bodySha256": "4317e7ba49790bc8bfb05e6b0ffb328dc875004360190aab4189351f2a28a0a9"
+    },
+    {
+      "id": "17.1",
+      "title": "17.1. AD-01 — пригодность определяется набором доказательств, не числом health",
+      "sourceStart": 204302,
+      "sourceEnd": 206259,
+      "sourceSha256": "e4e4419a40314f9cfdd1ec7a0175d7c15420e5d7228fe325dc3b8a2a697d670c",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17-1",
+      "bodySha256": "e4e4419a40314f9cfdd1ec7a0175d7c15420e5d7228fe325dc3b8a2a697d670c"
+    },
+    {
+      "id": "17.2",
+      "title": "17.2. AD-02 — текущие четыре score-компонента дают меньше информации, чем кажется",
+      "sourceStart": 206259,
+      "sourceEnd": 208046,
+      "sourceSha256": "e06898885002eb5c9a0e4b2605f176f2cee1e090008c4c13cc11eee1d448f470",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17-2",
+      "bodySha256": "e06898885002eb5c9a0e4b2605f176f2cee1e090008c4c13cc11eee1d448f470"
+    },
+    {
+      "id": "17.3",
+      "title": "17.3. AD-03 — диагностировать нужно и сам измеритель",
+      "sourceStart": 208046,
+      "sourceEnd": 210568,
+      "sourceSha256": "c775727c8e5ce514287e3edbe39342d4a35140bc7afa5b4f7cfd0cf045896efc",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17-3",
+      "bodySha256": "c775727c8e5ce514287e3edbe39342d4a35140bc7afa5b4f7cfd0cf045896efc"
+    },
+    {
+      "id": "17.4",
+      "title": "17.4. AD-04 — сначала определить измеряемую цель и missing outcomes",
+      "sourceStart": 210568,
+      "sourceEnd": 213229,
+      "sourceSha256": "e1bf55be63497d8ee73ba82094494d6e766c3c505cbcbcf8bf7766c396078ae7",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17-4",
+      "bodySha256": "e1bf55be63497d8ee73ba82094494d6e766c3c505cbcbcf8bf7766c396078ae7"
+    },
+    {
+      "id": "17.5",
+      "title": "17.5. AD-05 — повторный просмотр результатов требует отдельной статистики",
+      "sourceStart": 213229,
+      "sourceEnd": 215579,
+      "sourceSha256": "02868f6b0d9ad75ccd4e9b0ca8a486793c392e31169b0ef8a9952a43591b67ce",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17-5",
+      "bodySha256": "02868f6b0d9ad75ccd4e9b0ca8a486793c392e31169b0ef8a9952a43591b67ce"
+    },
+    {
+      "id": "17.6",
+      "title": "17.6. AD-06 — безопасная адаптация: область допустимого раньше оптимизации",
+      "sourceStart": 215579,
+      "sourceEnd": 218541,
+      "sourceSha256": "9eeb9d0f0641e5dc8a86b746d3ea9d12e4447ddd4c18fb127e4658e9bd66a0a6",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17-6",
+      "bodySha256": "9eeb9d0f0641e5dc8a86b746d3ea9d12e4447ddd4c18fb127e4658e9bd66a0a6"
+    },
+    {
+      "id": "17.7",
+      "title": "17.7. Что готового действительно использовать",
+      "sourceStart": 218541,
+      "sourceEnd": 220028,
+      "sourceSha256": "20e6633bf79f550c404a8b333f7b176b79d8346ba2e95cea98c91af90adb8e21",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17-7",
+      "bodySha256": "20e6633bf79f550c404a8b333f7b176b79d8346ba2e95cea98c91af90adb8e21"
+    },
+    {
+      "id": "17.8",
+      "title": "17.8. Структурированный следующий этап",
+      "sourceStart": 220028,
+      "sourceEnd": 221293,
+      "sourceSha256": "f9627a5eb9f1bef860864871403a241d21d05d75da4725fdd3e749e9820fd788",
+      "file": "docs/theory/adaptation/POLICY-AND-EVIDENCE.md",
+      "anchor": "source-17-8",
+      "bodySha256": "f9627a5eb9f1bef860864871403a241d21d05d75da4725fdd3e749e9820fd788"
+    },
+    {
+      "id": "9",
+      "title": "9. Скорость: физические ограничения и полезные оптимизации",
+      "sourceStart": 64506,
+      "sourceEnd": 64569,
+      "sourceSha256": "a6024d0975220dc595dac8d1370b20399131f7fee6a3a33aced50e643fdadfd7",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-9",
+      "bodySha256": "a6024d0975220dc595dac8d1370b20399131f7fee6a3a33aced50e643fdadfd7"
+    },
+    {
+      "id": "9.1",
+      "title": "9.1. Модель затрат",
+      "sourceStart": 64569,
+      "sourceEnd": 65698,
+      "sourceSha256": "23f01f94f6695793d69a84f3e59db1603ac9fb444df4d3117f43f80447daf8eb",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-9-1",
+      "bodySha256": "23f01f94f6695793d69a84f3e59db1603ac9fb444df4d3117f43f80447daf8eb"
+    },
+    {
+      "id": "9.2",
+      "title": "9.2. Где искать выигрыш",
+      "sourceStart": 65698,
+      "sourceEnd": 67541,
+      "sourceSha256": "4098dcbf0194863a919c42d50ac289243708087f5fd55071ee40652f7d5bbeb2",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-9-2",
+      "bodySha256": "4098dcbf0194863a919c42d50ac289243708087f5fd55071ee40652f7d5bbeb2"
+    },
+    {
+      "id": "9.3",
+      "title": "9.3. Что разумно заимствовать и когда",
+      "sourceStart": 67541,
+      "sourceEnd": 69923,
+      "sourceSha256": "45cfdb28278e199f308a53a47334cb4e4a61c7137ac725118151d3ea20f1d57b",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-9-3",
+      "bodySha256": "45cfdb28278e199f308a53a47334cb4e4a61c7137ac725118151d3ea20f1d57b"
+    },
+    {
+      "id": "13",
+      "title": "13. Надёжность и полезная скорость: детали обеих платформ",
+      "sourceStart": 109439,
+      "sourceEnd": 110061,
+      "sourceSha256": "2955b7079430ef4d9cab9c914ec13d3b1b0a487af27e61b176f30fdd797fe2b6",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-13",
+      "bodySha256": "4cb4396197c6ae84fcf6f34d42bf863a8ab6ca4eab729724ddf57cf049080599"
+    },
+    {
+      "id": "13.1",
+      "title": "13.1. Что означает «быстрее и стабильнее»",
+      "sourceStart": 110061,
+      "sourceEnd": 111002,
+      "sourceSha256": "b8a20da0be8913a321108b522f7262ac161c1a43ff24800d9b9557b9044d4db4",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-13-1",
+      "bodySha256": "b8a20da0be8913a321108b522f7262ac161c1a43ff24800d9b9557b9044d4db4"
+    },
+    {
+      "id": "13.2",
+      "title": "13.2. Закреплённый код важнее названия оптимизации",
+      "sourceStart": 111002,
+      "sourceEnd": 114522,
+      "sourceSha256": "a4a4be80cdc7507ccb0cb14ddd698cbd0c09529820adbb217d688f1dad63e473",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-13-2",
+      "bodySha256": "a4a4be80cdc7507ccb0cb14ddd698cbd0c09529820adbb217d688f1dad63e473"
+    },
+    {
+      "id": "13.3",
+      "title": "13.3. PMTU, IPv6, фрагментация и offload",
+      "sourceStart": 114522,
+      "sourceEnd": 116606,
+      "sourceSha256": "02a95cde2da24075ae9a3428939a32c44b598f8db2b1e876be1703ccd112e318",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-13-3",
+      "bodySha256": "02a95cde2da24075ae9a3428939a32c44b598f8db2b1e876be1703ccd112e318"
+    },
+    {
+      "id": "13.4",
+      "title": "13.4. Окна, congestion control, очереди и мультиплексирование",
+      "sourceStart": 116606,
+      "sourceEnd": 118742,
+      "sourceSha256": "132d163276e65151ecebf204a3b0672318522f18b6e7dcf3731ec686dfeea89d",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-13-4",
+      "bodySha256": "132d163276e65151ecebf204a3b0672318522f18b6e7dcf3731ec686dfeea89d"
+    },
+    {
+      "id": "13.10",
+      "title": "13.10. Память, маленький VPS и операционная устойчивость",
+      "sourceStart": 129191,
+      "sourceEnd": 131268,
+      "sourceSha256": "2ce5fa8e65692b33914729cf7785f83becd0821487ca6389122b32c50a9470f4",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-13-10",
+      "bodySha256": "2ce5fa8e65692b33914729cf7785f83becd0821487ca6389122b32c50a9470f4"
+    },
+    {
+      "id": "14",
+      "title": "14. Реальный путь пакета и восстановление: уточнение RQ-01/02",
+      "sourceStart": 138354,
+      "sourceEnd": 138905,
+      "sourceSha256": "0d0c206943149cbe2e67f48f349c5a3e6f64720ecbbdfaa7089cac8c49cdd5d4",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-14",
+      "bodySha256": "0e0f79a18254a61cf749478a71efb6843458e6939f3e98466fc3897ec0a78884"
+    },
+    {
+      "id": "14.1",
+      "title": "14.1. Уточнение Salamander: дефект выражения и вызываемый метод",
+      "sourceStart": 138905,
+      "sourceEnd": 140584,
+      "sourceSha256": "9081f846f1e75e0c04d296c45ed214c536ddce5d64c4c1eebb6273ae147b4e24",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-14-1",
+      "bodySha256": "9081f846f1e75e0c04d296c45ed214c536ddce5d64c4c1eebb6273ae147b4e24"
+    },
+    {
+      "id": "14.2",
+      "title": "14.2. Готовая QUIC-миграция есть ниже публичного HY2 API",
+      "sourceStart": 140584,
+      "sourceEnd": 142686,
+      "sourceSha256": "97b5e3ec28aaae9c57a4b612ba5d6ecb29a953ae768c41c7dadca74e1f22ff2e",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-14-2",
+      "bodySha256": "97b5e3ec28aaae9c57a4b612ba5d6ecb29a953ae768c41c7dadca74e1f22ff2e"
+    },
+    {
+      "id": "14.3",
+      "title": "14.3. PMTU: declared capability не равно наблюдаемому свойству сокета",
+      "sourceStart": 142686,
+      "sourceEnd": 143626,
+      "sourceSha256": "b52984be7a5fd9aa9d21be9a7dbe0703aebf4e5df69b16a5d7f9f55ce33e93a8",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-14-3",
+      "bodySha256": "b52984be7a5fd9aa9d21be9a7dbe0703aebf4e5df69b16a5d7f9f55ce33e93a8"
+    },
+    {
+      "id": "14.4",
+      "title": "14.4. UDP очередь ограничена по count, но запись может ждать",
+      "sourceStart": 143626,
+      "sourceEnd": 144788,
+      "sourceSha256": "d18bf012a81c67aa62d39d9dba084280ab05aebf4579ceb4c5b579f4392b35aa",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-14-4",
+      "bodySha256": "d18bf012a81c67aa62d39d9dba084280ab05aebf4579ceb4c5b579f4392b35aa"
+    },
+    {
+      "id": "14.5",
+      "title": "14.5. Таймер ядра, admission и полезное восстановление",
+      "sourceStart": 144788,
+      "sourceEnd": 146661,
+      "sourceSha256": "b3d4bbaea67ef161098b8a19d416c465f44ca9306acf2416a257346853cd92a9",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-14-5",
+      "bodySha256": "b3d4bbaea67ef161098b8a19d416c465f44ca9306acf2416a257346853cd92a9"
+    },
+    {
+      "id": "14.6",
+      "title": "14.6. Что переносить и в каком порядке",
+      "sourceStart": 146661,
+      "sourceEnd": 147484,
+      "sourceSha256": "6650871ba8a4ae968f41df3021871c710483ce30e0d01fb17c644fb45bf1b24a",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-14-6",
+      "bodySha256": "6650871ba8a4ae968f41df3021871c710483ce30e0d01fb17c644fb45bf1b24a"
+    },
+    {
+      "id": "14.7",
+      "title": "14.7. Первичные документы",
+      "sourceStart": 147484,
+      "sourceEnd": 148075,
+      "sourceSha256": "0283b224031fb9233243658481c6d652c553487e38efaf67ec4a9bbdd9aa129f",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-14-7",
+      "bodySha256": "0283b224031fb9233243658481c6d652c553487e38efaf67ec4a9bbdd9aa129f"
+    },
+    {
+      "id": "18",
+      "title": "18. Рецензированный вывод: cache eviction и время жизни заимствованного сообщения",
+      "sourceStart": 221293,
+      "sourceEnd": 221723,
+      "sourceSha256": "7e58b67a3c0be1c8fd6b15b0addadda2782cd3a74447be970d72b542cd8ac9ae",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-18",
+      "bodySha256": "83e6f681ad14839969c0376af493b97ef5558970291fbee47fa585bf9bb394c1"
+    },
+    {
+      "id": "18.1",
+      "title": "18.1. Что проверено",
+      "sourceStart": 221723,
+      "sourceEnd": 223262,
+      "sourceSha256": "142d6f6bb61ade8f0a54b52b4c8c77ab51e4862db3441ee4ec59ef81bca069a7",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-18-1",
+      "bodySha256": "142d6f6bb61ade8f0a54b52b4c8c77ab51e4862db3441ee4ec59ef81bca069a7"
+    },
+    {
+      "id": "18.2",
+      "title": "18.2. Следствие для ограничений ресурсов",
+      "sourceStart": 223262,
+      "sourceEnd": 224285,
+      "sourceSha256": "6042323cdb1d1f406d29939cd346780ae29edb8bc7d9c95d35cfee9e3281d50d",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-18-2",
+      "bodySha256": "6042323cdb1d1f406d29939cd346780ae29edb8bc7d9c95d35cfee9e3281d50d"
+    },
+    {
+      "id": "18.3",
+      "title": "18.3. Передача в разработку и предел знания",
+      "sourceStart": 224285,
+      "sourceEnd": 224799,
+      "sourceSha256": "b2d28c61bdd92bce2d470c9acf715ea3662b20efa313a6636925b67de50af66c",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "source-18-3",
+      "bodySha256": "b2d28c61bdd92bce2d470c9acf715ea3662b20efa313a6636925b67de50af66c"
+    },
+    {
+      "id": "12",
+      "title": "12. Android: пределы защиты, мобильная адаптация и повседневный UX",
+      "sourceStart": 81797,
+      "sourceEnd": 82387,
+      "sourceSha256": "f04784c27d4157c10a8f57e3cf8771216c85dfcfa6a023fcbb2dcc771c9e3358",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12",
+      "bodySha256": "c059b95c42ffff9458bda6561c180a489102bad29467feacb9d7c1aec659ef86"
+    },
+    {
+      "id": "12.1",
+      "title": "12.1. Модель защиты и ограничения платформы",
+      "sourceStart": 82387,
+      "sourceEnd": 84259,
+      "sourceSha256": "ab14c2ed7ec62e5b57f6bb03bade536871800d389f0f22fc40536e12b077ee60",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-1",
+      "bodySha256": "ab14c2ed7ec62e5b57f6bb03bade536871800d389f0f22fc40536e12b077ee60"
+    },
+    {
+      "id": "12.2",
+      "title": "12.2. Владение VpnService, native-ядром и доказательством готовности",
+      "sourceStart": 84259,
+      "sourceEnd": 86455,
+      "sourceSha256": "6c87e0c9358dce2954349def570ee1cc132ab472476913199fdba6128ab364d3",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-2",
+      "bodySha256": "6c87e0c9358dce2954349def570ee1cc132ab472476913199fdba6128ab364d3"
+    },
+    {
+      "id": "12.3",
+      "title": "12.3. Смена Wi-Fi/LTE, DNS и область правил",
+      "sourceStart": 86455,
+      "sourceEnd": 88892,
+      "sourceSha256": "6cf7f96efcdac7be61762faaf39d8259b661006d901ad9c4fdb82c215c2027b0",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-3",
+      "bodySha256": "6cf7f96efcdac7be61762faaf39d8259b661006d901ad9c4fdb82c215c2027b0"
+    },
+    {
+      "id": "12.4",
+      "title": "12.4. Российские блокировки: наблюдения → альтернативы → ограничения",
+      "sourceStart": 88892,
+      "sourceEnd": 91783,
+      "sourceSha256": "f07624eabaf8cdc691f5b2ba08a862f52ddd5df6274487c721c0164690083904",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-4",
+      "bodySha256": "f07624eabaf8cdc691f5b2ba08a862f52ddd5df6274487c721c0164690083904"
+    },
+    {
+      "id": "12.5",
+      "title": "12.5. Доверие, офлайн-перенос и обновления",
+      "sourceStart": 91783,
+      "sourceEnd": 94081,
+      "sourceSha256": "7fa8039ece38c923c5a1b9651a23adb0ccf8243b0dc43537778e10f49246bbda",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-5",
+      "bodySha256": "1f8ae67936540d3ba9723c76c5e1b226e1cb4976cdb0a65bf2a1ec77272db99a"
+    },
+    {
+      "id": "12.6",
+      "title": "12.6. Батарея и скорость: мобильные бюджеты",
+      "sourceStart": 94081,
+      "sourceEnd": 95344,
+      "sourceSha256": "8aa45f77f67176f5552f68f2a3fc7760b3ad1b7367fbc4ef8098e92ddc5b3149",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-6",
+      "bodySha256": "8aa45f77f67176f5552f68f2a3fc7760b3ad1b7367fbc4ef8098e92ddc5b3149"
+    },
+    {
+      "id": "12.7",
+      "title": "12.7. Что заимствовать: реальные реализации и лицензии",
+      "sourceStart": 95344,
+      "sourceEnd": 100207,
+      "sourceSha256": "1086ca9accff801e2e6cd5f32434afed95282ddca0a9d0612982289fa5f970e3",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-7",
+      "bodySha256": "01866311dd1b8568989e40c66583eb135c815ca533dbc590eaa129196006741d"
+    },
+    {
+      "id": "12.8",
+      "title": "12.8. UX: удобство из известных практик и проверяемые гипотезы",
+      "sourceStart": 100207,
+      "sourceEnd": 102699,
+      "sourceSha256": "031664d687bb8963342f7e45eec628eaa34a50c068c129a757779cc3a157811a",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-8",
+      "bodySha256": "031664d687bb8963342f7e45eec628eaa34a50c068c129a757779cc3a157811a"
+    },
+    {
+      "id": "12.9",
+      "title": "12.9. Публикация и пределы текущих выводов",
+      "sourceStart": 102699,
+      "sourceEnd": 104031,
+      "sourceSha256": "069c0f61de3bcdd2276f75f9cf26efb49d06fde55c14a7423d262097b57c787d",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-9",
+      "bodySha256": "069c0f61de3bcdd2276f75f9cf26efb49d06fde55c14a7423d262097b57c787d"
+    },
+    {
+      "id": "12.10",
+      "title": "12.10. Первичные Android-источники",
+      "sourceStart": 104031,
+      "sourceEnd": 109439,
+      "sourceSha256": "cb56b11e1ecb50a0e4a566ffcccd65ebf15894cc8dc699ccc941f5cb5070e616",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-12-10",
+      "bodySha256": "cb56b11e1ecb50a0e4a566ffcccd65ebf15894cc8dc699ccc941f5cb5070e616"
+    },
+    {
+      "id": "13.8",
+      "title": "13.8. Android: батарея и смысл изменения сети",
+      "sourceStart": 125797,
+      "sourceEnd": 127631,
+      "sourceSha256": "0c85e1c2be82ce4e4258040db959d23a95c45a1ff7d90e1b98e45d8584b499af",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-13-8",
+      "bodySha256": "0c85e1c2be82ce4e4258040db959d23a95c45a1ff7d90e1b98e45d8584b499af"
+    },
+    {
+      "id": "15.5",
+      "title": "15.5. Полный Android research handoff — 35 решений",
+      "sourceStart": 164142,
+      "sourceEnd": 185849,
+      "sourceSha256": "a6ab30c8d4d1ae8144f4acb4894264a45e29a6d831e9be790e9da6ca28c2d477",
+      "file": "docs/theory/android/PLATFORM-AND-UX.md",
+      "anchor": "source-15-5",
+      "bodySha256": "a6ab30c8d4d1ae8144f4acb4894264a45e29a6d831e9be790e9da6ca28c2d477"
+    },
+    {
+      "id": "13.5",
+      "title": "13.5. DNS, адреса и кэши — ускорение с контекстом",
+      "sourceStart": 118742,
+      "sourceEnd": 121615,
+      "sourceSha256": "918a8b4f33f74fe098c87ee695efc9c83fe314832ec3c2081c187f5d34dfce2c",
+      "file": "docs/theory/observability/DNS-AND-DIAGNOSTICS.md",
+      "anchor": "source-13-5",
+      "bodySha256": "918a8b4f33f74fe098c87ee695efc9c83fe314832ec3c2081c187f5d34dfce2c"
+    },
+    {
+      "id": "16",
+      "title": "16. Новые исходники: достоверность наблюдений, журнал и portable trust",
+      "sourceStart": 188782,
+      "sourceEnd": 189565,
+      "sourceSha256": "8515911faba8edc106a2e28a05e2206c3c414917183216cb23f11a4c899fc57c",
+      "file": "docs/theory/observability/DNS-AND-DIAGNOSTICS.md",
+      "anchor": "source-16",
+      "bodySha256": "b713001ec1d137f70fe2ce321df4d83e83173c82f02d4991292cd9bfb48d4165"
+    },
+    {
+      "id": "16.1",
+      "title": "16.1. OP-01 — успешный DNS ответ и свежесть имеют разные значения",
+      "sourceStart": 189565,
+      "sourceEnd": 191479,
+      "sourceSha256": "635880429da1b38fb8be165e40a45d10104e8878e6e9d7d879e94cd0e688cfe0",
+      "file": "docs/theory/observability/DNS-AND-DIAGNOSTICS.md",
+      "anchor": "source-16-1",
+      "bodySha256": "635880429da1b38fb8be165e40a45d10104e8878e6e9d7d879e94cd0e688cfe0"
+    },
+    {
+      "id": "16.2",
+      "title": "16.2. OP-02 — bootstrap resolver всё ещё отдельный путь",
+      "sourceStart": 191479,
+      "sourceEnd": 194057,
+      "sourceSha256": "2c827ab38c8bb59ab23b055bd6f9be0f19fc0d39f1a1107bb9cb8522dca2ea13",
+      "file": "docs/theory/observability/DNS-AND-DIAGNOSTICS.md",
+      "anchor": "source-16-2",
+      "bodySha256": "2c827ab38c8bb59ab23b055bd6f9be0f19fc0d39f1a1107bb9cb8522dca2ea13"
+    },
+    {
+      "id": "16.4",
+      "title": "16.4. OP-04 — журнал контроллера не полный аудит VPN",
+      "sourceStart": 197879,
+      "sourceEnd": 199182,
+      "sourceSha256": "848b80a6d674ce188726b140164be99dfbb991b6ddba153a2744b60d8861e509",
+      "file": "docs/theory/observability/DNS-AND-DIAGNOSTICS.md",
+      "anchor": "source-16-4",
+      "bodySha256": "848b80a6d674ce188726b140164be99dfbb991b6ddba153a2744b60d8861e509"
+    },
+    {
+      "id": "16.5",
+      "title": "16.5. OP-05 — privacy до записи и bounded support export",
+      "sourceStart": 199182,
+      "sourceEnd": 201004,
+      "sourceSha256": "3efae94daba5cd49b977564414c4005564f26a9407c2e7a939a25cfd8fac1d11",
+      "file": "docs/theory/observability/DNS-AND-DIAGNOSTICS.md",
+      "anchor": "source-16-5",
+      "bodySha256": "3efae94daba5cd49b977564414c4005564f26a9407c2e7a939a25cfd8fac1d11"
+    },
+    {
+      "id": "6",
+      "title": "6. Как проверять новые факты (метод)",
+      "sourceStart": 51456,
+      "sourceEnd": 52970,
+      "sourceSha256": "afe3f921dd029abf651bd09a1326d65ec74d5c271cb234e45d3912f395d63712",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-6",
+      "bodySha256": "afe3f921dd029abf651bd09a1326d65ec74d5c271cb234e45d3912f395d63712"
+    },
+    {
+      "id": "10",
+      "title": "10. Программа экспериментов и критерии знания",
+      "sourceStart": 69923,
+      "sourceEnd": 70197,
+      "sourceSha256": "ebf16c8a3cd8ebb2d72b5404326350e253bc84503ff0c8427d47fc48b7cf0e10",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-10",
+      "bodySha256": "ebf16c8a3cd8ebb2d72b5404326350e253bc84503ff0c8427d47fc48b7cf0e10"
+    },
+    {
+      "id": "10.1",
+      "title": "10.1. Минимальный паспорт опыта",
+      "sourceStart": 70197,
+      "sourceEnd": 70891,
+      "sourceSha256": "dbd5bd4fbca264034a29513a640501c29d266a8d916c902a01e57775160010cb",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-10-1",
+      "bodySha256": "dbd5bd4fbca264034a29513a640501c29d266a8d916c902a01e57775160010cb"
+    },
+    {
+      "id": "10.2",
+      "title": "10.2. Матрица опытов",
+      "sourceStart": 70891,
+      "sourceEnd": 74115,
+      "sourceSha256": "846e67f7283953ed40d299cb4483e1a47fbca5b528392ebab9d47a21738e1618",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-10-2",
+      "bodySha256": "846e67f7283953ed40d299cb4483e1a47fbca5b528392ebab9d47a21738e1618"
+    },
+    {
+      "id": "10.3",
+      "title": "10.3. Статистика и stop criteria",
+      "sourceStart": 74115,
+      "sourceEnd": 75470,
+      "sourceSha256": "b64036f3e94074332efe5eddda0b54361c87486f6828db1d388d8cc570d50add",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-10-3",
+      "bodySha256": "b64036f3e94074332efe5eddda0b54361c87486f6828db1d388d8cc570d50add"
+    },
+    {
+      "id": "11",
+      "title": "11. Источники, версии и срок применимости",
+      "sourceStart": 75470,
+      "sourceEnd": 81797,
+      "sourceSha256": "2cfd4269f808995b64e869b3ca90629e43b68fcab4a498442da4b636713c0e96",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-11",
+      "bodySha256": "2cfd4269f808995b64e869b3ca90629e43b68fcab4a498442da4b636713c0e96"
+    },
+    {
+      "id": "13.7",
+      "title": "13.7. Качество измерения и независимость",
+      "sourceStart": 123510,
+      "sourceEnd": 125797,
+      "sourceSha256": "a85e012437f8e7f3999da83978903ef3a968622846be59b654004191e497154f",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-13-7",
+      "bodySha256": "a85e012437f8e7f3999da83978903ef3a968622846be59b654004191e497154f"
+    },
+    {
+      "id": "13.12",
+      "title": "13.12. Первичные источники и границы",
+      "sourceStart": 133401,
+      "sourceEnd": 138354,
+      "sourceSha256": "99da7558693cd970101761c677e41e92a93b10fc1a89910c737aa528617d85ff",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-13-12",
+      "bodySha256": "99da7558693cd970101761c677e41e92a93b10fc1a89910c737aa528617d85ff"
+    },
+    {
+      "id": "15.1",
+      "title": "15.1. Что завершено и где проходит граница доказательства",
+      "sourceStart": 148169,
+      "sourceEnd": 150263,
+      "sourceSha256": "f5c28430c98fc6476a6a39ca17a33adb5df046d7afcce795b53ef6a9b66540e4",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "source-15-1",
+      "bodySha256": "6a05d1782ec6c160e2727889e0fbb53dcbd6c1c6273447b382033d81da05c090"
+    },
+    {
+      "id": "4",
+      "title": "4. Реестр ложных блокеров (анти-знание)",
+      "sourceStart": 45516,
+      "sourceEnd": 47692,
+      "sourceSha256": "69ed6c710e0a271f60d893142d7389d64838d65c3439aa14e13a5a2880efdfd8",
+      "file": "docs/theory/roadmap/RESEARCH-HANDOFF.md",
+      "anchor": "source-4",
+      "bodySha256": "69ed6c710e0a271f60d893142d7389d64838d65c3439aa14e13a5a2880efdfd8"
+    },
+    {
+      "id": "5",
+      "title": "5. Открытые вопросы и направления (исследовательские заметки)",
+      "sourceStart": 47692,
+      "sourceEnd": 51456,
+      "sourceSha256": "59277e2d810a10c08e7d3de9ee9fadf6f6f82f611cc35b685a9b2cb1d078c235",
+      "file": "docs/theory/roadmap/RESEARCH-HANDOFF.md",
+      "anchor": "source-5",
+      "bodySha256": "59277e2d810a10c08e7d3de9ee9fadf6f6f82f611cc35b685a9b2cb1d078c235"
+    },
+    {
+      "id": "13.11",
+      "title": "13.11. Порядок применения и проверенные модели",
+      "sourceStart": 131268,
+      "sourceEnd": 133401,
+      "sourceSha256": "78ea621af99506f04e1baf7ffc31399dc3d8e5fbc10ed995baa45856c3d6dab6",
+      "file": "docs/theory/roadmap/RESEARCH-HANDOFF.md",
+      "anchor": "source-13-11",
+      "bodySha256": "78ea621af99506f04e1baf7ffc31399dc3d8e5fbc10ed995baa45856c3d6dab6"
+    },
+    {
+      "id": "15",
+      "title": "15. Итог исследования и передача в разработку — 2026-10-24",
+      "sourceStart": 148075,
+      "sourceEnd": 148169,
+      "sourceSha256": "4e2594e5af3a4721054c66eb34ebf376e45281e9dfc99eb5973090434d54b36b",
+      "file": "docs/theory/roadmap/RESEARCH-HANDOFF.md",
+      "anchor": "source-15",
+      "bodySha256": "4e2594e5af3a4721054c66eb34ebf376e45281e9dfc99eb5973090434d54b36b"
+    },
+    {
+      "id": "15.2",
+      "title": "15.2. Адресное закрытие всех 12 вопросов старого §5",
+      "sourceStart": 150263,
+      "sourceEnd": 157440,
+      "sourceSha256": "d7db0c6c884bcaa7263d25b541768194456218caed9dd09e15b501e462c11e72",
+      "file": "docs/theory/roadmap/RESEARCH-HANDOFF.md",
+      "anchor": "source-15-2",
+      "bodySha256": "d7e3cfc547ca2d9cdfdd7784a8fd5e99a4fa70b55db4950cafce02ccdec896c0"
+    },
+    {
+      "id": "15.4",
+      "title": "15.4. Уточнение выбора готовых компонентов",
+      "sourceStart": 161887,
+      "sourceEnd": 164142,
+      "sourceSha256": "f04d8c16bf65dab00afb4535cc178b615bad633e7a1c28e4c1bb8fdd775614c3",
+      "file": "docs/theory/roadmap/RESEARCH-HANDOFF.md",
+      "anchor": "source-15-4",
+      "bodySha256": "f04d8c16bf65dab00afb4535cc178b615bad633e7a1c28e4c1bb8fdd775614c3"
+    },
+    {
+      "id": "15.6",
+      "title": "15.6. Окончательная последовательность разработки и доказательств",
+      "sourceStart": 185849,
+      "sourceEnd": 188782,
+      "sourceSha256": "a7f8e40fc204b64aecb4926b833fd132b6a7e4878e762767d542b261f94b6f1b",
+      "file": "docs/theory/roadmap/RESEARCH-HANDOFF.md",
+      "anchor": "source-15-6",
+      "bodySha256": "a7f8e40fc204b64aecb4926b833fd132b6a7e4878e762767d542b261f94b6f1b"
+    },
+    {
+      "id": "16.7",
+      "title": "16.7. Что делать в разработке после этого среза",
+      "sourceStart": 202748,
+      "sourceEnd": 203717,
+      "sourceSha256": "9eb3c817b9eb4ed2f3d998cfd1e71e7cfb16473d3a674922a873524abf47bed4",
+      "file": "docs/theory/roadmap/RESEARCH-HANDOFF.md",
+      "anchor": "source-16-7",
+      "bodySha256": "9eb3c817b9eb4ed2f3d998cfd1e71e7cfb16473d3a674922a873524abf47bed4"
+    }
+  ],
+  "relocated": [
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/REPORT-002.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/REPORT-002.md",
+      "originalSha256": "3f85c653a376c7128c11926533ad43dac721d38bdcef858c52c94413587025af",
+      "migratedSha256": "3f85c653a376c7128c11926533ad43dac721d38bdcef858c52c94413587025af",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/REPORT-003.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/REPORT-003.md",
+      "originalSha256": "06602132f9ae6d8fa9382a8ee96794f9bac823d9bf079f4b343646dfdd9ba5c2",
+      "migratedSha256": "06602132f9ae6d8fa9382a8ee96794f9bac823d9bf079f4b343646dfdd9ba5c2",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/REPORT-004.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/REPORT-004.md",
+      "originalSha256": "0f80f509e6685f841568d5034d16607d4d551d1c6e12482f1dde7da26be86e50",
+      "migratedSha256": "0f80f509e6685f841568d5034d16607d4d551d1c6e12482f1dde7da26be86e50",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/REPORT.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/REPORT.md",
+      "originalSha256": "070dc7404e7cc882937482666b8c0f034867c7b95237877dafbe8ea1729a90fd",
+      "migratedSha256": "070dc7404e7cc882937482666b8c0f034867c7b95237877dafbe8ea1729a90fd",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/SOURCES-002.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/SOURCES-002.md",
+      "originalSha256": "ee46372987211d006c85c908d52064e30e2381afde9e6e5df9219e9b2cdc32b5",
+      "migratedSha256": "ee46372987211d006c85c908d52064e30e2381afde9e6e5df9219e9b2cdc32b5",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/SOURCES-003.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/SOURCES-003.md",
+      "originalSha256": "9c0b39becc6b0872aae638813bad3ec0d8447541dc606503da1b1a4aa61ef80b",
+      "migratedSha256": "9c0b39becc6b0872aae638813bad3ec0d8447541dc606503da1b1a4aa61ef80b",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/SOURCES-004.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/SOURCES-004.md",
+      "originalSha256": "cc9389a201bd18891780e56f8f28430a5a0910184951ac21d10fa440695a81c9",
+      "migratedSha256": "cc9389a201bd18891780e56f8f28430a5a0910184951ac21d10fa440695a81c9",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/SOURCES.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/SOURCES.md",
+      "originalSha256": "5f079e7e2de469a75e28222ce99d8836f77ad9c1eafb7e61d272e327dd77a5c1",
+      "migratedSha256": "5f079e7e2de469a75e28222ce99d8836f77ad9c1eafb7e61d272e327dd77a5c1",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/START.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/02-CENSORSHIP/START.md",
+      "originalSha256": "a50972cda915b89541d9b03f43a9b8a49c18332f1818e7392e3324453f612e37",
+      "migratedSha256": "f7112afcee6a195e8528358aa629acbe4a10b44e494a010de60bf373063c4224",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/02-CENSORSHIP/START.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/STATE.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/02-CENSORSHIP/STATE.md",
+      "originalSha256": "3e61feb3c2a3f8f7a42b3dbfae91a49b4db835e14b843e0ef63ae8b0112ad739",
+      "migratedSha256": "3e61feb3c2a3f8f7a42b3dbfae91a49b4db835e14b843e0ef63ae8b0112ad739",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/02-CENSORSHIP/STATE.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/handoffs/R02-001.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/handoffs/R02-001.md",
+      "originalSha256": "b0b3d7a53507f6e8ad499dfde6547a0738cae2d0700b9b1391c533f626f5f8df",
+      "migratedSha256": "b0b3d7a53507f6e8ad499dfde6547a0738cae2d0700b9b1391c533f626f5f8df",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/handoffs/R02-002.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/handoffs/R02-002.md",
+      "originalSha256": "95843d179ae7126e2b8e7328e170bfa4dcc6cea78a94f9d185f879847fedafc5",
+      "migratedSha256": "95843d179ae7126e2b8e7328e170bfa4dcc6cea78a94f9d185f879847fedafc5",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/handoffs/R02-003.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/handoffs/R02-003.md",
+      "originalSha256": "355e89d1da23ca9a4ac6912f2af8c46b3862c5d721212edd89639b83aa85467c",
+      "migratedSha256": "355e89d1da23ca9a4ac6912f2af8c46b3862c5d721212edd89639b83aa85467c",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/02-CENSORSHIP/handoffs/R02-004.md",
+      "newFile": "docs/theory/research/02-CENSORSHIP/handoffs/R02-004.md",
+      "originalSha256": "5adc8148efd61a0277ed893d11632ed8b35aaf3d629b3ae3147e1d4409f94687",
+      "migratedSha256": "5adc8148efd61a0277ed893d11632ed8b35aaf3d629b3ae3147e1d4409f94687",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/REPORT.md",
+      "newFile": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "originalSha256": "ee0fb7b477f5f296a49789214a9507d6ca015076b58fdc723ca27717d87a8d61",
+      "migratedSha256": "ee0fb7b477f5f296a49789214a9507d6ca015076b58fdc723ca27717d87a8d61",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/SOURCES.md",
+      "newFile": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "originalSha256": "8eaa6bbd11648dacab6c19fb4019d756cb613c5222c34fcd77f2744f61a743ed",
+      "migratedSha256": "8eaa6bbd11648dacab6c19fb4019d756cb613c5222c34fcd77f2744f61a743ed",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/START.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/03-ADAPTATION/START.md",
+      "originalSha256": "2f850d242b6a7b284d82a8480dc7d70fe121fad7692a5efe91933e85addc507a",
+      "migratedSha256": "2f434964fc1e531562de103cc6bc19699c3d497c3e5b5e6d41e3ccd979304b47",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/03-ADAPTATION/START.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/STATE.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/03-ADAPTATION/STATE.md",
+      "originalSha256": "f0623a6fec68de88ad1e990107fd7eec0aca798569017d587360a6a47825a69a",
+      "migratedSha256": "f0623a6fec68de88ad1e990107fd7eec0aca798569017d587360a6a47825a69a",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/03-ADAPTATION/STATE.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/handoffs/R03-001.md",
+      "newFile": "docs/theory/research/03-ADAPTATION/handoffs/R03-001.md",
+      "originalSha256": "ae3cd9569a5b46b88ed514e3124eea1991f86316ceac184ded3e2ecf329bfb7c",
+      "migratedSha256": "ae3cd9569a5b46b88ed514e3124eea1991f86316ceac184ded3e2ecf329bfb7c",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/handoffs/R03-002.md",
+      "newFile": "docs/theory/research/03-ADAPTATION/handoffs/R03-002.md",
+      "originalSha256": "463e22ca9cbdaafb0817a231a132e91b126900f5f60181e78fcd22ef0b2fd749",
+      "migratedSha256": "463e22ca9cbdaafb0817a231a132e91b126900f5f60181e78fcd22ef0b2fd749",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/handoffs/R03-003.md",
+      "newFile": "docs/theory/research/03-ADAPTATION/handoffs/R03-003.md",
+      "originalSha256": "6638a30ba0bbf3f06ca0b8d65d1256372fda0dcdfb9c289eab635cb0e05dfe90",
+      "migratedSha256": "6638a30ba0bbf3f06ca0b8d65d1256372fda0dcdfb9c289eab635cb0e05dfe90",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/handoffs/R03-004.md",
+      "newFile": "docs/theory/research/03-ADAPTATION/handoffs/R03-004.md",
+      "originalSha256": "b1886fa1518c9468cd0522c4036c2f6c875a71b8ed507f2c07b9ea8cfc5384fc",
+      "migratedSha256": "b1886fa1518c9468cd0522c4036c2f6c875a71b8ed507f2c07b9ea8cfc5384fc",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/03-ADAPTATION/handoffs/R03-005.md",
+      "newFile": "docs/theory/research/03-ADAPTATION/handoffs/R03-005.md",
+      "originalSha256": "a88df6e278c5ef6fd10a403bedf8f04faeee68214f3718344e6353172b4548e6",
+      "migratedSha256": "a88df6e278c5ef6fd10a403bedf8f04faeee68214f3718344e6353172b4548e6",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/04-PERFORMANCE/REPORT.md",
+      "newFile": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "originalSha256": "3dc2674a6a96f44f2783c2be2e140df2c8900d07605aa8260c0b540c61c1255e",
+      "migratedSha256": "3dc2674a6a96f44f2783c2be2e140df2c8900d07605aa8260c0b540c61c1255e",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/04-PERFORMANCE/SOURCES.md",
+      "newFile": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "originalSha256": "7493d737f1b088eb6344b646e6807296fcadd412350ab191d71b357ec1c84598",
+      "migratedSha256": "7493d737f1b088eb6344b646e6807296fcadd412350ab191d71b357ec1c84598",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/04-PERFORMANCE/START.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/04-PERFORMANCE/START.md",
+      "originalSha256": "7584dcf6006c5d7a7a4d0eafd1daa9e3f3e00813635125b947072a990a33f35f",
+      "migratedSha256": "d97dea39e6a61dcf3aed7ddcd5e86b1d17b168573623a177c71b882d801903cd",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/04-PERFORMANCE/START.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/04-PERFORMANCE/STATE.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/04-PERFORMANCE/STATE.md",
+      "originalSha256": "b9e6b711232d02f51ba5efece4ad0c0975166413833596ed6ba8ff0d5faf9c5f",
+      "migratedSha256": "b9e6b711232d02f51ba5efece4ad0c0975166413833596ed6ba8ff0d5faf9c5f",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/04-PERFORMANCE/STATE.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/04-PERFORMANCE/handoffs/R04-001.md",
+      "newFile": "docs/theory/research/04-PERFORMANCE/handoffs/R04-001.md",
+      "originalSha256": "e5d8e0ea85c47ac0a591bce8950fccbe4d11d5ef48bfbd0dd8332430cd3d4145",
+      "migratedSha256": "e5d8e0ea85c47ac0a591bce8950fccbe4d11d5ef48bfbd0dd8332430cd3d4145",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/04-PERFORMANCE/handoffs/R04-002.md",
+      "newFile": "docs/theory/research/04-PERFORMANCE/handoffs/R04-002.md",
+      "originalSha256": "faa7c1f84b6ba3f0a3c87d1d38f50887ea00be0fd57ddaaa808a7213afadfe95",
+      "migratedSha256": "faa7c1f84b6ba3f0a3c87d1d38f50887ea00be0fd57ddaaa808a7213afadfe95",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/04-PERFORMANCE/handoffs/R04-003.md",
+      "newFile": "docs/theory/research/04-PERFORMANCE/handoffs/R04-003.md",
+      "originalSha256": "83abd7df51cce58a762557a97517d679525d1b67195bed464e4e9f82723ad0a3",
+      "migratedSha256": "83abd7df51cce58a762557a97517d679525d1b67195bed464e4e9f82723ad0a3",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/05-TRUST-SAFETY/REPORT.md",
+      "newFile": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "originalSha256": "b4f72aa03043ae6370ec19b751d58eddea139e54f2d01b63933843f6af11d48f",
+      "migratedSha256": "b4f72aa03043ae6370ec19b751d58eddea139e54f2d01b63933843f6af11d48f",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/05-TRUST-SAFETY/SOURCES.md",
+      "newFile": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "originalSha256": "7916c88476d24f53cb74c6be271b3975b13e8753f78cc298a03c2f9a37b21eb7",
+      "migratedSha256": "7916c88476d24f53cb74c6be271b3975b13e8753f78cc298a03c2f9a37b21eb7",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/05-TRUST-SAFETY/START.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/05-TRUST-SAFETY/START.md",
+      "originalSha256": "59f771dd571b34cfd80034abc604fc9a8fc3791aac52c8183b17a6db6739b298",
+      "migratedSha256": "c51dd818825c9b52f231394406a9ce7bc8f57735c8d03ab7f391107a0cd9904b",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/05-TRUST-SAFETY/START.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/05-TRUST-SAFETY/STATE.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/05-TRUST-SAFETY/STATE.md",
+      "originalSha256": "dce156a0402e7f914774da93aef45146fd81976cf1d9ab749cbdcef09fb1d148",
+      "migratedSha256": "dce156a0402e7f914774da93aef45146fd81976cf1d9ab749cbdcef09fb1d148",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/05-TRUST-SAFETY/STATE.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/05-TRUST-SAFETY/handoffs/R05-001.md",
+      "newFile": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-001.md",
+      "originalSha256": "a132c8c1a63c2d88ae80a08e6e4551b1981268d9d77b75728efcb6f32a0a5f6b",
+      "migratedSha256": "a132c8c1a63c2d88ae80a08e6e4551b1981268d9d77b75728efcb6f32a0a5f6b",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/05-TRUST-SAFETY/handoffs/R05-002.md",
+      "newFile": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-002.md",
+      "originalSha256": "859c7dc23ba909cc44e4529cb2b7ce248215c3241833d409620bbba5c98dd175",
+      "migratedSha256": "859c7dc23ba909cc44e4529cb2b7ce248215c3241833d409620bbba5c98dd175",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/05-TRUST-SAFETY/handoffs/R05-003.md",
+      "newFile": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-003.md",
+      "originalSha256": "c7fc4442ce021799c6360295b64264043abe6fa90396c30af748416f75a19d2b",
+      "migratedSha256": "c7fc4442ce021799c6360295b64264043abe6fa90396c30af748416f75a19d2b",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/REPORT.md",
+      "newFile": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "originalSha256": "243d3d6922f8ca82478b1546e9ee025d1609e05fce60fed2afefdd2f902d4fd2",
+      "migratedSha256": "5135e98f1901315eeccb38ab55c1354da60058b451094cbff00ad8c47e0ab59e",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/SOURCES.md",
+      "newFile": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "originalSha256": "8bfd810cf41c5d7ae33e7bedaf23d9fa12265975822b1be2418f1192c998d49a",
+      "migratedSha256": "14857378d2ef7936d640eea6f65773ea96fddc5588d1601a03d418d0e8a4441c",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/START.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/06-RELIABILITY-UX/START.md",
+      "originalSha256": "7b9012ac1bb0b245008fa0b9210d8a8edb7e95288cd678fa5f3c58958c0bcf6a",
+      "migratedSha256": "7aadb59b06e9c88cddc36222c69f84b12a2a2605ac87d984fd148131140fd8d2",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/06-RELIABILITY-UX/START.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/STATE.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/06-RELIABILITY-UX/STATE.md",
+      "originalSha256": "8583a1f8751bc5d6967e858397ee4e2cab214fc833af388937ae1fab50a6e486",
+      "migratedSha256": "8583a1f8751bc5d6967e858397ee4e2cab214fc833af388937ae1fab50a6e486",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/06-RELIABILITY-UX/STATE.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/handoffs/R06-001.md",
+      "newFile": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-001.md",
+      "originalSha256": "f88927af1b3f28163c1692dff448b3484100d12d6025f0235048b7861a3c88a8",
+      "migratedSha256": "f88927af1b3f28163c1692dff448b3484100d12d6025f0235048b7861a3c88a8",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/handoffs/R06-002.md",
+      "newFile": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-002.md",
+      "originalSha256": "6c31b69df18f3a3d08be87d281699d981cfb4e8d7b3c53b30f922b6598ed0869",
+      "migratedSha256": "6c31b69df18f3a3d08be87d281699d981cfb4e8d7b3c53b30f922b6598ed0869",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/handoffs/R06-003.md",
+      "newFile": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-003.md",
+      "originalSha256": "8a000ec7dff68439a089b7d71ced7ffbd8aca8013c116d34d8b24f2d72c0bd84",
+      "migratedSha256": "8a000ec7dff68439a089b7d71ced7ffbd8aca8013c116d34d8b24f2d72c0bd84",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/handoffs/R06-004.md",
+      "newFile": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-004.md",
+      "originalSha256": "6aed44003f4c4bdc73a2842dfa2fb2760846cd0ece0d15882553e5097714a38d",
+      "migratedSha256": "6aed44003f4c4bdc73a2842dfa2fb2760846cd0ece0d15882553e5097714a38d",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/06-RELIABILITY-UX/handoffs/R06-005.md",
+      "newFile": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-005.md",
+      "originalSha256": "944a92ab508fd204fb3fd295089286849942ca871e70af4b6747aba3a839d5cf",
+      "migratedSha256": "944a92ab508fd204fb3fd295089286849942ca871e70af4b6747aba3a839d5cf",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/DEPTH-CYCLE-002.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/DEPTH-CYCLE-002.md",
+      "originalSha256": "86e1e50beca9e7ff9ed5e653024c02d0d1ab7ceec4b6d1c3dd1d6912177054b8",
+      "migratedSha256": "86e1e50beca9e7ff9ed5e653024c02d0d1ab7ceec4b6d1c3dd1d6912177054b8",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/DEPTH-CYCLE-002.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/README.md",
+      "newFile": "docs/theory/research/README.md",
+      "originalSha256": "6490508b1fbd3d2e7eb439a8613c57b40fa2c2d1d44ddaf6a03e4fc1c4b2c7c8",
+      "migratedSha256": "7c2b972494391d543adc25bfa55128f12f395c51dd588c74d75c9b351ed0c48c",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/STATE.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/STATE.md",
+      "originalSha256": "2160abee9811bbcf83f33ec0e3c4cd26819aa856df953ecf030533bc48da639d",
+      "migratedSha256": "cec88b8a0342a0e99a296b95958cecedd4096bec675ffb0cf6dde2a68f85b21c",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/STATE.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/TEN-HOUR-FINAL.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/TEN-HOUR-FINAL.md",
+      "originalSha256": "27b0060602c339476c74d53f409fe104fd98149f2c44a6c7ddbfb7701007ce49",
+      "migratedSha256": "233b1c08c688343b943222d33c0cf1ccfa46d97787e78b979260bd74dc706149",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/TEN-HOUR-FINAL.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/TEN-HOUR-WINDOW.md",
+      "newFile": "docs/archive/theory-organization-2026-10-28/obsolete/research/TEN-HOUR-WINDOW.md",
+      "originalSha256": "e53ce636319f88f6842b910d896c7161116b816d570d38eae4cac5f3376b9f4d",
+      "migratedSha256": "e53ce636319f88f6842b910d896c7161116b816d570d38eae4cac5f3376b9f4d",
+      "archivedVerbatim": false,
+      "previousLocation": "docs/theory/research/TEN-HOUR-WINDOW.md"
+    },
+    {
+      "oldFile": "docs/tasks/THEORY-LAB/reviews/HB01-R04-06.md",
+      "newFile": "docs/theory/research/reviews/HB01-R04-06.md",
+      "originalSha256": "4000102f8f80e8bab4fc84f29ffe2af8c1e99bbc9093ab9499dcbd3e68d09a32",
+      "migratedSha256": "4000102f8f80e8bab4fc84f29ffe2af8c1e99bbc9093ab9499dcbd3e68d09a32",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/COMPETITOR-FEATURES.md",
+      "newFile": "docs/theory/ux/COMPETITOR-FEATURES.md",
+      "originalSha256": "8d11e9621f30b68a810294d8d5338a6b41226f27f0a6611fda1effecdd83bc65",
+      "migratedSha256": "feeaffed1fab91ea7b325b9350a94f174817225c1cb848d7403faa024890a719",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/B1-REALITY-RESEARCH.md",
+      "newFile": "docs/theory/transports/REALITY-RESEARCH.md",
+      "originalSha256": "1dcbb2e8f6fe4aad8772cbbd261d44c19a135604c14c749a8f5ec275f5c19df5",
+      "migratedSha256": "1dcbb2e8f6fe4aad8772cbbd261d44c19a135604c14c749a8f5ec275f5c19df5",
+      "archivedVerbatim": false
+    },
+    {
+      "oldFile": "docs/archive/CENSORSHIP-THEORY-pre-V2-109-2026-10-21.md",
+      "newFile": "docs/theory/archive/CENSORSHIP-THEORY-pre-V2-109-2026-10-21.md",
+      "originalSha256": "7e8a3ef564cdcf0b0d3f434adde55a186464f9b8a626646c1401599b41a90332",
+      "migratedSha256": "7e8a3ef564cdcf0b0d3f434adde55a186464f9b8a626646c1401599b41a90332",
+      "archivedVerbatim": true
+    }
+  ],
+  "additions": [
+    {
+      "id": "19",
+      "title": "Рецензированный вывод: handshake и конфиденциальность полезного потока",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "reviewed-transport-confidentiality",
+      "claim": "R02-10",
+      "decision": "ACCEPTED_SCOPED_SOURCE_MODEL",
+      "review": "docs/theory/research/reviews/2H-HB01-R02-10.md",
+      "at": "2026-10-26T09:12:07.866Z",
+      "productExecution": false
+    },
+    {
+      "id": "20",
+      "title": "Рецензированный вывод: полный callback contract важнее имени алгоритма",
+      "file": "docs/theory/performance/TRANSPORT-AND-RESOURCES.md",
+      "anchor": "reviewed-brutal-dispatch",
+      "claim": "R04-10",
+      "decision": "ACCEPTED_SCOPED_SOURCE_METHOD_SET",
+      "review": "docs/theory/research/reviews/2H-HB02-R04-10.md",
+      "at": "2026-10-26T09:45:46.964Z",
+      "productExecution": false
+    },
+    {
+      "id": "21",
+      "title": "Рецензированный вывод: совместимость HRR не доказывает свежесть data session",
+      "file": "docs/theory/transports/CENSORSHIP-MECHANISMS.md",
+      "anchor": "reviewed-hrr-session-freshness",
+      "claim": "R02-15",
+      "decision": "ACCEPTED_SCOPED_SOURCE_MODEL",
+      "review": "docs/theory/research/reviews/4H-HB01-R02-15.md",
+      "at": "2026-10-26T11:36:53.923Z",
+      "productExecution": false
+    },
+    {
+      "id": "ech-dns-bootstrap-2026-10-27",
+      "title": "ECH и DNS: discovery, identity, retry и пределы приватности",
+      "file": "docs/theory/transports/ECH-DNS-BOOTSTRAP.md",
+      "anchor": "ech-dns-bootstrap-2026-10-27",
+      "decision": "SPECIFICATION_SUMMARY_WITH_PROPOSED_APPLICATION",
+      "at": "2026-10-27",
+      "productExecution": false
+    },
+    {
+      "id": "service-binding-observations-2026-10-27",
+      "title": "SVCB/HTTPS observations, proxy privacy и NAT64 hints",
+      "file": "docs/theory/observability/DNS-AND-DIAGNOSTICS.md",
+      "anchor": "service-binding-observations-2026-10-27",
+      "decision": "SPECIFICATION_SUMMARY_WITH_PROPOSED_APPLICATION",
+      "at": "2026-10-27",
+      "productExecution": false
+    },
+    {
+      "id": "measurement-comparability-2026-10-27",
+      "title": "Сопоставимость порогов и контрольного объекта",
+      "file": "docs/theory/methodology/RESEARCH-METHOD.md",
+      "anchor": "measurement-comparability-2026-10-27",
+      "decision": "DOCUMENTATION_CORRECTION_WITH_PROPOSED_EXPERIMENTS",
+      "at": "2026-10-27",
+      "productExecution": false
+    },
+    {
+      "id": "vision-upstream-correction-2026-10-27",
+      "title": "Vision в public upstream closure: исправление основания",
+      "file": "docs/theory/transports/REALITY-RESEARCH.md",
+      "anchor": "capability-correction-2026-10-27",
+      "claim": "R02-01",
+      "decision": "ACCEPTED_SCOPED_PUBLIC_UPSTREAM_SOURCE",
+      "review": "docs/theory/research/reviews/2026-10-27-R02-01-VISION.md",
+      "at": "2026-10-27",
+      "productExecution": false
+    },
+    {
+      "id": "tuf-progress-and-reset-2026-10-27",
+      "title": "TUF: допустимый progress, expiry и разрешённый reset",
+      "file": "docs/theory/architecture/SAFETY-AND-TRUST.md",
+      "anchor": "tuf-progress-and-reset-2026-10-27",
+      "claim": "R05-001-A/B",
+      "decision": "ACCEPTED_SCOPED_SPECIFICATION_PUBLIC_SOURCE_MODEL",
+      "review": "docs/theory/research/reviews/2026-10-27-R05-001-PROGRESS.md",
+      "at": "2026-10-27",
+      "productExecution": false
+    },
+    {
+      "id": "transport-composition-2026-10-28",
+      "title": "Композиция транспортов: шифрование, identity и TLS-контракт",
+      "file": "docs/theory/transports/COMPOSITION-AND-TLS-CONTRACTS.md",
+      "anchor": "transport-composition-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "padding-observation-window-2026-10-28",
+      "title": "Padding: stop/restart и окно наблюдения детектора",
+      "file": "docs/theory/transports/PADDING-AND-OBSERVATION-WINDOW.md",
+      "anchor": "padding-observation-window-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "quic-accounting-limits-2026-10-28",
+      "title": "QUIC/HY2: accounting, ресурсы и peer timers",
+      "file": "docs/theory/performance/QUIC-ACCOUNTING-AND-LIMITS.md",
+      "anchor": "quic-accounting-limits-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "interval-policy-evaluation-2026-10-28",
+      "title": "Неполные наблюдения, historical intervals и causal policy evaluation",
+      "file": "docs/theory/adaptation/INTERVALS-AND-POLICY-EVALUATION.md",
+      "anchor": "interval-policy-evaluation-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "trust-continuity-agreement-2026-10-28",
+      "title": "TUF continuity, различимость истории и multirepo agreement",
+      "file": "docs/theory/architecture/TRUST-CONTINUITY-AND-AGREEMENT.md",
+      "anchor": "trust-continuity-agreement-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "release-evidence-2026-10-28",
+      "title": "Время revocation evidence, bytes и первое исполнение",
+      "file": "docs/theory/architecture/RELEASE-EVIDENCE-BOUNDARIES.md",
+      "anchor": "release-evidence-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "probe-proof-boundaries-2026-10-28",
+      "title": "Доказательная сила probe: endpoint, путь и отсутствие утечек",
+      "file": "docs/theory/observability/PROBE-PROOF-BOUNDARIES.md",
+      "anchor": "probe-proof-boundaries-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "proxy-dns-nat64-2026-10-28",
+      "title": "Corporate proxy, DNS и NAT64 по фактическим socket-hop",
+      "file": "docs/theory/observability/PROXY-DNS-NAT64.md",
+      "anchor": "proxy-dns-nat64-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "android-uid-ownership-2026-10-28",
+      "title": "Android UID capture, lockdown, family и owner",
+      "file": "docs/theory/android/UID-ROUTING-AND-OWNERSHIP.md",
+      "anchor": "android-uid-ownership-2026-10-28",
+      "decision": "SCOPED_RESEARCH_WITH_EXPLICIT_LIMITS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    },
+    {
+      "id": "measurement-corpus-coverage-2026-10-28",
+      "title": "Происхождение, время и покрытие корпуса измерений",
+      "file": "docs/theory/methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md",
+      "anchor": "measurement-corpus-coverage-2026-10-28",
+      "decision": "PARTIAL_SEARCH_WITH_SCOPED_REFERENCE_FINDINGS",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "at": "2026-10-28",
+      "productExecution": false
+    }
+  ],
+  "unification": {
+    "at": "2026-10-28T08:07:44.348Z",
+    "kind": "Lossless union of authored theory branches and navigation reconciliation",
+    "originalCoverageUnchanged": true,
+    "addedSource": "Obsidian Snowden theory copy, 2026-10-27/28",
+    "reviewProvenance": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+    "evidence": ".artifacts/research/library-structure/2026-10-28/coverage-correction/vault-comparison.json"
+  }
+}

@@ -1,0 +1,2012 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-28T08:07:44.348Z",
+  "kind": "Combined authored-package and saved-review index, with Obsidian branch provenance; not new scientific review",
+  "atomicSnapshot": false,
+  "scope": "Existing docs/theory research handoffs and saved review decisions",
+  "originalSectionMap": "docs/theory/CONTENTS.json",
+  "totals": {
+    "handoffs": 58,
+    "researchHandoffs": 56,
+    "windowSummaries": 2,
+    "decisionDocuments": 13,
+    "legacyDecisionDocuments": 10,
+    "topicNotesImported": 11,
+    "acceptedScopedLegacyFamily": 7,
+    "needsRevisionLegacyFamily": 2,
+    "confirmedNotFormalAcceptedLegacyFamily": 1
+  },
+  "topics": [
+    {
+      "id": "R02",
+      "title": "Блокировки и противник",
+      "directory": "docs/theory/research/02-CENSORSHIP",
+      "handoffs": 14
+    },
+    {
+      "id": "R03",
+      "title": "Адаптация и статистика",
+      "directory": "docs/theory/research/03-ADAPTATION",
+      "handoffs": 10
+    },
+    {
+      "id": "R04",
+      "title": "Производительность, ресурсы и энергия",
+      "directory": "docs/theory/research/04-PERFORMANCE",
+      "handoffs": 11
+    },
+    {
+      "id": "R05",
+      "title": "Доверие и безопасность",
+      "directory": "docs/theory/research/05-TRUST-SAFETY",
+      "handoffs": 10
+    },
+    {
+      "id": "R06",
+      "title": "Надёжность и повседневный UX",
+      "directory": "docs/theory/research/06-RELIABILITY-UX",
+      "handoffs": 13
+    }
+  ],
+  "decisions": [
+    {
+      "id": "R04-06",
+      "packet": "R04-002",
+      "status": "ACCEPTED",
+      "file": "docs/theory/research/reviews/HB01-R04-06.md",
+      "scope": "Source-факты и условный interleaving fragment lifetime/cache eviction HY2.",
+      "limit": "Не воспроизведение race/crash, частота, severity, native-эффект или исправление."
+    },
+    {
+      "id": "R02-10",
+      "packet": "R02-004",
+      "status": "ACCEPTED",
+      "file": "docs/theory/research/reviews/2H-HB01-R02-10.md",
+      "scope": "Рассмотренная TLS-less VLESS→ShadowTLS3 композиция не получает data confidentiality от donor TLS/HMAC.",
+      "limit": "Не deployed profile, реальная утечка, расшифровка inner HTTPS или исправление."
+    },
+    {
+      "id": "R04-10",
+      "packet": "R04-004",
+      "status": "ACCEPTED",
+      "file": "docs/theory/research/reviews/2H-HB02-R04-10.md",
+      "scope": "Method-set mismatch выбирает base adapter; рассмотренный normal batch dispatch не обновляет ackRate.",
+      "limit": "Не compile/native-проверка, реальная скорость, pacing/SRTT или отсутствие иных feedback paths."
+    },
+    {
+      "id": "R02-15",
+      "packet": "R02-007",
+      "status": "ACCEPTED",
+      "savedVerdict": "ACCEPTED_SCOPED_SOURCE_MODEL",
+      "file": "docs/theory/research/reviews/4H-HB01-R02-15.md",
+      "scope": "Фиксированный HRR Random в one-shot seed: условное повторение first outer MAC predicate.",
+      "limit": "Не гарантия relay delivery, эффект на inner/target/application, exploit или severity."
+    },
+    {
+      "id": "R02-01",
+      "packet": "R02-001",
+      "status": "CONFIRMED",
+      "file": "docs/theory/research/reviews/EVE-2026-10-27-R02-01.md",
+      "scope": "Vision присутствует в dependency closure; прежний отрицательный grep только по sing-box был слишком узким.",
+      "limit": "Формальное ACCEPTED отдельно не записано. Не runtime activation или готовность обеих сторон."
+    },
+    {
+      "id": "R02-014-A",
+      "packet": "R02-014",
+      "status": "ACCEPTED",
+      "secondaryStatus": "NEEDS_REVISION для чрезмерных числовых обобщений",
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R02-014-A.md",
+      "scope": "Область числовых источников: у 95/99,5 не идентифицирована методика; 469−258 не доказывает 211 новых уникальных блокировок.",
+      "limit": "Чрезмерные числовые обобщения — NEEDS_REVISION в этой области. Не измерение сети, опровержение существования любых испытаний или приёмка B/C/D."
+    },
+    {
+      "id": "R03-010-A",
+      "packet": "R03-010",
+      "status": "ACCEPTED",
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R03-010-A.md",
+      "scope": "Выбранная математическая часть: union/tower и счётная alpha-композиция при A1/A2, post-selection контрпример.",
+      "limit": "Не весь A, B/C, numerical/library/producer применимость, FDR или текущая сеть."
+    },
+    {
+      "id": "R03-17",
+      "packet": "R03-009",
+      "status": "NEEDS_REVISION",
+      "kind": "Самокоррекция, не независимая внешняя рецензия",
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R03-17-ERRATUM.md",
+      "scope": "Прежняя product-formula при неизвестной зависимости и тезис о бесконечном ожидании требуют пересмотра.",
+      "limit": "Без независимости error events применим union bound, а не 1−(1−α)^W. +1 credit за успех не доказывает бесконечное ожидание."
+    },
+    {
+      "id": "R05-010-A",
+      "packet": "R05-010",
+      "status": "ACCEPTED",
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R05-010-A.md",
+      "scope": "Только условный timestamp→returned Progress trace и retention call перед возвратом исходной ошибки.",
+      "limit": "Не успешная запись на диск, artifact proof/update authority, lockout/bypass, severity или остальные A/B/C/D."
+    },
+    {
+      "id": "R06-013-A",
+      "packet": "R06-013",
+      "status": "NEEDS_REVISION",
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R06-013-A.md",
+      "scope": "Пересмотр maturity/horizon/denominator и protection scope; раннее «не завершено» не terminal failure к D.",
+      "limit": "Условная алгебра не исправляет категории/cohort. B/OSS/пилот отдельно не приняты."
+    }
+  ],
+  "entries": [
+    {
+      "id": "R02-001",
+      "topic": "R02",
+      "title": "передача научному руководителю",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-001.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Public-source ACCEPTED; EVE CONFIRMED отдельно",
+      "decisionIds": [
+        "R02-01"
+      ],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-27-R02-01-VISION.md",
+          "scope": "R02-01 ACCEPTED только public upstream source. Ранний EVE CONFIRMED сохранён отдельно; включение flow и two-sided native compatibility не приняты."
+        }
+      ]
+    },
+    {
+      "id": "R02-002",
+      "topic": "R02",
+      "title": "совместное наблюдение, prefix и shaping contract",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-002.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-002.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-002.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-003",
+      "topic": "R02",
+      "title": "готовые машины и непереносимые гарантии",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-003.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-003.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-003.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-004",
+      "topic": "R02",
+      "title": "высокий приоритет: VLESS → ShadowTLS без payload encryption",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-004.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-004.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-004.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Частично принято",
+      "decisionIds": [
+        "R02-10"
+      ],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-005",
+      "topic": "R02",
+      "title": "свойства encrypted replacement по участкам",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-005.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-005.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-005.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R02-006",
+      "topic": "R02",
+      "title": "IO variants меняют protocol semantics",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-006.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-006.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-006.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-007",
+      "topic": "R02",
+      "title": "приоритетная рецензия HRR freshness и TLS minimum",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-007.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-007.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-007.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [
+        "R02-15"
+      ],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R02-008",
+      "topic": "R02",
+      "title": "anti-probing first-record boundary",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-008.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-008.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-008.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-009",
+      "topic": "R02",
+      "title": "паспорт границы replay predicates",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-009.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-009.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-009.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-010",
+      "topic": "R02",
+      "title": "паспорт доступности ready session binding",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-010.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-010.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-010.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R02-011",
+      "topic": "R02",
+      "title": "паспорт early-data/replay границы HY2 и ShadowTLS conversion",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-011.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-011.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-011.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-012",
+      "topic": "R02",
+      "title": "паспорт решётки доменов отказа на барьере IP/ASN/allowlist",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-012.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-012.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-012.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-013",
+      "topic": "R02",
+      "title": "ECH/SVCB: спецификация, bootstrap и область фильтрации",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-013.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-013.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-013.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": {
+        "author": 1,
+        "note": "A/B/C ожидают рецензии; D — PARTIAL_AT_CUTOFF."
+      },
+      "additionalReviews": []
+    },
+    {
+      "id": "R02-014",
+      "topic": "R02",
+      "title": "РФ: качество доказательств сетевых ограничений и OONI",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-014.md",
+      "report": "docs/theory/research/02-CENSORSHIP/REPORT-014.md",
+      "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-014.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Частично принято",
+      "decisionIds": [
+        "R02-014-A"
+      ],
+      "nineWindow": {
+        "author": 2,
+        "note": "A принят в числовой source-области; B/C/D ожидают рецензии."
+      },
+      "additionalReviews": []
+    },
+    {
+      "id": "R03-001",
+      "topic": "R03",
+      "title": "пакет научному руководителю",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-001.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R03-002",
+      "topic": "R03",
+      "title": "temporal evidence и выполнимость измерений",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-002.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R03-003",
+      "topic": "R03",
+      "title": "минимально полезные измерения для конкретного решения",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-003.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R03-004",
+      "topic": "R03",
+      "title": "идентифицируемое сравнение адаптивных политик",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-004.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R03-005",
+      "topic": "R03",
+      "title": "delayed outcomes и statistical resets",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-005.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R03-006",
+      "topic": "R03",
+      "title": "optional решение при дрейфе и дорогом переходе",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-006.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R03-007",
+      "topic": "R03",
+      "title": "coherent trial risk и resource tail",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-007.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R03-008",
+      "topic": "R03",
+      "title": "наблюдения с пропусками и ложными результатами",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-008.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R03-009",
+      "topic": "R03",
+      "title": "паспорт регистрации попыток и exploration allowance",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-009.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть NEEDS_REVISION",
+      "decisionIds": [
+        "R03-17"
+      ],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R03-010",
+      "topic": "R03",
+      "title": "Последовательная статистика, физические кредиты и журнал попыток",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-010.md",
+      "report": "docs/theory/research/03-ADAPTATION/REPORT-010.md",
+      "sources": "docs/theory/research/03-ADAPTATION/SOURCES-010.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Частично принято",
+      "decisionIds": [
+        "R03-010-A"
+      ],
+      "nineWindow": {
+        "author": 3,
+        "note": "Принята выбранная математическая часть A; остальные A/B/C ожидают рецензии."
+      },
+      "additionalReviews": []
+    },
+    {
+      "id": "R04-001",
+      "topic": "R04",
+      "title": "пакет научному руководителю",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-001.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R04-002",
+      "topic": "R04",
+      "title": "конкуренция TCP/UDP и bounded overload",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-002.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [
+        "R04-06"
+      ],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R04-003",
+      "topic": "R04",
+      "title": "часы сна, keepalive и энергия",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-003.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R04-004",
+      "topic": "R04",
+      "title": "HY2/BBR clocks и Brutal feedback",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-004.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Частично принято",
+      "decisionIds": [
+        "R04-10"
+      ],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R04-005",
+      "topic": "R04",
+      "title": "очереди, timestamps и PMTU feedback",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-005.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R04-006",
+      "topic": "R04",
+      "title": "BBR flightBefore/flightAfter",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-006.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R04-007",
+      "topic": "R04",
+      "title": "готовое исправление Brutal и границы переноса callback-контракта",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-007.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "R04-14 NEEDS_REVISION; см. DR27",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R04-008",
+      "topic": "R04",
+      "title": "паспорт retention-границы sent history при плохой связи",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-008.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R04-009",
+      "topic": "R04",
+      "title": "паспорт CCA-трилеммы и overload admission",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-009.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R04-010",
+      "topic": "R04",
+      "title": "Windows/HY2: пакетный UDP-путь и границы ресурсов",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-010.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT-010.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES-010.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": {
+        "author": 4,
+        "note": "Source/model пакет ожидает независимой рецензии."
+      },
+      "additionalReviews": []
+    },
+    {
+      "id": "R04-011",
+      "topic": "R04",
+      "title": "Android: Doze/FGS, keepalive и энергия QUIC",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-011.md",
+      "report": "docs/theory/research/04-PERFORMANCE/REPORT-011.md",
+      "sources": "docs/theory/research/04-PERFORMANCE/SOURCES-011.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": {
+        "author": 5,
+        "note": "Поздняя сдача после cutoff; время acquisition заявлено автором, независимо не аттестовано."
+      },
+      "additionalReviews": []
+    },
+    {
+      "id": "R05-001",
+      "topic": "R05",
+      "title": "пакет руководителю «Теория»",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-001.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-27-R05-001-PROGRESS.md",
+          "scope": "R05-001-A/B ACCEPTED в named spec/public-source/model области; snapshot-only full-key-replacement trace не распространяется на все rotations или текущий адаптер."
+        }
+      ]
+    },
+    {
+      "id": "R05-002",
+      "topic": "R05",
+      "title": "минимальный durable trust cut",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-002.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Scoped решение и незакрытый пересмотр",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R05-003",
+      "topic": "R05",
+      "title": "provenance не заменяет authority и adoption",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-003.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R05-004",
+      "topic": "R05",
+      "title": "installation и execution имеют разные доказательства",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-004.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": "docs/theory/research/05-TRUST-SAFETY/R05-004.md",
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R05-005",
+      "topic": "R05",
+      "title": "offline good не current global authority",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-005.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": "docs/theory/research/05-TRUST-SAFETY/R05-005.md",
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R05-006",
+      "topic": "R05",
+      "title": "готовый approval search с конкретными ограничениями",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-006.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": "docs/theory/research/05-TRUST-SAFETY/R05-006.md",
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R05-007",
+      "topic": "R05",
+      "title": "паспорт bootstrap/transition и target agreement",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-007.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": "docs/theory/research/05-TRUST-SAFETY/R05-007.md",
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R05-008",
+      "topic": "R05",
+      "title": "паспорт native backup/recovery примитивов",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-008.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": "docs/theory/research/05-TRUST-SAFETY/R05-008.md",
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R05-009",
+      "topic": "R05",
+      "title": "Key Attestation: операция, подтверждение и границы доверия",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-009.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT-009.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES-009.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": {
+        "author": 6,
+        "note": "A/B/C pending; D был PARTIAL_AT_CUTOFF, новая задача 28 октября сдана READY_FOR_REVIEW в 06:56:36Z."
+      },
+      "additionalReviews": []
+    },
+    {
+      "id": "R05-010",
+      "topic": "R05",
+      "title": "Обновления: timestamp, returned Progress и durable authority",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-010.md",
+      "report": "docs/theory/research/05-TRUST-SAFETY/REPORT-010.md",
+      "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES-010.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Частично принято",
+      "decisionIds": [
+        "R05-010-A"
+      ],
+      "nineWindow": {
+        "author": 7,
+        "note": "Только timestamp trace A принят; остальные части ожидают рецензии, D — PARTIAL_AT_CUTOFF."
+      },
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-001",
+      "topic": "R06",
+      "title": "первый цикл: надёжность сквозной услуги",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-001.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-002",
+      "topic": "R06",
+      "title": "temporal recovery при составном отказе",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-002.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-003",
+      "topic": "R06",
+      "title": "что сохраняется при переключении рабочего соединения",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-003.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-004",
+      "topic": "R06",
+      "title": "границы причинного диагноза по приватной истории",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-004.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-005",
+      "topic": "R06",
+      "title": "итог дополнительного исследовательского окна",
+      "kind": "window-summary",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-005.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Итог окна",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-006",
+      "topic": "R06",
+      "title": "рабочий authenticated proxy при strict VPN и важной сессии",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-006.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R06-007",
+      "topic": "R06",
+      "title": "IPv6-only/NAT64: bootstrap и достижимое восстановление",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-007.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R06-008",
+      "topic": "R06",
+      "title": "proxy и NAT64: placement фактического dial hop",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-008.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Есть дополнительное scoped решение",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": [
+        {
+          "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+          "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены."
+        }
+      ]
+    },
+    {
+      "id": "R06-009",
+      "topic": "R06",
+      "title": "итог нового2h исследовательского окна",
+      "kind": "window-summary",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-009.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Итог окна",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-010",
+      "topic": "R06",
+      "title": "паспорт рабочих сетей: split DNS/NRPT/PAC, LAN и Android-сочетания",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-010.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-011",
+      "topic": "R06",
+      "title": "паспорт измерения useful-task recovery",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-011.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "reportLayout": "cumulative",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": null,
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-012",
+      "topic": "R06",
+      "title": "VPN/MDM: полномочия и композиция платформенной защиты",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-012.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT-012.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES-012.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Ожидает рецензии",
+      "decisionIds": [],
+      "nineWindow": {
+        "author": 8,
+        "note": "A/B/C pending; новый D отдельного этапа сдан READY_FOR_REVIEW 28 октября в 06:55:21Z."
+      },
+      "additionalReviews": []
+    },
+    {
+      "id": "R06-013",
+      "topic": "R06",
+      "title": "Полезное восстановление, privacy и локальный пилот",
+      "kind": "research-handoff",
+      "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-013.md",
+      "report": "docs/theory/research/06-RELIABILITY-UX/REPORT-013.md",
+      "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES-013.md",
+      "reportLayout": "separate",
+      "contract": null,
+      "reviewLabel": "Есть NEEDS_REVISION",
+      "decisionIds": [
+        "R06-013-A"
+      ],
+      "nineWindow": {
+        "author": 9,
+        "note": "A — NEEDS_REVISION; B/OSS/пилот ожидают рецензии. FUP-9-01 не подтверждён как доставленное задание."
+      },
+      "additionalReviews": []
+    }
+  ],
+  "sourceObservations": [
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-001.md",
+      "sha256": "b0b3d7a53507f6e8ad499dfde6547a0738cae2d0700b9b1391c533f626f5f8df",
+      "bytes": 5198,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT.md",
+      "sha256": "070dc7404e7cc882937482666b8c0f034867c7b95237877dafbe8ea1729a90fd",
+      "bytes": 29103,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES.md",
+      "sha256": "5f079e7e2de469a75e28222ce99d8836f77ad9c1eafb7e61d272e327dd77a5c1",
+      "bytes": 12708,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/EVE-2026-10-27-R02-01.md",
+      "sha256": "82935c312d1267e6b5d6f724f22ac9656f2cf63d55920cf62d1c6d3ddac33aec",
+      "bytes": 7878,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-002.md",
+      "sha256": "95843d179ae7126e2b8e7328e170bfa4dcc6cea78a94f9d185f879847fedafc5",
+      "bytes": 5648,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-002.md",
+      "sha256": "3f85c653a376c7128c11926533ad43dac721d38bdcef858c52c94413587025af",
+      "bytes": 35468,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-002.md",
+      "sha256": "ee46372987211d006c85c908d52064e30e2381afde9e6e5df9219e9b2cdc32b5",
+      "bytes": 11806,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-003.md",
+      "sha256": "355e89d1da23ca9a4ac6912f2af8c46b3862c5d721212edd89639b83aa85467c",
+      "bytes": 2750,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-003.md",
+      "sha256": "06602132f9ae6d8fa9382a8ee96794f9bac823d9bf079f4b343646dfdd9ba5c2",
+      "bytes": 14579,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-003.md",
+      "sha256": "9c0b39becc6b0872aae638813bad3ec0d8447541dc606503da1b1a4aa61ef80b",
+      "bytes": 5406,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-004.md",
+      "sha256": "5adc8148efd61a0277ed893d11632ed8b35aaf3d629b3ae3147e1d4409f94687",
+      "bytes": 2496,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-004.md",
+      "sha256": "0f80f509e6685f841568d5034d16607d4d551d1c6e12482f1dde7da26be86e50",
+      "bytes": 16758,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-004.md",
+      "sha256": "cc9389a201bd18891780e56f8f28430a5a0910184951ac21d10fa440695a81c9",
+      "bytes": 4749,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/2H-HB01-R02-10.md",
+      "sha256": "67bcdec8618cac99205dd185f2f8b9857ed4c05c9667d468588507a64de8ee9b",
+      "bytes": 8646,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-005.md",
+      "sha256": "4973af53fa0715f377869be2c073ba1a7eeaa7b29f93c033be419dade1282000",
+      "bytes": 2094,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-005.md",
+      "sha256": "638b1e8312c151b29932bcbbe4732ab84edd79dd547138a4fcc36fe7a30eae6b",
+      "bytes": 17220,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-005.md",
+      "sha256": "26733d4ba077e12767ec6146a66b892987e104b4975e9b5dcb0d0a8eb3a36d1b",
+      "bytes": 5001,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-006.md",
+      "sha256": "8a4d53a908eaf6947aab95658258d0002ab37fd349871c9e3228922b6d74e0d5",
+      "bytes": 2213,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-006.md",
+      "sha256": "024c2a4e4cdce7738c4916486bfdff6716365a343b4eef060037ad2e37fbd6e0",
+      "bytes": 13974,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-006.md",
+      "sha256": "75e663f96f856ab5317949ae74954631bab534f2f58319c4a1a4f94868bff58d",
+      "bytes": 3439,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-007.md",
+      "sha256": "0c36d4833c5e8188aae2ee32c3c5dfd6bdbe95fe0ab1c93235679be41ded64c3",
+      "bytes": 2019,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-007.md",
+      "sha256": "ccc48e15a2be25179ac9e60bb4b1e5551a6b15ff1a02f63252ed25d3d0e2b011",
+      "bytes": 13422,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-007.md",
+      "sha256": "e732859e5f0010250f638bb94af0e1a0d6e4c42121a9da6f9681a4f54eb2794d",
+      "bytes": 3614,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/4H-HB01-R02-15.md",
+      "sha256": "e930f5a3a7930d7a8ca19dd85347268c861c7546fd7daccd692d3892b9b13828",
+      "bytes": 13385,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-008.md",
+      "sha256": "ea7618d1e82254ffefe51c9d54ce437924ce478f86296927500eaa5f75e8db38",
+      "bytes": 1434,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-008.md",
+      "sha256": "be8e1b5c721a72dc2511c227ba60d6bd2fdeb13814e4d8d2bd8594a135629159",
+      "bytes": 7454,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-008.md",
+      "sha256": "172444eab49a5a69b2aef86c6be3dcc170318407d4c5308cb6aae1c6286183e4",
+      "bytes": 2234,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-009.md",
+      "sha256": "a5d8f218308638187f51b625570c902765de16bf28bf67effb3cb87fba501b8b",
+      "bytes": 2511,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-009.md",
+      "sha256": "7abcf233e567c98a772c56bf9277e5c72d04351e7ca2817165a02855a1ba7542",
+      "bytes": 13854,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-009.md",
+      "sha256": "16b657987e088bfca29eeb114523b15ea007b6d5c59202613559f550019dafeb",
+      "bytes": 2545,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-010.md",
+      "sha256": "35807a37f8182cff2bb490ab33c8ddb144a73030bf5f86d1084bdcd37c64b0ce",
+      "bytes": 2584,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-010.md",
+      "sha256": "64d65a791db7eed533ef01ab547225197658862df39f8c856f66d93bf75be4e8",
+      "bytes": 11928,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-010.md",
+      "sha256": "1365165abf71cc3ab10ef2635e25a5f191b06e0b2e135884daca1c5a2c324ad1",
+      "bytes": 2629,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-011.md",
+      "sha256": "2a03928ff4981c5648f0a75749d8ce763270f96903cfe2c95e9061ffbffe5539",
+      "bytes": 3488,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-011.md",
+      "sha256": "d6cac75b63c4793629814240a3d86e21a123910a9f5db627649c50a964fdd7d7",
+      "bytes": 8507,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-011.md",
+      "sha256": "7bd1c2bc7ecac775c13f7a2e0afe533907d34279e3699c2303bb77dadb53f242",
+      "bytes": 4020,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-012.md",
+      "sha256": "24c7a0092103c2e7220b40ffb4e0562f3848337978b609f7067397cd8679d3ed",
+      "bytes": 3803,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-012.md",
+      "sha256": "38217fea04a4e1cc160a9935f5ac21ebfddb0b7689c7f8eb13a3e23538d31ffe",
+      "bytes": 9260,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-012.md",
+      "sha256": "536b0fc241954f9afcf9cebb9230973797f76d2a8b79cadc7e7acb90b3fda489",
+      "bytes": 2566,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-013.md",
+      "sha256": "88bff007730ea7a076a08efc09befa4ce49ec390fdd0a520adf69426880d76f9",
+      "bytes": 14609,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-013.md",
+      "sha256": "e84ba090d3cf54a3e894aa9da3dba1a4d8632a6ff786df6eeb978cd63a694013",
+      "bytes": 51233,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-013.md",
+      "sha256": "b9e1a9a9c93f98fce53661dd5e45fa664fcf98025f9d6f21c6f44e89fdc435d3",
+      "bytes": 28649,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/handoffs/R02-014.md",
+      "sha256": "1f79f8d7c32fea6df4c5bcef4dc130df408e80b4b30bb1a7011606629b8f1eef",
+      "bytes": 15177,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/REPORT-014.md",
+      "sha256": "0e8db72751cadb186324186e31c1f0c8b005264f83ba22480058f4bb62e2bc4f",
+      "bytes": 45450,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/02-CENSORSHIP/SOURCES-014.md",
+      "sha256": "fd299add4f35b0cac8d25e25627e588d8ebafe0bfa38804acc7816f14c72d638",
+      "bytes": 42482,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R02-014-A.md",
+      "sha256": "04d25fb4cee2a9925415cd3e29a2a7590539d5de712dc73ed2ef5d5613fbb8e0",
+      "bytes": 11554,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-001.md",
+      "sha256": "ae3cd9569a5b46b88ed514e3124eea1991f86316ceac184ded3e2ecf329bfb7c",
+      "bytes": 5021,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/REPORT.md",
+      "sha256": "3d4d26186ef08e52f9dcb40feedcede246cdb8db57e3293cba27a6c79b64d92e",
+      "bytes": 242924,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/SOURCES.md",
+      "sha256": "60f572658aa937ed7de62722b8d2399648aec805b7ebfca4a0b982f13eecfad5",
+      "bytes": 49148,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-002.md",
+      "sha256": "463e22ca9cbdaafb0817a231a132e91b126900f5f60181e78fcd22ef0b2fd749",
+      "bytes": 5204,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-003.md",
+      "sha256": "6638a30ba0bbf3f06ca0b8d65d1256372fda0dcdfb9c289eab635cb0e05dfe90",
+      "bytes": 9396,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-004.md",
+      "sha256": "b1886fa1518c9468cd0522c4036c2f6c875a71b8ed507f2c07b9ea8cfc5384fc",
+      "bytes": 4824,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-005.md",
+      "sha256": "a88df6e278c5ef6fd10a403bedf8f04faeee68214f3718344e6353172b4548e6",
+      "bytes": 3637,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-006.md",
+      "sha256": "09144006ff7feda1194a911b8e5ddf5421725b5253689237ceab712f72cb659f",
+      "bytes": 4477,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-007.md",
+      "sha256": "a2ed998572ec2076ea81ea3511f27101fe0c2fc5f50b28a1344edf3e0e3adb43",
+      "bytes": 3645,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-008.md",
+      "sha256": "8d67762f96c9158f1f400745a4699b7134013f145dd02605ab670da0725c4f87",
+      "bytes": 5542,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-009.md",
+      "sha256": "d8cce40bed2c963103d17020eb3ee83b1e639cfb71e4296c5b799394cc7c7050",
+      "bytes": 3690,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R03-17-ERRATUM.md",
+      "sha256": "b09aefae3efa5a280c821d05f673b8596c56af03ab6ef4998a72396e916d24f1",
+      "bytes": 9241,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/handoffs/R03-010.md",
+      "sha256": "cb7b31266390bfdbbcbddb8c2f7b28c3e8d70b5a171ea191701bde469e36838a",
+      "bytes": 8664,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/REPORT-010.md",
+      "sha256": "ba59986fef1d194ddfc95644fa60de9fb905f353fa0f830656f25fd4c32b19e7",
+      "bytes": 43751,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/03-ADAPTATION/SOURCES-010.md",
+      "sha256": "67bd29d215bf269de1cfaf7b443723d9c8d104fb905fab850a0297f9b842d840",
+      "bytes": 15371,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R03-010-A.md",
+      "sha256": "99f121bca5192614b776a85aa2ac7946c81debd1756a2aafbfedc13955df89cb",
+      "bytes": 8995,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-001.md",
+      "sha256": "e5d8e0ea85c47ac0a591bce8950fccbe4d11d5ef48bfbd0dd8332430cd3d4145",
+      "bytes": 5401,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/REPORT.md",
+      "sha256": "0f6de7dbf119f42e603b2080fec1adfda61cd0252b2e5551fafa52e6b4382136",
+      "bytes": 178744,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
+      "sha256": "3342886442c796d56b26c44c373860e32e3060657de184cb70df907589c712bf",
+      "bytes": 60481,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-002.md",
+      "sha256": "faa7c1f84b6ba3f0a3c87d1d38f50887ea00be0fd57ddaaa808a7213afadfe95",
+      "bytes": 6784,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/HB01-R04-06.md",
+      "sha256": "4000102f8f80e8bab4fc84f29ffe2af8c1e99bbc9093ab9499dcbd3e68d09a32",
+      "bytes": 9685,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-003.md",
+      "sha256": "83abd7df51cce58a762557a97517d679525d1b67195bed464e4e9f82723ad0a3",
+      "bytes": 5429,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-004.md",
+      "sha256": "72e12a91a0b1f8fd719a032d8bf6128d2092e4fd9d770d068ede90659cea1b7a",
+      "bytes": 4755,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/2H-HB02-R04-10.md",
+      "sha256": "bbfffdc620385b9634f0c0e6ff01a25ae57971ac08960dada111d9a092ac0db4",
+      "bytes": 6099,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-005.md",
+      "sha256": "81d7dab102f151766b7dd7959279c1ae2093393555e068266946a5046f9d02ad",
+      "bytes": 3670,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-006.md",
+      "sha256": "9ec7204e3edb839e10d7998cb5afe21a5200054ddeb89eaf70231e862cb39076",
+      "bytes": 2399,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-007.md",
+      "sha256": "c5067e0cd5a99e5980bd26a65f19faddf4cdff9b19ff8a20577e5f13d98aab7e",
+      "bytes": 13402,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-008.md",
+      "sha256": "121cd09d12128d630c5e4567ebb154fa860e27f3eb3ebbe310835b0203dab3e7",
+      "bytes": 3433,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-009.md",
+      "sha256": "904cd76df3c20f7bbc0edbce1240974ba968b59a6c2f449a3173ac039765e455",
+      "bytes": 3323,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-010.md",
+      "sha256": "9c3c37be98c94c62f1ca09c8e408fe3c6abdb0f05089798e9d7e1475b3339352",
+      "bytes": 7398,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/REPORT-010.md",
+      "sha256": "110393b4fdbb175287731c6c5b126aec0aa57976100ba617f035dc8f3262f33e",
+      "bytes": 29016,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/SOURCES-010.md",
+      "sha256": "18e18be0d90e2d1823802ff76594d7bb56e74e7f399e8ecc6f631d7021196372",
+      "bytes": 16079,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/handoffs/R04-011.md",
+      "sha256": "35f617acd5abbfc998403b862dce2f98bb717d367d37595bbb274bcb715c33b6",
+      "bytes": 3395,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/REPORT-011.md",
+      "sha256": "344f24ccce5d7216f9491d263db0619b76c98b2d59f6c6c311f4f33701da074f",
+      "bytes": 19291,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/04-PERFORMANCE/SOURCES-011.md",
+      "sha256": "dd204e6d586076f692145a8578812aa65e84772412364351ea31cf1ef8993e64",
+      "bytes": 14344,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-001.md",
+      "sha256": "a132c8c1a63c2d88ae80a08e6e4551b1981268d9d77b75728efcb6f32a0a5f6b",
+      "bytes": 4233,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
+      "sha256": "7b453fbde099ab572cc13d8698f0f31ff577f2e13130585b72ec6f2d2536e0d9",
+      "bytes": 97865,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
+      "sha256": "1da1d9d923fed951f6fba99656092c74e8b77cd49c68be4ad489b5f6d79e6162",
+      "bytes": 45593,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-002.md",
+      "sha256": "859c7dc23ba909cc44e4529cb2b7ce248215c3241833d409620bbba5c98dd175",
+      "bytes": 7292,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-003.md",
+      "sha256": "c7fc4442ce021799c6360295b64264043abe6fa90396c30af748416f75a19d2b",
+      "bytes": 3615,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-004.md",
+      "sha256": "89be9001d64221f59e4720a560772f7aa93ea6f5b93c834f1bf77227e18cc1b8",
+      "bytes": 3117,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/R05-004.md",
+      "sha256": "695b87ee120cc643f36713b4b7f2be83ce5a51370456a7bbab9eded23aadc47d",
+      "bytes": 24037,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-005.md",
+      "sha256": "12c6475fddc742725e44bd86e0a5c8f7384bb3d6d8617ac6a20e6594980eabaf",
+      "bytes": 2465,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/R05-005.md",
+      "sha256": "ba7ecdda6a32689956ef88ba64a3f79cfa38fdbc88459a0bef25b47eb4bca1c4",
+      "bytes": 15009,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-006.md",
+      "sha256": "97ef6ccb72cbe5540cb036141a8730592350e702f7d523af357618e7d4667d90",
+      "bytes": 2193,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/R05-006.md",
+      "sha256": "90d8351eaa625cf908a0ae0276942bf3c28cb0a7d5a91fda00814759ebdcc556",
+      "bytes": 9599,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-007.md",
+      "sha256": "9a43faf663849be51a495923221adbd73c7b42ecf392f6c4671c0255a1eeab89",
+      "bytes": 6071,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/R05-007.md",
+      "sha256": "c931d7b9a644e514612fecd4b410334576f4d797861a1285f131ae1858b374d4",
+      "bytes": 19692,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-008.md",
+      "sha256": "608453e66b3efa253ec994342e328055830bdb3c6f19fadb816aa608d0817529",
+      "bytes": 3496,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/R05-008.md",
+      "sha256": "67ee750c98e14fb48a4789f29edef929f303d31a04d699753b9b47d36e974764",
+      "bytes": 8002,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-009.md",
+      "sha256": "075f9316e7d8cc73002ffac5974173133781cd546d9039b58423d5358922e446",
+      "bytes": 20994,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/REPORT-009.md",
+      "sha256": "bddb7a03f532de151d8c1462a64c0d2fe03a7cb2b90d89a09dd8250c7c117ee6",
+      "bytes": 74167,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/SOURCES-009.md",
+      "sha256": "cb852a36a9306d0afc2d8cbfd9cf191af16c18530a08948129a49f3a6e772ef1",
+      "bytes": 32176,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-010.md",
+      "sha256": "9485c63b265a289853a116ee9933e6e2ebfcdf343caa2093acd710806acee267",
+      "bytes": 12990,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/REPORT-010.md",
+      "sha256": "33796acb1f4a258dd4651df94578fc3abd23bfc7b5e43b47185a584b27230f5a",
+      "bytes": 55753,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/05-TRUST-SAFETY/SOURCES-010.md",
+      "sha256": "7bbf67f06a48045a3c54d86b0a7a0094ce1339fbb61e9ffcc5da531dc8ee8ec6",
+      "bytes": 20876,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R05-010-A.md",
+      "sha256": "018b31544a1e8b2fb19b9a1a766e6c7dbb99e6aca1d6a5d12c9b3ddfaaf3b3fd",
+      "bytes": 13769,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-001.md",
+      "sha256": "f88927af1b3f28163c1692dff448b3484100d12d6025f0235048b7861a3c88a8",
+      "bytes": 6101,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
+      "sha256": "954e08d551f8eeeb1f3dfa2fb880b22ca57a36b5f6655c71f103882f7e3255d0",
+      "bytes": 226473,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
+      "sha256": "e213b167f5523caa6ce98ec8749028e7c15eea32d1725343187e029359752a98",
+      "bytes": 56670,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-002.md",
+      "sha256": "6c31b69df18f3a3d08be87d281699d981cfb4e8d7b3c53b30f922b6598ed0869",
+      "bytes": 7993,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-003.md",
+      "sha256": "8a000ec7dff68439a089b7d71ced7ffbd8aca8013c116d34d8b24f2d72c0bd84",
+      "bytes": 4863,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-004.md",
+      "sha256": "6aed44003f4c4bdc73a2842dfa2fb2760846cd0ece0d15882553e5097714a38d",
+      "bytes": 4350,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-005.md",
+      "sha256": "944a92ab508fd204fb3fd295089286849942ca871e70af4b6747aba3a839d5cf",
+      "bytes": 4350,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-006.md",
+      "sha256": "71bc29b60717a778d59ea1287b7e412507af3f7e632d261493c82011f5ab2ee6",
+      "bytes": 4016,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-007.md",
+      "sha256": "cc9db81f42d48defa3be39a8d3001e492311e0c70cd463ad5434b65e306cef8e",
+      "bytes": 3781,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-008.md",
+      "sha256": "0c5c46dc203f917df271be8e10ad43d14b36f08e4351d3dd3e35e9125172c6c1",
+      "bytes": 2064,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-009.md",
+      "sha256": "e9288c8452a551c2dae1f3d733dda37eb462e94e0cef0b695a150522e610ed3b",
+      "bytes": 6081,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-010.md",
+      "sha256": "2b05d3d630d69c8009ab98882d9a1c788b120e8954f3a3d7a49b0cf3935a024c",
+      "bytes": 3749,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-011.md",
+      "sha256": "03cd6eba716f0e25e87b41c77d2bd5cb2026cea575fb9e1ec2cae04c4c0ca87a",
+      "bytes": 3405,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-012.md",
+      "sha256": "ff1fa87fc5ea342ae08ee664d9543a77f470528ba9b5ef9d539857aba2515d58",
+      "bytes": 16177,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/REPORT-012.md",
+      "sha256": "69ede78100c2d8c9da8ef3db8dd9d23373f0699fa2559bcbdfaadec520e5a9a2",
+      "bytes": 50875,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/SOURCES-012.md",
+      "sha256": "ccc9695138c6d3ad0eb4acbbf7e71400bda52a1de5eab25cafd67191d1a49e1a",
+      "bytes": 31313,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-013.md",
+      "sha256": "58cdc430704a257ac24da5d5f9e2ebc57c1f0f06305863b3f34f206ba03a8521",
+      "bytes": 5354,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/REPORT-013.md",
+      "sha256": "e2d17a8cf5894663a79e9297f6b9213331a3ccfcd184b1a5bc1ef6f52f131a2d",
+      "bytes": 25697,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/06-RELIABILITY-UX/SOURCES-013.md",
+      "sha256": "0ae23eb5e8dfe77d62f2b37392eaeac00e92d5eea7b3680cce11a46a819ea2d2",
+      "bytes": 11368,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    },
+    {
+      "file": "docs/theory/research/reviews/NINE-2026-10-27-R06-013-A.md",
+      "sha256": "4315973ab16b2700637dd385e974ae631e9e80b9dcf6420e272c2460c46ced4c",
+      "bytes": 9975,
+      "observedAt": "2026-10-28T08:07:44.348Z"
+    }
+  ],
+  "reviewCollections": [
+    {
+      "file": "docs/theory/research/reviews/2026-10-27-R02-01-VISION.md",
+      "title": "Vision и REALITY keygen: public upstream closure",
+      "scope": "R02-01 ACCEPTED только public upstream source. Ранний EVE CONFIRMED сохранён отдельно; включение flow и two-sided native compatibility не приняты.",
+      "packets": [
+        "R02-001"
+      ]
+    },
+    {
+      "file": "docs/theory/research/reviews/2026-10-27-R05-001-PROGRESS.md",
+      "title": "TUF progress и разрешённая ротация",
+      "scope": "R05-001-A/B ACCEPTED в named spec/public-source/model области; snapshot-only full-key-replacement trace не распространяется на все rotations или текущий адаптер.",
+      "packets": [
+        "R05-001"
+      ]
+    },
+    {
+      "file": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "title": "DR27: 16 направлений, scoped и смешанные решения",
+      "scope": "15 полных отчётов, частичный DR27-16; R04-14 и расширения DR27-10 требуют пересмотра. Два дополнительных opponent review не завершены.",
+      "packets": [
+        "R02-005",
+        "R02-007",
+        "R02-010",
+        "R03-004",
+        "R03-008",
+        "R04-002",
+        "R04-003",
+        "R04-006",
+        "R04-007",
+        "R05-002",
+        "R05-007",
+        "R06-006",
+        "R06-007",
+        "R06-008"
+      ]
+    }
+  ],
+  "topicNotes": [
+    {
+      "file": "docs/theory/adaptation/INTERVALS-AND-POLICY-EVALUATION.md",
+      "title": "Что можно вывести из неполных наблюдений и как сравнивать полные политики",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "36e7f15d25ef95bd2ebe395e31acca447614a8d1735f8c0e80e3bc934f84b3e0"
+    },
+    {
+      "file": "docs/theory/android/UID-ROUTING-AND-OWNERSHIP.md",
+      "title": "Android VPN: UID capture, lockdown и текущий владелец",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "3826e21a2fb38b4bb4859f11bcae78175c0790923159f24ff9c708a6fa160993"
+    },
+    {
+      "file": "docs/theory/architecture/RELEASE-EVIDENCE-BOUNDARIES.md",
+      "title": "Обновления: время знания, проверенные bytes и первое исполнение",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "06e10137bcf5119d189d6df1c8b1840b14882ca7f3bc6182ae4e9b278b9b7377"
+    },
+    {
+      "file": "docs/theory/architecture/TRUST-CONTINUITY-AND-AGREEMENT.md",
+      "title": "Непрерывность доверия: различимость истории и точный смысл согласия",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "c7fbc96894a2126940e5346b54d10cac24e62ed0de64c9fd0436349dec276c66"
+    },
+    {
+      "file": "docs/theory/methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md",
+      "title": "Достоверность корпуса: происхождение, время и покрытие измерений",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "f7b7a47b277dc443f998014d35caf09a43154cbc1b02d33c346c251974db4e3a"
+    },
+    {
+      "file": "docs/theory/observability/PROBE-PROOF-BOUNDARIES.md",
+      "title": "Что доказывает probe: endpoint, путь и отсутствие утечек",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "2f92a95f008c4f7db889cd20cad9934ff539c0b4a9e491d4ddfc24bb3291c6b2"
+    },
+    {
+      "file": "docs/theory/observability/PROXY-DNS-NAT64.md",
+      "title": "Корпоративный proxy и NAT64: следовать фактическим socket-hop",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "8904a836eb818feaf6cfaa4a6e7fb52f400214d6142c212703e50d0f25a492c2"
+    },
+    {
+      "file": "docs/theory/performance/QUIC-ACCOUNTING-AND-LIMITS.md",
+      "title": "QUIC/HY2: семантика счётчиков, пределы памяти и сроки peer",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "6cb3260ee7487a374f4ded9653460a000435c4102a6d2c229706a11975ceb66a"
+    },
+    {
+      "file": "docs/theory/transports/COMPOSITION-AND-TLS-CONTRACTS.md",
+      "title": "Композиция транспортов: шифрование, identity и сохранение TLS-контракта",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "77a16d01e03d75d0d02b7d5660daa0b6516d286503f62e4ee29ab26c957b029f"
+    },
+    {
+      "file": "docs/theory/transports/ECH-DNS-BOOTSTRAP.md",
+      "title": "ECH и DNS: приватность зависит от всего установления соединения",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "1250ac46684fec37848bdc2daf55cf1582a22eccc2082eb77a5fca6bf2d4299d"
+    },
+    {
+      "file": "docs/theory/transports/PADDING-AND-OBSERVATION-WINDOW.md",
+      "title": "Padding: остановка, перезапуск и граница наблюдения детектора",
+      "source": "Obsidian branch; imported byte-exact",
+      "sha256": "4d30af880437597482c2aabaeabf95efef3a4596a918878f7da0858bb9ecfecf"
+    }
+  ],
+  "researchCycles": [
+    {
+      "id": "NINE",
+      "contentMap": "docs/theory/research/NINE-KNOWLEDGE.md",
+      "status": "historical window CLOSED",
+      "authors": 9
+    },
+    {
+      "id": "DR27",
+      "summary": "docs/theory/research/DEEP-REVIEW-2026-10-28.md",
+      "review": "docs/theory/research/reviews/2026-10-28-DEEP-REVIEW.md",
+      "completeReports": 15,
+      "initialTopics": 16,
+      "status": "scoped review, partial DR27-16; no blanket acceptance"
+    },
+    {
+      "id": "R28",
+      "contentMap": "docs/theory/research/cycles/2026-10-28-contracts/README.md",
+      "review": "docs/theory/research/cycles/2026-10-28-contracts/REVIEW-01.md",
+      "applicability": "docs/theory/research/cycles/2026-10-28-contracts/APPLICABILITY-LIMITS.md",
+      "authors": 14,
+      "reportSourceHandoffFiles": 42,
+      "status": "Research stopped; four scoped review decisions, no whole-cycle acceptance; application analysis is separate"
+    }
+  ],
+  "lastEditorialUpdate": {
+    "at": "2026-10-28T12:03:03.998Z",
+    "scope": "Add missing R28 reader-cycle route; preserve legacy totals/entries and scientific verdicts. No new research content or claim acceptance.",
+    "prior": "2026-10-28T10:50:39.258Z"
+  }
+}
