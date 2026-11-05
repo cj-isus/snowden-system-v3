@@ -2,7 +2,7 @@
 
 :root { color-scheme: light; }
 :root[saved-theme="dark"] { color-scheme: dark; }
-html { scroll-padding-top: 2rem; }
+html { width: 100%; scroll-padding-top: 2rem; }
 body { -webkit-font-smoothing: antialiased; }
 .page { max-width: 1600px; }
 .page > #quartz-body { grid-template-columns: 280px minmax(0, 1fr) 260px; column-gap: 1.7rem; }
