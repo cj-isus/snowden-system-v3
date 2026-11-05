@@ -6,8 +6,8 @@ import SourceLink from "./quartz/components/SourceLink"
 
 const isHome = (page: QuartzComponentProps) => page.fileData.slug === "index"
 const graphOptions = {
-  localGraph: { depth: 1, scale: 1, repelForce: 0.7, centerForce: 0.2, linkDistance: 48, fontSize: 0.7, showTags: false },
-  globalGraph: { depth: -1, scale: 0.7, repelForce: 0.7, centerForce: 0.15, linkDistance: 48, fontSize: 0.7, showTags: false, focusOnHover: true, enableRadial: false },
+  localGraph: { depth: 1 },
+  globalGraph: { depth: -1 },
 }
 const navigation = [
   Component.PageTitle(),

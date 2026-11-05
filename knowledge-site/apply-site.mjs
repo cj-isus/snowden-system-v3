@@ -2,6 +2,8 @@ import fs from "node:fs"
 import path from "node:path"
 import { createRequire } from "node:module"
 import { pathToFileURL, fileURLToPath } from "node:url"
+import { applySearchPatches } from "./patch-search.mjs"
+import { createHash } from "node:crypto"
 
 const site = path.dirname(fileURLToPath(import.meta.url))
 const args = new Map()
@@ -30,19 +32,12 @@ patch("quartz/components/scripts/darkmode.inline.ts", 'localStorage.getItem("the
 patch("quartz/components/Graph.tsx", 'aria-label="Global Graph"', 'type="button" aria-label="Развернуть общий граф"')
 patch("quartz/components/Explorer.tsx", 'class="explorer-toggle mobile-explorer hide-until-loaded"', 'class="explorer-toggle mobile-explorer hide-until-loaded" aria-label="Открыть или закрыть дерево материалов"')
 patch("quartz/components/Head.tsx", '<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossOrigin="anonymous" />', '')
-// Fit the full corpus once at startup; keep Quartz zoom/drag and local graphs intact.
-patch("quartz/components/scripts/graph.inline.ts", '  if (enableZoom) {\n    select<HTMLCanvasElement, NodeData>(app.canvas).call(\n      zoom<HTMLCanvasElement, NodeData>()', '  if (depth === -1) simulation.tick(120)\n  if (enableZoom) {\n    const graphZoom = zoom<HTMLCanvasElement, NodeData>()')
-patch("quartz/components/scripts/graph.inline.ts", '        }),\n    )\n  }\n\n  let stopAnimation = false', `        })
-    const canvas = select<HTMLCanvasElement, NodeData>(app.canvas).call(graphZoom)
-    if (depth === -1 && graphData.nodes.length > 0) {
-      const xs = graphData.nodes.map(n => n.x ?? 0), ys = graphData.nodes.map(n => n.y ?? 0)
-      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
-      const fit = Math.max(0.25, Math.min(1, (width - 60) / (maxX - minX + 30), (height - 60) / (maxY - minY + 30)))
-      canvas.call(graphZoom.transform, zoomIdentity.translate(width / 2 - fit * (width / 2 + (minX + maxX) / 2), height / 2 - fit * (height / 2 + (minY + maxY) / 2)).scale(fit))
-    }
-  }
-
-  let stopAnimation = false`)
+// Keep Quartz Graph markup and styles, replace its permanent Pixi/physics loop.
+fs.copyFileSync(path.join(site, "scripts/graph.inline.ts"), path.join(quartz, "quartz/components/scripts/graph.inline.ts"))
+patch("quartz/components/renderPage.tsx", '"static/contentIndex.json"', '"static/navigationIndex.json"')
+const resourceVersion = createHash("sha256").update(fs.readFileSync(path.join(quartz, "knowledge-export.json"))).update(["apply-site.mjs", "patch-search.mjs", "scripts/graph.inline.ts", "styles/custom.scss", "quartz.layout.ts", "quartz.config.ts"].map(file => fs.readFileSync(path.join(site, file), "utf8")).join("\0")).digest("hex").slice(0, 12)
+for (const file of ["postscript.js", "index.css"]) patch("quartz/components/renderPage.tsx", `joinSegments(baseDir, "${file}")`, `joinSegments(baseDir, "${file}") + "?v=${resourceVersion}"`)
+applySearchPatches(patch, basePath)
 patch("quartz/components/scripts/mermaid.inline.ts", '"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.0/mermaid.esm.min.mjs"', `new URL(${JSON.stringify(basePath + "/static/mermaid/mermaid.js")}, window.location.origin).href`)
 
 const runtimePackage = path.join(site, "runtime/node_modules/mermaid/dist/mermaid.esm.mjs")

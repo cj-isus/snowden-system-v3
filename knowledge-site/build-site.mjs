@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import crypto from "node:crypto"
 import { spawnSync } from "node:child_process"
+import { buildNavigation } from "./build-graph.mjs"
 
 const flag = process.argv.indexOf("--quartz")
 if (flag < 0 || !process.argv[flag + 1]) throw new Error("Explicit isolated Quartz directory required")
@@ -16,6 +17,7 @@ const build = spawnSync(process.execPath, ["quartz/bootstrap-cli.mjs", "build", 
 if (build.status !== 0) process.exit(build.status ?? 1)
 const index = fs.readFileSync(path.join(output, "index.html"), "utf8")
 const content = JSON.parse(fs.readFileSync(path.join(output, "static/contentIndex.json"), "utf8"))
+const navigation = await buildNavigation(quartz, content)
 const missing = exported.entries.filter(entry => entry.type === "material" && !fs.existsSync(path.join(output, entry.destination.replace(/\.md$/, ".html"))))
 if (missing.length || Object.keys(content).length < exported.materials || !index.includes("knowledge-home") || !index.includes("graph-container")) throw new Error(`Incomplete Pages artifact: ${missing.length} materials missing`)
 const receipt = {
@@ -23,6 +25,8 @@ const receipt = {
   indexedPages: Object.keys(content).length,
   links: Object.values(content).reduce((sum, page) => sum + (page.links?.length ?? 0), 0),
   homeSHA256: crypto.createHash("sha256").update(index).digest("hex"),
+  navigation, searchBytes: fs.statSync(path.join(output, "static/contentIndex.json")).size,
+  browserScriptBytes: fs.statSync(path.join(output, "postscript.js")).size,
   scope: "Static site packaging receipt; no VPN or native/device/live verification.",
 }
 fs.writeFileSync(path.join(quartz, "site-build.json"), JSON.stringify(receipt, null, 2) + "\n")
