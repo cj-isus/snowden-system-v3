@@ -1,0 +1,81 @@
+name: Publish knowledge graph
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/theory/**'
+      - 'docs/planning/knowledge-application/**'
+      - 'docs/KNOWLEDGE-BASE.md'
+      - 'knowledge-site/**'
+      - '.github/workflows/knowledge-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: knowledge-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout the published knowledge source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - name: Checkout the reviewed Quartz engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: jackyzha0/quartz
+          ref: d25a6eabf96751ffca56f8a8139272def7a65041
+          path: .knowledge-engine
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Node for the site only
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.21.1'
+          check-latest: false
+          cache: npm
+          cache-dependency-path: |
+            .knowledge-engine/package-lock.json
+            source/knowledge-site/runtime/package-lock.json
+      - name: Install pinned engine dependencies without lifecycle scripts
+        working-directory: .knowledge-engine
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install the self-hosted diagram runtime
+        working-directory: source/knowledge-site/runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Export canonical knowledge from this commit
+        run: node source/knowledge-site/export-content.mjs --repository source --ref "$GITHUB_SHA" --out .knowledge-engine/site-content --quartz .knowledge-engine
+      - name: Apply site layout and self-hosted resources
+        run: node source/knowledge-site/apply-site.mjs --quartz .knowledge-engine
+      - name: Build the static knowledge site
+        run: node source/knowledge-site/build-site.mjs --quartz .knowledge-engine
+      - name: Upload the Pages site
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: .knowledge-engine/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy knowledge to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

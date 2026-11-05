@@ -1,0 +1,68 @@
+@use "./base.scss";
+
+:root { color-scheme: light; }
+:root[saved-theme="dark"] { color-scheme: dark; }
+html { scroll-padding-top: 2rem; }
+body { -webkit-font-smoothing: antialiased; }
+.page { max-width: 1600px; }
+.page > #quartz-body { grid-template-columns: 280px minmax(0, 1fr) 260px; column-gap: 1.7rem; }
+.page > #quartz-body .sidebar { padding: 2.3rem 0.9rem 1.2rem; height: 100dvh; }
+.page > #quartz-body .page-header { margin-top: 2.3rem; }
+.page-title { font-size: 1.24rem; letter-spacing: -.035em; }
+.page-title a { color: var(--dark); }
+.page-title a::before { content: "●"; color: var(--secondary); margin-right: .55rem; font-size: .78em; }
+.article-title { font-size: clamp(1.6rem, 1.2rem + 1.1vw, 2.25rem); line-height: 1.23; letter-spacing: -.035em; }
+.center { min-width: 0 !important; }
+article { line-height: 1.7; overflow-wrap: anywhere; }
+article p, article li { font-size: 1rem; }
+article h2 { margin-top: 2.4rem; letter-spacing: -.025em; }
+article h3 { line-height: 1.4; }
+article table { font-size: .9rem; line-height: 1.55; }
+article pre { max-width: 100%; border-radius: .65rem; }
+article code { overflow-wrap: anywhere; }
+article .katex-display, article mjx-container[display="true"] { max-width: 100%; overflow-x: auto; padding-block: .5rem; }
+article blockquote { border-left-width: 2px; border-color: var(--secondary); padding: .25rem 1rem; background: var(--highlight); border-radius: 0 .5rem .5rem 0; }
+.note-origin { margin: .6rem 0 1.5rem; font-size: .79rem; }
+.note-origin a { color: var(--gray); font-weight: 400; }
+.explorer { font-size: .86rem; }
+.explorer-content ul li > a { line-height: 1.5; padding-block: .18rem; }
+.explorer-content a.active { color: var(--secondary); }
+.explorer button { border-radius: .35rem; }
+.sidebar.right { font-size: .85rem; }
+.graph > h3 { font-weight: 500; color: var(--gray); }
+.graph > .graph-outer { border-radius: .8rem; }
+.graph .global-graph-icon { min-width: 32px; min-height: 32px; }
+.global-graph-outer > .global-graph-container { height: 88dvh !important; width: min(94vw, 1600px) !important; }
+.knowledge-home { margin-top: .5rem; }
+.graph-intro { color: var(--gray); margin: 0 0 1.5rem; font-size: 1rem; }
+.knowledge-graph .graph > h3 { display: none; }
+.knowledge-graph .graph-container { height: 100%; }
+.knowledge-graph .graph > .graph-outer { height: clamp(26rem, 66dvh, 48rem); margin: 0; border: 1px solid var(--lightgray); border-radius: 1rem; background: radial-gradient(ellipse at 50% 45%, var(--highlight), transparent 72%); }
+.graph-caption { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .4rem 1rem; margin: .9rem .1rem 0; color: var(--gray); font-size: .77rem; line-height: 1.6; }
+.graph-keyboard { color: var(--gray); font-size: .76rem; margin-top: .6rem; }
+kbd { border: 1px solid var(--lightgray); border-radius: .25rem; padding: .05rem .3rem; font-family: var(--codeFont); font-size: .85em; }
+.page:has(.knowledge-home) > #quartz-body { grid-template-columns: 280px minmax(0, 1fr); grid-template-areas: "grid-sidebar-left grid-header" "grid-sidebar-left grid-center" "grid-sidebar-left grid-footer"; }
+.page:has(.knowledge-home) .sidebar.right { display: none; }
+.page:has(.knowledge-home) .center > article { border-top: 1px solid var(--lightgray); padding-top: 1rem; margin-top: 1.7rem; }
+footer { font-size: .75rem; opacity: .75; padding-block: 1.5rem; }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--secondary); outline-offset: 4px; }
+@media (min-width: 801px) and (max-width: 1200px) {
+  .page > #quartz-body, .page:has(.knowledge-home) > #quartz-body { grid-template-columns: 250px minmax(0, 1fr); }
+  .page > #quartz-body .sidebar.right { height: auto; padding: 1rem 0; }
+}
+@media (max-width: 800px) {
+  .page > #quartz-body, .page:has(.knowledge-home) > #quartz-body { grid-template-columns: minmax(0, 1fr); grid-template-areas: "grid-sidebar-left" "grid-header" "grid-center" "grid-sidebar-right" "grid-footer"; gap: .5rem; padding-inline: 1rem; }
+  .page > #quartz-body .sidebar.left { height: auto; padding: 1rem 0; gap: .65rem; }
+  .page > #quartz-body .page-header { margin-top: .6rem; }
+  .page-title { font-size: 1rem; }
+  .knowledge-graph .graph > .graph-outer { height: 56dvh; min-height: 21rem; border-radius: .65rem; }
+  .graph-caption { display: block; }
+  .graph-caption span { display: block; margin-bottom: .3rem; }
+  .graph-keyboard { display: none; }
+  .note-origin { margin-bottom: 1rem; }
+  .sidebar.right .graph { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

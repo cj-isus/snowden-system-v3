@@ -1,0 +1,7 @@
+{
+  "name": "snowden-knowledge-site-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Self-hosted runtime diagrams for the static knowledge site; no application dependencies.",
+  "dependencies": { "mermaid": "11.4.0" }
+}

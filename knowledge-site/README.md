@@ -1,0 +1,42 @@
+# Публикация базы знаний
+
+Сайт: **https://cj-isus.github.io/snowden-system-v3/**.
+
+Единственный редактируемый источник — `docs/theory/`,
+`docs/planning/knowledge-application/` и `docs/KNOWLEDGE-BASE.md`.
+Сайт читает только их версию из Git. Непереданные изменения других владельцев,
+служебные артефакты, настройки Obsidian, код и данные приложения в экспорт не входят.
+
+Основа — [Quartz 4.5.2](https://github.com/jackyzha0/quartz/tree/d25a6eabf96751ffca56f8a8139272def7a65041),
+MIT. Та же закреплённая версия использовалась как источник графа в отдельной работе
+над папками. Лицензия движка сохранена в `LICENSE-Quartz.txt`.
+Mermaid закреплён отдельным lockfile и собирается в локальные ресурсы сайта;
+формулы отображает MathJax SVG. Аналитика и внешняя загрузка шрифтов отключены.
+
+## Как обновляется сайт
+
+1. Править канонические Markdown-файлы в `docs`.
+2. Публиковать проверенные изменения в `main`.
+3. Workflow `knowledge-pages.yml` экспортирует содержимое, собирает Quartz
+   и публикует артефакт GitHub Pages.
+
+Экспорт не меняет исходные заметки. Заголовок и ссылки адаптируются для сайта,
+а у каждой статьи остаётся ссылка на исходный Markdown той же версии.
+Авторские оригиналы доступны отдельной веткой дерева.
+
+`upstream.json` фиксирует движок. При его обновлении нужно согласованно менять
+ref в workflow и проверять локальную адаптацию; автоматического `latest` нет.
+
+## Изолированная сборка
+
+В чистой копии закреплённого Quartz установить его lockfile через `npm ci --ignore-scripts`,
+а runtime — через `npm ci --prefix knowledge-site/runtime --ignore-scripts`.
+Далее:
+
+```text
+node knowledge-site/export-content.mjs --repository . --ref HEAD --out <quartz>/site-content --quartz <quartz>
+node knowledge-site/apply-site.mjs --quartz <quartz>
+node knowledge-site/build-site.mjs --quartz <quartz>
+```
+
+Это сборка читательского сайта. Она не запускает проверки, сборки или сетевой runtime VPN.
