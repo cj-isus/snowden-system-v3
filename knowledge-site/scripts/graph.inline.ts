@@ -165,7 +165,7 @@ function mountGraph(container: HTMLElement, slug: FullSlug) {
       }
       const nodes = all.nodes.filter(n => included.has(n.id)).map(n => ({...n}))
       const byId = new Map(nodes.map(n => [n.id, n]))
-      data = {nodes, edges: all.edges.filter(([a,b]) => included.has(a.id) && included.has(b.id)).map(([a,b]) => [byId.get(a.id)!,byId.get(b.id)!]), neighbours: all.neighbours}
+      data = {nodes, edges: all.edges.filter(([a,b]) => included.has(a.id) && included.has(b.id)).map(([a,b]): [GraphNode, GraphNode] => [byId.get(a.id)!,byId.get(b.id)!]), neighbours: all.neighbours}
       canvas = document.createElement("canvas"); canvas.className = "knowledge-canvas"; canvas.tabIndex = 0
       canvas.setAttribute("role", "img"); canvas.setAttribute("aria-label", "Карта связей. Плюс и минус — масштаб, стрелки — перемещение, 0 — вписать. Все материалы доступны в дереве и поиске.")
       const ctx = canvas.getContext("2d")
@@ -223,6 +223,7 @@ function mountGraph(container: HTMLElement, slug: FullSlug) {
       canvas.addEventListener("pointerleave", () => { if (!pointers.size) { hover = undefined; requestDraw() } }, {signal})
       canvas.addEventListener("wheel", event => { event.preventDefault(); const p = point(event); zoom(Math.exp(-Math.max(-120, Math.min(120, event.deltaY)) * .003), p.x, p.y) }, {passive: false, signal})
       canvas.addEventListener("keydown", event => {
+        if (event.ctrlKey || event.metaKey || event.altKey) return
         if (["+", "=", "-", "0", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(event.key)) event.preventDefault()
         if (event.key === "+" || event.key === "=") zoom(1.4)
         else if (event.key === "-") zoom(1 / 1.4)
@@ -260,8 +261,9 @@ document.addEventListener("nav", () => {
     returnFocus = document.activeElement as HTMLElement
     overlay.classList.add("active"); overlay.setAttribute("role", "dialog"); overlay.setAttribute("aria-modal", "true"); overlay.setAttribute("aria-label", "Общий граф знаний")
     globalCleanup = mountGraph(graph, slug)
-    let closeButton = overlay.querySelector<HTMLButtonElement>(".graph-close")
-    if (!closeButton) { closeButton = button("Закрыть общий граф", "×", close); closeButton.className = "graph-close"; overlay.append(closeButton) }
+    overlay.querySelector(".graph-close")?.remove()
+    const closeButton = button("Закрыть общий граф", "×", close)
+    closeButton.className = "graph-close"; overlay.append(closeButton)
     closeButton.focus()
   }
   for (const icon of document.querySelectorAll(".global-graph-icon")) icon.addEventListener("click", show, {signal})
@@ -277,5 +279,5 @@ document.addEventListener("nav", () => {
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
     }
   }, {signal})
-  window.addCleanup(() => { abort.abort(); for (const cleanup of cleanups) cleanup(); globalCleanup?.() })
+  window.addCleanup(() => { abort.abort(); for (const cleanup of cleanups) cleanup(); globalCleanup?.(); overlay?.querySelector(".graph-close")?.remove(); overlay?.classList.remove("active") })
 })

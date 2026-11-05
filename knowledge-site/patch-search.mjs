@@ -6,7 +6,7 @@ let fullSearchPromise: Promise<void> | undefined
 function prepareFullSearch(data: ContentIndex) {
   return fullSearchPromise ??= fetch(new URL(${JSON.stringify(basePath + "/static/contentIndex.json")}, location.origin))
     .then(response => { if (!response.ok) throw new Error("Search unavailable"); return response.json() })
-    .then(async full => {
+    .then(async (full: ContentIndex) => {
       for (const [slug, entry] of Object.entries(full)) if (data[slug]) Object.assign(data[slug], entry)
       await fillDocument(data)
     })
