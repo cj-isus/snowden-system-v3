@@ -1,221 +1,262 @@
-# R28-Z04 — QUIC/HY2: все holders и semantic matrix готового исправления
+# R28-Z04 — QUIC/HY2: владельцы ресурсов и матрица совместимости
 
-- author_status: READY_FOR_REVIEW
-- evidence: [SOURCES](SOURCES.md), [HANDOFF](HANDOFF.md)
-- captures: `.artifacts/research/r28-contracts/Z04/`
+**Срез 28 октября 2026 года. Статус автора — READY_FOR_REVIEW.**
+[Источники, версии и глубина чтения](SOURCES.md) · [Краткая сводка](HANDOFF.md).
+Сохранённые материалы: `.artifacts/research/r28-contracts/Z04/`.
 
-## 1. Ограниченный ответ
+## Краткий вывод и предел применения
 
-### R28-Z04-A — queue/callback bounds теряют силу при смене owner и unit
+Число элементов в одной очереди ограничивает только эту очередь. После копирования,
+извлечения, сериализации и передачи в историю одни данные могут удерживаться
+разными владельцами. Общая граница памяти требует учёта этих владельцев,
+активных и завершающихся поколений, размеров выделенных буферов и условий допуска.
 
-Локальные пределы корректны только для своего owner: `sendQueue=8` считает
-serialized `packetBuffer`; `datagramQueue=32/128` — pointers/copies QUIC
-DATAGRAM; HY2 `data=64` — application `udpMessage`; defragger — fragment groups;
-sent history — packet metadata+frame references; BBR sampler — slots от первого
-до последнего congestion packet number. `Pop`, socket-write и ACK/loss имеют
-разные release receipts. Поэтому ни один локальный count/window/singleflight
-не является global RAM/time bound без лимитов на callers, sessions, fragments,
-handlers, active/retiring generations и allocator capacities.
+Найдена согласованная пара исходников отправителя и контроллеров, исправляющая
+названные расхождения обратных вызовов. Она остаётся **кандидатом миграции**:
+ветвь PTO, PMTU, ёмкость sampler, общий допуск и совместимость всего ядра
+не закрываются одним обновлением. RSS, CPU, время остановки и скорость не измерены.
 
-### R28-Z04-B — готовое исправление действительно парное, но scoped
+**Применимость:** оценка ресурсов и подготовка ограниченной миграции ядра.
+**Предел:** выбранные исходники, ручные трассы и условная арифметика.
+Слова ACCEPT/REJECT в матрице ниже — предложения автора в названной области,
+не новые научные решения руководителя и не подтверждение работы продукта.
 
-Совместимая source-пара:
+## 1. Ограниченные утверждения
 
-- **sender:** SagerNet quic-go commit
-  `f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80`
-  (tag ref `v0.61.0-sing-box-mod.6`, MIT);
-- **controllers/callers:** SagerNet sing-quic commit
-  `4ab2eceaac81e073f53b22ec72ff56aaea89a3d1`
-  (go.mod требует quic-go mod.6; GPL-3.0-or-later).
+### R28-Z04-A — граница очереди относится к своему владельцу и единице
 
-Пара исправляет named mismatches: injected `OnPacketSent` получает **prior**
-flight; packet identity становится per-connection across number spaces;
-pre-install packets фильтруются; drop/migration могут вызвать
-`OnPacketNeutered`; после ACK/loss event передаётся exact `leastUnacked`;
-Brutal реализует полный Ex и monotime, pacer seed — actual initial packet size.
+`sendQueue=8` считает сериализованные `packetBuffer`; `datagramQueue=32/128` —
+кадры и копии QUIC DATAGRAM; HY2 `data=64` — прикладные `udpMessage`.
+Defragger хранит группы фрагментов, sent history — метаданные и ссылки на кадры,
+а BBR sampler — слоты между первым и последним congestion packet number.
+`Pop`, возврат socket-write и ACK/loss — разные события освобождения.
 
-**Scoped verdict:** `ADAPT_AS_COUPLED_PAIR`, не drop-in и не whole-resource fix.
-Brutal Ex исправляет потерянный batch dispatch. BBR получает правильный prior
-flight и terminal callbacks. Но PTO `QueueProbePacket` всё ещё удаляет packet
-из engine history и очищает frames без `OnPacketNeutered`/`notifyLeastUnacked`.
-Следовательно, sampler record может пережить этот specific retirement до
-следующего congestion event/connection disposal; готовая пара не доказывает
-полный sampler/resource bound.
+Поэтому count, окно истории или единственная незавершённая подготовка сами
+по себе не задают общий предел RAM или времени. Нужны предпосылки о числе
+вызывающих, сессий, фрагментов, обработчиков, поколений и ёмкости выделений.
 
-## 2. Actual path и holder passport
+### R28-Z04-B — исправление отправителя и контроллеров рассматривается парой
 
-Current manifest: sing-box1.13.19; quic-go0.59.0-mod.4 commit
-`ccd46abedd39c6f8384b1df8daf42008724958f5`; sing-quic pseudo-version commit
-`d83826c306d7c008cafb3fd6d8ee07cbcfd656ed`; sing0.8.13. Fresh raw fetch:
-11 current critical files byte-equal локальному module cache. Windows packaging:
-windows/amd64 + with_quic/utls/gvisor/clash_api.
+- Отправитель: SagerNet quic-go
+  `f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80`,
+  ref `v0.61.0-sing-box-mod.6`, MIT.
+- Контроллеры и вызывающий код: SagerNet sing-quic
+  `4ab2eceaac81e073f53b22ec72ff56aaea89a3d1`,
+  go.mod требует quic-go mod.6, GPL-3.0-or-later.
 
-Actual non-hopping Windows/HY2 path из R04-010 подтверждён адресно:
-DefaultDialer connected UDP → trackedConn (если manager) → UnbindPacketConn →
-scalar Salamander → quic-go Windows basicConn → Go UDP WSARecv/WSASend.
-Unbind не экспортирует SyscallConn/ReadMsgUDP/WriteMsgUDP; Windows quic-go
-`newConn` возвращает basicConn. Это сохраняет границы одной UDP datagram и
-исключает перенос Linux UDP_SEGMENT fast path по имени GSO.
+В названных ветвях внедрённый `OnPacketSent` получает flight **до отправки**;
+идентичность пакета становится общей для соединения и пространств номеров;
+пакеты до установки контроллера отфильтровываются; drop/migration могут вызывать
+`OnPacketNeutered`; после ACK/loss передаётся точный `leastUnacked`.
+Brutal реализует полный Ex и monotime; начальная настройка pacer использует
+фактический начальный размер пакета.
 
-### 2.1 Паспорт holders
+**Предложение автора:** `ADAPT_AS_COUPLED_PAIR`, а не прямая замена без адаптации
+или полное исправление ресурсов. Brutal Ex восстанавливает потерянный batch
+dispatch; BBR получает согласованные prior flight и названные terminal callbacks.
+Но PTO `QueueProbePacket` всё ещё удаляет пакет из engine history и очищает frames
+без `OnPacketNeutered`/`notifyLeastUnacked` на этой ветви. Запись sampler может
+пережить именно это удаление до следующего соответствующего события или
+освобождения соединения. Полный предел sampler этим не доказан.
 
-Обозначения: U — original application payload bytes; D — packed HY2 DATAGRAM
-payload; L≤1452 — обычный encoded QUIC packet текущего Windows пути; N_* —
-максимальное одновременное количество соответствующих owners. Все формулы —
-условные source-модели, не RSS measurements.
+## 2. Рассмотренный путь и паспорт владельцев
 
-| Stage / variable | Unit | Owner | Локальный guard | Release receipt / перенос |
+Манифест на дату среза: sing-box1.13.19; quic-go0.59.0-mod.4
+`ccd46abedd39c6f8384b1df8daf42008724958f5`; sing-quic pseudo-version
+`d83826c306d7c008cafb3fd6d8ee07cbcfd656ed`; sing0.8.13.
+При первоначальной сверке 11 выбранных публичных файлов совпали с локальным
+module cache. Упаковка Windows задавала windows/amd64 и теги
+with_quic/utls/gvisor/clash_api. Это не идентичность выпущенного EXE.
+
+Адресно подтверждённый в R04-010 Windows/HY2-путь без hopping:
+DefaultDialer connected UDP → trackedConn при наличии manager → UnbindPacketConn →
+скалярный Salamander → quic-go Windows basicConn → Go UDP WSARecv/WSASend.
+Unbind не экспортирует SyscallConn/ReadMsgUDP/WriteMsgUDP; Windows `newConn`
+возвращает basicConn. Сохраняются границы одной UDP-датаграммы;
+Linux UDP_SEGMENT нельзя приписать этому пути по слову GSO.
+
+### 2.1. Паспорт владельцев
+
+U — исходные байты прикладного payload; D — упакованный HY2 DATAGRAM payload;
+L≤1452 — выбранный обычный encoded QUIC packet этого Windows-пути.
+N_* — максимальное одновременное число соответствующих владельцев.
+В произведениях ND величина D должна ограничивать все входящие в этот член
+буферы, а не быть размером одного удобного примера. Это условная модель,
+не измерение RSS и не универсальный предел для других MTU/путей.
+
+| Стадия / переменная | Единица | Владелец | Локальная граница | Освобождение или перенос |
 |---|---|---|---|---|
-| Caller original `U_caller` | bytes/backing | caller приложения | MaxUDPSize4096 только на HY2 API | Возврат Write/WritePacket не доказывает немедленный GC caller buffer |
-| HY2 fragments `F_frag` | `*udpMessage`, alias slices | один Write caller | U≤4096; `fragmentTotal` wire uint8; gate на C=B-H и F≤255 отсутствует | `releaseMessages`; alias не владеет original backing; caller lifetime критичен |
-| HY2 packed staging `B_pack` | managed `buf.Buffer` per fragment | `writePacket` | packet size/allocator class | deferred Release после `SendDatagram` return |
-| QUIC pre-Add copies `N_wait·D` | copied `wire.DatagramFrame.Data` | каждый concurrent SendDatagram caller | copy создаётся **до** Add; Add blocks when queue32 full | Add error/queue acceptance; blocked copies не входят в 32 |
-| QUIC DATAGRAM send queue | frame pointers+Data | `datagramQueue.sendQueue` | 32 queued | Pop только переносит frame в packer/history; не release Data |
-| Packet payload/history | frame refs+stream refs | `sentPacketHistory` | current tracked guards 40k/50k slots; distinct PN spaces | ACK/loss/remove/neuter paths; DATAGRAM `Frame.Data` удерживается history после Pop/write |
-| QUIC serialized send queue | encoded buffer bytes | `sendQueue` | 8 entries; Windows non-GSO ⇒ Σencoded≤8·1452=11616 | worker Write return releases serialized buffer; **не** DATAGRAM frame Data |
-| In-service + builder + Salamander | encoded/staging backing | send worker / packer / Salamander | один serialized write in service и current builder в normal scalar trace; allocator round-up | write/return/defer; kernel completion не peer/app receipt |
-| Kernel UDP buffers | kernel bytes | Windows Winsock | desired sizes — requests; no engine Job memory cap | socket close/kernel completion; не Go queue receipt |
-| QUIC RX datagram queue | `[]byte` copies | datagramQueue | 128 queued; copy occurs before cap check | Receive dequeues; dropped new copy becomes GC candidate, not immediate RSS proof |
-| Client post-dequeue handler | goroutine+`[]byte`+message | `loopMessages` child | goroutine-per-message, no local numeric cap | handler return / connection close; upstream128 no longer applies after dequeue |
-| Server post-dequeue path | message/session goroutine | serverSession | serial loop until new session, then goroutine per new UDP session | udpTimeout/canceler and close; simultaneous sessions need external bound |
-| HY2 ready queue | `udpMessage`+data | per `udpPacketConn` | channel64 | Read/WaitRead; WaitRead may transfer `p.data` ownership when no headroom copy |
-| Defrag groups `G_defrag` | map entry + up to255 message slots+buffers | LruCache packetID | age10s; **no WithSize** | eviction runs lazily on cache operations, callback releases messages; time alone not active timer receipt |
-| RX assembly overlap | fragments+new output | `udpDefragger.feed` | no repeat total≤4096 gate | fragments released after output copy; full ready queue drops output after allocation |
-| BBR sampler | RingBuffer slots of connectionState | injected controller | initial256, grows geometrically; no capacity ceiling | ACK sample does not immediately remove; event-end RemoveUpTo / neuter. `Clear/Pop` zeros slots but backing high-water remains allocated |
-| Pending offer | one registered `clientOffer` | HY2 Client | one pending under mutex | done closes before discarded conn cleanup; singleflight≠retiring generation bound |
-| Active/retiring generation | QUIC state+raw socket+sessions | clientQUICConnection / Windows worker | connDone marks inactive before full QUIC/raw close; platform forbids replacement after failed Stop | graceful close then raw close; Windows Job Terminate/Wait/Empty is stronger process receipt, but commitBytes=0 |
+| Исходный `U_caller` | Байты и исходное выделение | Прикладной caller | MaxUDPSize4096 только на HY2 API | Возврат Write/WritePacket не доказывает немедленный GC буфера caller |
+| Фрагменты HY2 `F_frag` | `*udpMessage`, срезы-алиасы | Один Write caller | U≤4096; wire `fragmentTotal` — uint8; проверки C=B-H и F≤255 не найдены | `releaseMessages`; алиас не владеет исходным выделением, время жизни caller существенно |
+| Упаковка HY2 `B_pack` | `buf.Buffer` на фрагмент | `writePacket` | Размер пакета и класс allocator | deferred Release после возврата `SendDatagram` |
+| Копии QUIC до Add `N_wait·D` | `wire.DatagramFrame.Data` | Каждый одновременный caller SendDatagram | Копирование до Add; Add ждёт при полной queue32 | Ошибка Add или принятие очередью; ожидающие копии не входят в 32 |
+| Отправляемые QUIC DATAGRAM | Указатели на кадры и Data | `datagramQueue.sendQueue` | 32 элемента | Pop переносит кадр в packer/history, не освобождает Data |
+| Payload и история пакетов | Ссылки на кадры/streams | `sentPacketHistory` | В срезе guards 40k/50k, разные PN spaces | ACK/loss/remove/neuter; history удерживает `Frame.Data` после Pop/write |
+| Сериализованная очередь QUIC | Encoded buffer bytes | `sendQueue` | 8 элементов; выбранный Windows non-GSO: Σencoded≤8·1452=11616 | Возврат worker Write освобождает encoded buffer, не DATAGRAM Data |
+| Текущая запись, builder, Salamander | Encoded/staging backing | Send worker, packer, Salamander | Одна обслуживаемая скалярная запись и текущий builder в названной трассе; allocator округляет | Возврат/write/defer; kernel completion не подтверждает peer или приложение |
+| UDP-буферы ОС | Kernel bytes | Windows Winsock | Запрашиваемые размеры не равны установленным; лимит памяти engine Job не задан | Закрытие socket/kernel completion, не событие Go queue |
+| Приёмная очередь QUIC DATAGRAM | Копии `[]byte` | datagramQueue | 128 элементов; копия создаётся до проверки ёмкости | Receive извлекает; новая отброшенная копия лишь становится кандидатом GC |
+| Клиентский обработчик после извлечения | Goroutine, `[]byte`, message | Потомок `loopMessages` | Goroutine на сообщение, локальный численный предел не найден | Возврат handler или закрытие; upstream128 уже не ограничивает обработчиков |
+| Сервер после извлечения | Message/session goroutine | serverSession | Последовательный цикл до новой сессии, затем goroutine на новую UDP-сессию | udpTimeout/canceler/close; число одновременных сессий требует отдельной предпосылки |
+| Готовая очередь HY2 | `udpMessage` и data | Каждый `udpPacketConn` | Channel64 | Read/WaitRead; без копирования headroom WaitRead может передать владение `p.data` |
+| Группы defrag `G_defrag` | Запись map, до 255 slots и буферы | LruCache packetID | Age10s; **нет WithSize** | Eviction вызывается лениво при операциях кеша; время само не вызывает освобождение |
+| Сборка принятого сообщения | Фрагменты и новый output | `udpDefragger.feed` | Повторная проверка общей длины≤4096 не найдена | Фрагменты освобождаются после копирования; полная ready queue отбрасывает уже выделенный output |
+| BBR sampler | RingBuffer слотов connectionState | Внедрённый контроллер | Начально 256, геометрический рост, потолок ёмкости не найден | ACK sample не удаляет немедленно; event-end RemoveUpTo/neuter. Clear/Pop обнуляют slots, но сохраняют выделенную ёмкость |
+| Незавершённая подготовка | Один `clientOffer` | HY2 Client | Один pending под mutex | done закрывается до очистки отброшенного соединения; это не предел завершающихся поколений |
+| Активное/завершающееся поколение | QUIC, raw socket, sessions | clientQUICConnection / Windows worker | connDone раньше полного закрытия; платформа запрещает замену после неудачного Stop | Graceful/raw close; Job Terminate/Wait/Empty — более сильное процессное событие, но commitBytes=0 |
 
-### 2.2 Условная композиционная арифметика
+### 2.2. Условная композиционная арифметика
 
-Для выбранного carrier, без kernel/TLS/stream/pool overhead, логические живые
-payload/backing bytes удовлетворяют только параметрической форме:
+Для выбранного carrier, без kernel/TLS/stream/pool overhead, логические
+удерживаемые payload/backing bytes имеют только параметрическую форму:
 
 `B_live ≤ B_caller + N_wait·D + 32D + B_history + 8L + B_writer + B_builder
         + B_salamander + 128D_rx + N_handler·D_rx
         + Σ_sessions(64·U_ready + B_defrag + B_assembly) + B_sampler + B_retiring`
 
-где
+Условия чтения формулы:
 
 - `B_defrag ≤ Σ_groups(Σparts U_part + slots·metadata)` только при заданных
-  `G_defrag`, parts/group и capacities; age10s не задаёт количество groups;
-- `B_sampler` зависит от PN span/high-water, а не только present records;
-- `B_retiring` требует cap generations и completion receipts;
-- `B_caller`, N_wait, N_handler, sessions, groups, retiring generations не
-  ограничены рассмотренными queue counts.
+  числе групп, parts/group и ёмкостях; age10s не задаёт количество групп.
+- `B_sampler` зависит от диапазона PN и сохранённой максимальной ёмкости,
+  а не только от числа присутствующих записей.
+- `B_retiring` требует предела поколений и подтверждения их завершения.
+- `B_caller`, N_wait, N_handler, sessions, groups и retiring generations
+  не ограничены рассмотренными счётчиками очередей.
 
-Формула не обещает finite global number без admission assumptions. Сильнейший
-контрпример: queue32 полна, N callers уже скопировали D и ждут Add; одновременно
-Pop переносит 32 frame Data в history, socket queue8 удерживает другие encoded
-buffers. Count32 и count8 оба истинны, но bytes находятся у разных owners.
+Без этих условий формула не даёт конечного общего числа. Контрпример:
+queue32 полна, N callers уже скопировали D и ждут Add; одновременно Pop
+переносит 32 Data в history, а socket queue8 удерживает другие encoded buffers.
+Оба локальных count истинны, но данные принадлежат разным владельцам.
 
-## 3. Sender/controller semantic matrix
+## 3. Матрица отправителя и контроллера
 
-| Seam | Current mod.4 + d838 | Pair f7b7e9c + 4ab2ece | Verdict |
+Каждая оценка ниже — ограниченное предложение автора, не новое ACCEPTED.
+
+| Граница | Mod.4 + d838 в исходном срезе | Кандидат f7b7e9c + 4ab2ece | Что именно предлагается |
 |---|---|---|---|
-| Brutal batch dispatch | Brutal asserts base interface; Ex method не выбран; ackRate не получает normal batch | Brutal asserts CongestionControlEx; monotime event batch | **ACCEPT pair** для named dispatch mismatch |
-| `OnPacketSent` flight | Injected callback получает post-flight; sampler добавляет L ⇒ snapshot F+2L | Injected controller получает prior F; sampler stores F+L | **ACCEPT pair**; не применять `-L` глобально к legacy controllers |
-| Packet identity | PN scoped per Initial/Handshake/App spaces; controller map assumes one ordered domain | отдельный congestionPacketNumber across spaces | **ACCEPT pair** для injected controller identity |
-| Install boundary | Старые packets могут пересечь SetCongestionControl без explicit reports predicate | firstPacketNumber фильтрует pre-install packets | **ACCEPT pair**; whole connection lifecycle still external |
-| ACK/loss cleanup | Ex event + approximate/current lowest app PN; current BBR самостоятельно estimates leastUnacked | sender computes exact least across reported spaces after events | **ACCEPT pair**, better sampler retirement |
-| Drop/migration | Drop packet spaces/path migration может убрать history без controller terminal record | `OnPacketNeutered`, controller retained across migration | **ACCEPT pair** для listed paths |
-| PTO probe retirement | QueueProbePacket DeclareLost + clears frames; no loss batch/neuter/least callback in that function | то же: no terminal sampler callback visible | **UNKNOWN/NEEDS_ADAPTATION**; named residual seam |
-| PMTU loss | individual controller callback skipped; current Ex list may include loss (baseline mismatch) | candidate Ex lost list append remains under reports but outside individual PMTU guard | **UNKNOWN**, pair not blanket PMTU fix |
-| App-limited | current packer emptiness can overmark between writes | candidate suppresses within one RTT since network-limited | **ACCEPT source behavior**, field effect unknown |
-| Pacer seed | current Brutal fixed1252; BBR old constructor clock/size seams | actual `InitialPacketSize`, monotime, profile constructor | **ACCEPT compatibility improvement**; rates/overflow still separate |
-| Method set | Current BBR implements old Ex; Brutal no full Ex | both implement new Ex including neuter/lost/app-limited | **PAIR ONLY**; new controller with old sender does not get new callbacks |
-| Licence/deps | quic-go MIT; sing-quic GPL-3+; existing closure sing0.8.13 | same root licences; go.mod moves sing0.9 beta4, quic0.61 mod6, x/*/utls versions | **ADAPT, no drop-in**; whole dependency/build/API closure required |
+| Brutal batch dispatch | Выбран base interface; Ex-метод не получает обычный batch, ackRate не обновляется этим путём | CongestionControlEx и monotime batch | Принять только устранение названного dispatch-расхождения |
+| `OnPacketSent` flight | Передаётся post-flight; sampler добавляет L и получает F+2L | Передаётся prior F; sampler хранит F+L | Согласованная пара; не вычитать L у всех legacy callers |
+| Идентичность пакета | PN раздельны для Initial/Handshake/App; map контроллера предполагает один порядок | Отдельный congestionPacketNumber между пространствами | Устранение названного расхождения идентичности |
+| Установка контроллера | Старые пакеты могут пересечь SetCongestionControl без явного reports-предиката | firstPacketNumber отфильтровывает pre-install | Только эта граница; не весь lifecycle соединения |
+| Очистка ACK/loss | Ex event и приблизительный/current lowest app PN; BBR сам оценивает leastUnacked | Отправитель вычисляет точный least по reported spaces после события | Согласование названного удаления sampler |
+| Drop/migration | History может исчезнуть без terminal-события контроллера | `OnPacketNeutered`, контроллер сохраняется при migration | Только перечисленные ветви |
+| PTO probe retirement | QueueProbePacket DeclareLost и очистка frames без loss batch/neuter/least на этой ветви | Явный terminal callback sampler здесь также не виден | UNKNOWN/NEEDS_ADAPTATION |
+| PMTU loss | Individual callback пропущен; Ex list может включать loss | Ex lost list добавляется под reports, вне individual PMTU guard | UNKNOWN; общего исправления PMTU нет |
+| App-limited | Пустой packer может чрезмерно отмечать промежутки между записями | Кандидат подавляет отметку в пределах RTT после network-limited | Факт исходника; эффект в поле неизвестен |
+| Начальный pacer | Brutal использует 1252; у старого BBR отдельные clock/size seams | Actual `InitialPacketSize`, monotime, profile constructor | Согласование API; rates/overflow отдельно |
+| Набор методов | Старый BBR Ex; Brutal не полный Ex | Оба реализуют новый Ex, включая neuter/lost/app-limited | Только парой; новый контроллер не получит новые callbacks от старого отправителя |
+| Лицензии и зависимости | MIT + GPL-3+; sing0.8.13 в исходном составе | Корневые лицензии те же; sing0.9 beta4, quic0.61 mod6, x/*/utls меняются | Адаптация с проверкой всего состава, не прямая замена |
 
-### 3.1 Partial-fix decisions
+### 3.1. Частичные исправления
 
-- **Backport only Brutal full Ex/monotime onto current sender:** restores dispatch
-  only if current public Ex method set is implemented exactly. It does **not**
-  fix prior/post flight, cross-space identity, install filtering, drop/migration
-  retirement or app-limited semantics. `DEFER` as transitional experiment, not
-  accepted remediation.
-- **Subtract packet length inside old BBR sampler:** may repair one post→before
-  snapshot, but corrupts legacy/prior callers and does not solve identity or
-  retirement. `REJECT`.
-- **Backport only candidate sender semantics while retaining old BBR:** old BBR
-  lacks new `OnPacketNeutered` public method and its own estimated cleanup differs;
-  it is type/semantic incompatible without an adapter. A no-op neuter loses
-  stateful cleanup. `REJECT` as complete fix.
-- **Candidate pair but ignore PTO terminal seam:** acceptable only for scoped
-  dispatch/prior-flight verdict; not full resource-bound or lifecycle acceptance.
+- **Только Brutal full Ex/monotime поверх старого отправителя:** восстанавливает
+  dispatch при точном старом Ex method set, но не prior/post flight, идентичность,
+  install, drop/migration или app-limited. DEFER как переходный вариант,
+  не принятое полное исправление.
+- **Вычесть длину пакета в старом sampler:** может исправить одну post→before
+  трассу, но испортить prior/legacy callers; identity/retirement остаются.
+  REJECT как универсальное исправление.
+- **Только новый отправитель со старым BBR:** нет нового публичного
+  `OnPacketNeutered`; собственная estimated cleanup отличается. Нужна
+  адаптация типа и смысла; no-op neuter теряет очистку. REJECT как полное решение.
+- **Новая пара без PTO terminal:** кандидат только для dispatch/prior-flight,
+  не для полной ресурсной гарантии или всего lifecycle.
 
-## 4. Opposing cases and admission guards
+## 4. Возражения и границы допуска
 
-### 4.1 Strong existing guards
+### 4.1. Существующие защитные ограничения
 
-- Transport raw receive queue1024, per-connection unprocessed256, accept queue32,
-  retry/reject queues and anti-amplification3× limit specific queue/work classes.
-- `GetConfigForClient`/ConnContext can reject before connection creation in
-  quic-go API, handshake idle timeout bounds inactive attempts, tracked packets
-  gate sending at40k/50k, DATAGRAM queues32/128, HY2 ready64.
-- Windows application uses one isolated worker owner: failed previous Stop blocks
-  replacement; Job process count8 and Terminate/Wait/Empty receipts guard
-  retirement. Job memory commit limit is **not set** (`commitBytes=0`).
+В срезе найдены raw receive queue1024, per-connection unprocessed256,
+accept queue32, retry/reject queues, anti-amplification3×, tracked packets
+40k/50k, DATAGRAM32/128 и HY2 ready64. Они ограничивают свои стадии.
+quic-go API предоставляет ранние `GetConfigForClient`/ConnContext;
+handshake idle timeout завершает неактивные попытки при работе scheduler/timer.
 
-### 4.2 Why these do not close admission
+Windows имеет одного изолированного владельца worker: неудачный Stop
+блокирует замену. Job count8 и Terminate/Wait/Empty поддерживают завершение.
+Лимит памяти в рассмотренном engine Job **не задан** (`commitBytes=0`).
 
-Pinned HY2 Service's `quic.Config` sets `MaxIncomingStreams=1<<60`, but does not
-set `GetConfigForClient`; qtls Listen does not pass a ConnContext. The listener
-starts one `handleConnection` goroutine per accepted QUIC connection. Auth is
-application HTTP/3 after transport handshake; invalid password gets masquerade
-response, not pre-handshake resource rejection. After auth, first new sessionID
-creates udpPacketConn/map entry and handler goroutine; map size has no local cap.
+### 4.2. Почему это не полный допуск
 
-Thus accept-queue32 limits **completed not-yet-Accepted** connections, not active
-accepted connections or handshakes already running. Anti-amplification limits
-outbound bytes before validation, not local CPU/maps/TLS state. Handshake timeout
-bounds duration conditional on scheduler/timer delivery, not concurrency.
-A global bound needs independent caps/rate budgets at pre-handshake, authenticated
-connection and UDP-session stages plus worker/process memory monitoring.
+Рассмотренный HY2 Service задаёт `MaxIncomingStreams=1<<60`, не задаёт
+`GetConfigForClient`, а qtls Listen не передаёт ConnContext. После Accept
+запускается `handleConnection` на соединение. Прикладная HTTP/3 auth идёт
+после транспортного handshake; неверный пароль получает masquerade response,
+а не отказ до выделения всех handshake-ресурсов. Новая sessionID после auth
+создаёт udpPacketConn, запись map и handler; локальный предел map не найден.
 
-Strong opposing case against a blanket DoS claim: address validation, handshake
-idle timeout, queue drops, auth map, tracked-packet limits and Windows Job reap
-all reduce exposure. No deployed remote DoS, reachable malicious peer profile,
-frequency or RSS effect is established here.
+Accept queue32 ограничивает завершённые, ещё не принятые соединения,
+а не все активные и уже исполняющиеся handshake. Anti-amplification ограничивает
+отправленные байты до проверки адреса, не CPU, maps или TLS state.
+Timeout ограничивает длительность условно на доставку таймера, не параллелизм.
+Для общей гарантии нужен замкнутый учёт допуска всех стадий и памяти;
+одна возможная реализация — согласованные бюджеты handshake/connection/session.
+Новая БД или отдельный механизм на каждую стадию из этого не следуют.
 
-## 5. Recommendation / reuse / cost
+Адресная проверка, auth map, timeouts, сбросы очередей и Job reap существенно
+снижают воздействие. Здесь не установлены реальный удалённый DoS,
+достижимый злонамеренный профиль, частота отказов или эффект RSS.
 
-**Recommendation:** platform/dependency owner should treat f7b7e9c+4ab2ece as
-one compatibility unit and adapt it only after API/build/licence closure. First
-acceptance target is semantic: prior-flight, cross-space identity, install fence,
-ACK/loss exact least-unacked, drop/migration neuter and Brutal Ex dispatch. Keep
-PTO retirement and PMTU inclusion as explicit open gates; don't market a memory
-fix or speed gain.
+## 5. Применение, переиспользование и цена
 
-Cost surface:
+Рассматривать f7b7e9c+4ab2ece как одну единицу совместимости после проверки
+API, сборки и лицензий. Первая цель — смысл событий prior-flight,
+идентичность между PN spaces, install, exact least-unacked, drop/migration
+и Brutal Ex dispatch. PTO/PMTU остаются открытыми. Обещание исправить всю
+память или ускорить VPN этим результатом не обосновано.
 
-- sing-quic go.mod moves quic-go mod.4→mod.6, sing0.8.13→0.9.0-beta.4,
-  utls1.8.4→1.8.7 and x/* packages; constructors/wrappers/caller APIs change;
-- sing-quic GPL-3.0-or-later, quic-go MIT; entire resulting binary retains wider
-  dependency/licence obligations, not only these two roots;
-- BBR sampler high-water capacity and global owner admission remain outside
-  callback correctness; platform instrumentation must report owner/unit/release,
-  not one global scalar;
-- current Windows scalar/Salamander path remains a compatibility constraint;
-  sender/controller fix does not enable GSO or alter on-wire framing by itself.
+Цена переноса:
 
-## 6. Future finite acceptance — NOT_RUN
+- go.mod меняет quic-go mod.4→mod.6, sing0.8.13→0.9.0-beta.4,
+  utls1.8.4→1.8.7 и x/*, конструкторы, обёртки и API потребителей;
+- GPL-3.0-or-later и MIT двух корней не заменяют проверку полного состава
+  бинарного файла и обязательств по соответствующим исходникам;
+- исправление callback не ограничивает сохранённую ёмкость BBR sampler
+  и число владельцев; наблюдения должны сохранять единицу, владельца и
+  фактическое событие освобождения;
+- скалярный Windows/Salamander-путь остаётся условием совместимости.
+  Исправление sender/controller само не включает GSO и не меняет wire framing.
 
-1. **Interface/build:** exact coupled versions with full production tags; no shim
-   silently no-ops neuter/lost/app-limited; whole dependency/license inventory.
-2. **Semantic oracle:** F=0/F>0, STREAM/DATAGRAM, ACK-only, ACK+PING, PMTU/PATH,
-   Initial/Handshake/App PN overlaps, install with preexisting packets.
-3. **Terminal ownership:** ACK, threshold/time loss, key drop, Retry, PTO probe,
-   path migration, controller replacement and close; compare engine history,
-   frame backing, sampler present/slot high-water.
-4. **Holder accounting:** queue full with N waiting SendDatagram callers;
-   Add→Pop→Write→ACK/loss; RX128→handlers→session64; defrag groups255/age10 and
-   assembly overlap; active/retiring generations.
-5. **Admission:** bounded concurrent handshakes, accepted connections, sessions,
-   per-user attempts and CPU/bytes; invalid auth/slow client/timeout variants.
-6. **Platform retirement:** graceful close blocked/write error, worker terminate/
-   Wait/Empty and memory accounting; no direct fallback on failure.
-7. **Comparative behavior:** useful goodput, latency tails, loss classes, RSS/CPU
-   and fairness under a finite registered workload; benchmark/device/live only
-   under separate permission.
+Маршрут: PC-06/07 [плана ПК](../../../../../planning/knowledge-application/PC-PLAN.md)
+и ANDR-02/07 [плана Android](../../../../../planning/knowledge-application/ANDROID-PLAN.md).
+Основное изложение — [учёт QUIC и пределы](../../../../performance/QUIC-ACCOUNTING-AND-LIMITS.md).
+Платформенные владельцы сохраняют жизненный цикл и собственную приёмку;
+второй runtime или массовое обновление зависимостей не требуется по одному отчёту.
 
-No tests, build, simulation, benchmark, native/network/endpoint actions or code
-patches were run. All empirical and product acceptance remains UNKNOWN.
+## 6. Будущая приёмка — NOT_RUN
+
+1. **Интерфейс и сборка:** точная пара с production tags; нет скрытого no-op
+   для neuter/lost/app-limited; полный состав зависимостей и лицензий.
+2. **Семантика:** F=0/F>0, STREAM/DATAGRAM, ACK-only, ACK+PING, PMTU/PATH,
+   пересечения PN Initial/Handshake/App и установка при уже существующих пакетах.
+3. **Завершение:** ACK, threshold/time loss, key drop, Retry, PTO, migration,
+   замена контроллера и close; сравнить history, frame backing, sampler
+   present и сохранённую ёмкость slots.
+4. **Учёт владельцев:** полная queue с N ожидающими SendDatagram;
+   Add→Pop→Write→ACK/loss; RX128→handlers→session64; группы defrag255/age10,
+   перекрытие сборки, активные и завершающиеся поколения.
+5. **Допуск:** одновременные handshake, принятые connection, session,
+   per-user attempts и CPU/bytes; неверная auth, медленный клиент и timeout.
+6. **Платформа:** заблокированный graceful close, ошибка write, terminate/
+   Wait/Empty и память; без прямого fallback после ошибки.
+7. **Сравнение:** полезное завершение и goodput, хвосты задержек, классы потерь,
+   RSS/CPU и fairness при заданной зарегистрированной нагрузке. Это отдельное
+   разрешённое выполнение, а не результат чтения исходников.
+
+Тесты, сборка, симуляции, benchmarks, native/сеть/endpoint и изменения кода
+в этом срезе не выполнялись. Эмпирическая и продуктовая приёмка остаётся неизвестной.
+
+<a id="r28-z04--quichy2-все-holders-и-semantic-matrix-готового-исправления"></a>
+<a id="1-ограниченный-ответ"></a>
+<a id="r28-z04-a--queuecallback-bounds-теряют-силу-при-смене-owner-и-unit"></a>
+<a id="r28-z04-b--готовое-исправление-действительно-парное-но-scoped"></a>
+<a id="2-actual-path-и-holder-passport"></a>
+<a id="21-паспорт-holders"></a>
+<a id="3-sendercontroller-semantic-matrix"></a>
+<a id="31-partial-fix-decisions"></a>
+<a id="4-opposing-cases-and-admission-guards"></a>
+<a id="41-strong-existing-guards"></a>
+<a id="42-why-these-do-not-close-admission"></a>
+<a id="5-recommendation--reuse--cost"></a>
+<a id="6-future-finite-acceptance--not_run"></a>

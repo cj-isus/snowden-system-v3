@@ -218,7 +218,7 @@ membership уже задан registration/assignment, а not-started outcome д�
 | Return после epoch/safety change | Accounting сохраняет original unit с unpublishable/stale tag; live publication gate остаётся | Новый epoch делает исход новой independent unit |
 | Initial fail → fast-reprobe успех | Несколько logical attempts либо один заранее определённый episode с retries | Health.OK/FAIL восстановит complete attempt roster |
 | Duplicate delivered callback | Same ID idempotently recognised, payload conflict visible | Два callbacks = две independent successes |
-| Crash/restart сбрасывает in-memory sequence | Recovered durable family+cohort lineage с process-independent key | Номер1 новой памяти = новый lifetime бюджет или unique old callback |
+| Crash/restart сбрасывает in-memory sequence | Recovered durable family+cohort lineage с process-independent key | Номер 1 новой памяти = новый lifetime бюджет или unique old callback |
 | Storage corruption/cachefile reset | Keep unconfirmed state, no inference/optional new measurement; recovery/family scope проверяется отдельно | Пустая DB = честный новый старт старой семьи |
 
 На конкретном caller `watchCore` после cancellation возвращается до publication,

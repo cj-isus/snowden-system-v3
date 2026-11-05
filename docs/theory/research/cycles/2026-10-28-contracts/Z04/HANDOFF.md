@@ -1,89 +1,114 @@
-# R28-Z04 — HANDOFF
+# QUIC/HY2: владельцы ресурсов и совместимые исправления
 
-28 октября 2026.
+**Срез 28 октября 2026 года. Статус автора — READY_FOR_REVIEW.**
+[Полный аргумент](REPORT.md) · [Источники](SOURCES.md).
+Сохранённые материалы: `.artifacts/research/r28-contracts/Z04/`.
 
-- status: READY_FOR_REVIEW
-- report: [REPORT](REPORT.md)
-- sources: [SOURCES](SOURCES.md)
-- artifacts: `.artifacts/research/r28-contracts/Z04/`
+## Краткий вывод
 
-## New scoped claims
+Лимит одной очереди не задаёт предел всей удерживаемой памяти. Изменение
+контроллера перегрузки должно согласоваться с отправителем: единицами
+учёта, идентичностью пакетов и событиями завершения. Найденная пара новых
+исходников исправляет названные несогласованности, но не доказывает полное
+освобождение sampler, общий RSS, исправление всех отказов или прирост скорости.
 
-### R28-Z04-A — holder composition, not a global queue cap
+**Применимость:** сопоставление владельцев ресурсов и выбор согласованной
+миграции. **Предел:** прочитанные версии и ручные условные трассы;
+сборка, native-исполнение, устройство и полевая работа не проверены.
 
-**Claim:** current local counts/window limits remain valid only within their
-unit/owner. Global retained-memory/time accounting requires separate bounds on
-pre-Add callers, post-dequeue history, fragment aliases/groups, assemblies,
-handlers/sessions, sampler PN-span capacity and active/retiring generations.
+## R28-Z04-A — пределы по владельцам не равны общему пределу очереди
 
-**Evidence:** exact current module commits byte-checked against local cache;
-manual owner/release trace. Conditional arithmetic is REPORT §2.2. It is not RSS,
-CPU, kernel or field measurement.
+Текущие счётчики и окна действуют в своих единицах и областях владения.
+Общий учёт требует отдельных границ для вызывающих до Add, истории после
+извлечения из очереди, алиасов фрагментов и групп, сборок, обработчиков/сессий,
+ёмкости sampler по диапазону номеров пакетов и активных/завершающихся поколений.
 
-**Strongest opposing guard:** queue8/32/64/128, history40k/50k, handshake/idle,
-anti-amplification, raw1024/accept32 and Windows Job reap materially bound their
-own scopes. The claim does not say “unbounded everything”. Counterexample to
-blanket composition: N blocked SendDatagram callers already own copied D outside
-queue32 while 32 dequeued frames can remain in sent history and 8 unrelated
-serialized packet buffers occupy sendQueue.
+Основание: точные module commits сопоставлены с локальным кешем;
+вручную прослежен владелец и освобождение. Условная арифметика находится
+в REPORT §2.2. Это не измерение RSS, CPU, kernel-ресурсов или поля.
 
-**Recommended verdict:** `ACCEPT source/model scope` if lead confirms inputs;
-not a global DoS or RSS verdict.
+**Сильное возражение:** очереди 8/32/64/128, история 40k/50k,
+handshake/idle, anti-amplification, raw1024/accept32 и Windows Job reap
+действительно ограничивают свои области. Здесь не утверждается, что
+«всё неограниченно». Контрпример общему пределу: N заблокированных
+вызывающих SendDatagram уже владеют копиями D вне queue32; извлечённые
+32 кадра могут оставаться в sent history, а 8 иных сериализованных буферов —
+занимать sendQueue.
 
-### R28-Z04-B — coupled sender/controller remediation
+**Предложение автора:** `ACCEPT source/model scope` при независимой проверке
+входов. Это не verdict о глобальном DoS или RSS.
 
-**Claim:** quic-go
+## R28-Z04-B — отправитель и контроллер меняются согласованной парой
+
+Кандидат по исходникам: quic-go
 `f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80` + sing-quic
-`4ab2eceaac81e073f53b22ec72ff56aaea89a3d1` is the ready source pair that fixes
-the named injected-controller reporting mismatches: prior flight, one packet
-identity across spaces, install fence, neutered/drop/migration reporting,
-least-unacked cleanup, app-limited suppression and full Ex Brutal/monotime.
+`4ab2eceaac81e073f53b22ec72ff56aaea89a3d1`.
+Он исправляет названные расхождения для внедрённого контроллера:
+prior flight, единую идентичность пакета между пространствами, границу
+установки контроллера, сообщения neutered/drop/migration, очистку
+least-unacked, подавление app-limited и полный Ex-путь Brutal/monotime.
 
-**Strongest opposing trace:** PTO `QueueProbePacket` in candidate still removes
-engine history and clears frames without an explicit `OnPacketNeutered` or
-`notifyLeastUnacked` call in that path. Therefore the pair does not by itself
-prove full sampler retirement or resource bound. PMTU lost-list semantics also
-remain an explicit gate.
+**Сильное возражение:** кандидат PTO `QueueProbePacket` всё ещё удаляет
+engine history и очищает frames без явного `OnPacketNeutered` либо
+`notifyLeastUnacked` на этой ветви. Пара сама по себе не доказывает полное
+завершение sampler и предел ресурсов. Семантика списка потерянных PMTU
+остаётся отдельной границей проверки.
 
-**Reuse recommendation:** `ADAPT_AS_COUPLED_PAIR`; do not recommend global
-upgrade or one-file backport. Exact candidate go.mod moves quic-go/sing/utls/x/*
-and caller APIs; licences MIT + GPL-3.0-or-later with whole-binary closure cost.
+**Переиспользование:** `ADAPT_AS_COUPLED_PAIR`; не массовое обновление ядра
+и не перенос одного файла. go.mod кандидата меняет quic-go/sing/utls/x/*
+и API потребителя. Лицензии MIT + GPL-3.0-or-later не заменяют проверку
+полного состава поставляемого бинарного файла и соответствующих исходников.
 
-**Recommended verdict:** `ACCEPT scoped semantic pair; NEEDS_REVISION for blanket
-resource/memory fix`.
+**Предложение автора:** `ACCEPT scoped semantic pair; NEEDS_REVISION for blanket
+resource/memory fix`. Оно не является новым принятием этого документа.
 
-### R28-Z04-C — existing admission guards are stage-local
+## R28-Z04-C — существующий допуск ограничен стадией
 
-**Claim:** current transport has meaningful queue, retry, callback, handshake,
-anti-amplification and tracked-packet guards, but pinned HY2 Service does not
-wire pre-handshake `GetConfigForClient/ConnContext`, sets huge stream allowance,
-launches per-accepted-connection and per-new-UDP-session work, and has no local
-active connection/session cap. Global bound needs external admission assumptions.
+В рассмотренном транспорте есть существенные ограничения очередей, повторов,
+callbacks, рукопожатия, усиления трафика и истории пакетов. При этом pinned
+HY2 Service не подключает pre-handshake `GetConfigForClient/ConnContext`,
+задаёт очень большой допуск streams, запускает работу для принятого соединения
+и новой UDP-сессии и не содержит собственного общего предела их активного числа.
+Общий предел требует предпосылок о внешнем допуске.
 
-**Strongest opposing case:** invalid auth is checked against userMap and receives
-masquerade handling; timeouts/queue drops/Job owner reduce exposure. No remote
-DoS/reachability/frequency claim is made.
+**Сильное возражение:** неверная auth проверяется по userMap и получает
+masquerade handling; timeouts, сбросы очередей и владелец Job уменьшают
+воздействие. Удалённый DoS, его достижимость или частота здесь не установлены.
 
-**Recommended verdict:** `ACCEPT source contract gap, DEFER platform policy`.
+**Предложение автора:** `ACCEPT source contract gap, DEFER platform policy`.
 
-## Semantic decision matrix
+## Сравнение вариантов
 
-| Option | Decision | Reason |
+| Вариант | Ограниченное решение | Причина |
 |---|---|---|
-| Current pair unchanged | reject as semantic baseline for injected BBR/Brutal correctness | Brutal batch not selected; post-flight passed; identity/terminal gaps |
-| Backport only Brutal Ex/monotime | defer/partial | batch dispatch improves but sender prior/identity/terminal semantics remain old |
-| Subtract L in old sampler | reject | wrong for prior callers, identity/lifecycle untouched |
-| New sender + old BBR with no-op shim | reject | stateful sampler loses required terminal cleanup; method compatibility not semantic compatibility |
-| New pair f7b7e9c+4ab2ece | adapt/accept scoped | matching public contracts and constructors; residual PTO/PMTU/resource/admission gates explicit |
+| Сохранить текущую пару как основание корректности внедрённых BBR/Brutal | Не принимать это обоснование | Brutal batch не выбран; передаётся post-flight; остаются пробелы идентичности и завершения |
+| Перенести только Brutal Ex/monotime | Частичный кандидат | Улучшается batch dispatch, но старые prior/identity/terminal semantics отправителя остаются |
+| Вычесть L в старом sampler | Отклонить как универсальное исправление | Неверно для prior callers; идентичность и lifecycle не изменены |
+| Новый отправитель + старый BBR с no-op shim | Отклонить это обоснование совместимости | Stateful sampler теряет нужную terminal cleanup; совместимость методов не равна совместимости смысла |
+| Новая пара f7b7e9c+4ab2ece | Рассматривать в названной области | Согласованы публичные контракты и конструкторы; PTO/PMTU/resource/admission остаются открытыми |
 
-## Open/unknown
+Практический маршрут — PC-06/07 [плана ПК](../../../../../planning/knowledge-application/PC-PLAN.md)
+и ANDR-02/07 [плана Android](../../../../../planning/knowledge-application/ANDROID-PLAN.md).
+Сохранить платформенных владельцев и проверять одну согласованную серию ядра.
+Основное изложение — [учёт QUIC](../../../../performance/QUIC-ACCOUNTING-AND-LIMITS.md).
 
-- PTO sampler retirement intent/fix, PMTU classification and close-time sampler
-  disposal need explicit semantic decision.
-- Actual number of callers/sessions/connections/generations and physical allocator
-  capacities/RSS are unmeasured; engine Job memory cap is not configured.
-- Whole core dependency/API/build/native compatibility and performance effect
-  are NOT_RUN.
+## Открытые вопросы
 
-No code, plans, dependencies, roles, bindings, network, devices or real profiles
-were changed or used.
+- Требуются явное решение о PTO sampler retirement, классификация PMTU
+  и освобождение sampler при закрытии.
+- Число вызывающих, сессий, соединений, поколений, физическая ёмкость
+  выделенной памяти и RSS не измерены. В прочитанном срезе предел памяти
+  engine Job не настроен; это не утверждение обо всех будущих сборках.
+- Полная совместимость зависимостей/API ядра, сборка/native и эффект
+  производительности — **NOT_RUN**.
+
+Рассмотрение исходников не подтверждает изменение кода, готовность сервера,
+работу реального профиля или успешное выполнение перечисленных случаев.
+
+<a id="r28-z04--handoff"></a>
+<a id="new-scoped-claims"></a>
+<a id="r28-z04-a--holder-composition-not-a-global-queue-cap"></a>
+<a id="r28-z04-b--coupled-sendercontroller-remediation"></a>
+<a id="r28-z04-c--existing-admission-guards-are-stage-local"></a>
+<a id="semantic-decision-matrix"></a>
+<a id="openunknown"></a>

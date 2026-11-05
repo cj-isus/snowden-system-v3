@@ -139,7 +139,7 @@ always-on/MDM не равен доступному нам обычному conse
 4. `LoopbackAlive` — один TCP connect с timeout300ms. Успех не аутентифицирует
    Snowden/proxy/tunnel; ошибка не отличает отсутствие listener от иного отказа.
    UI-строка «локальный порт доступен» уже точнее, чем внутреннее `vpnActive`.
-5. `HealStaleSystemProxy` проверяет формат и порт1080, но это не происхождение
+5. `HealStaleSystemProxy` проверяет формат и порт 1080, но это не происхождение
    настройки. Другой процесс может оставить такой же адрес. Между read и
    `ProxyEnable=0` нет fence от внешней записи; нет и принятого owner receipt.
    Сохранение PAC-значения не доказывает неизменность эффективного proxy path.
@@ -262,8 +262,8 @@ package автоматически выводить отсутствие эти�
 ### 4.1 Контрпример к знаменателю R06-013-A
 
 Baseline §2.1: episode зрелый при terminal outcome **либо** t0+D; pending вне N.
-Ручной пример: два episode зарегистрированы t0=0, D=10. A завершился успешно на1,
-B ещё pending на5. Такой maturity даёт N=1 и100%. На10 у B подтверждён failure:
+Ручной пример: два episode зарегистрированы t0=0, D=10. A завершился успешно на 1,
+B ещё pending на 5. Такой maturity даёт N=1 и100%. На 10 у B подтверждён failure:
 N=2 и50%, хотя ни работа алгоритма, ни уже известный A не изменились.
 
 Это outcome-dependent попадание в знаменатель. «Terminal-or-horizon» может быть
@@ -365,8 +365,8 @@ UI freshness константа или одна точка такой coverage �
 полноте/валидности receipt допустим только более узкий label observed evidence.
 
 Более сильный opposing trace: событие completion локализовано в интервале [10,12],
-а own-policy наблюдалась только в точке11. Пересечение интервалов и «возраст меньше
-5s» не доказывают, что policy действовала в неизвестный фактический момент10.
+а own-policy наблюдалась только в точке 11. Пересечение интервалов и «возраст меньше
+5s» не доказывают, что policy действовала в неизвестный фактический момент 10.
 Для такого положительного claim нужна проверенная coverage **всего** допустимого
 completion interval нужным receipt, либо более узкий явно названный observational
 endpoint. Freshness не превращает sample в гарантию постоянства свойства.
@@ -467,12 +467,12 @@ unknown и узкий предмет измерения. Успешные episod
 
 | Trace | Исправленный вывод |
 |---|---|
-| t0=0,D=10; A timely success на1, B pending на5 | fixed N=2: при достаточном claim A bound [1/2,1]; mature subset на5 пуст. По maturity оба ещё pending, но исход A уже известен — эти оси не суммируются как взаимоисключающие outcomes |
-| На10 B достоверно не завершился к D | тот же N=2, bound [1/2,1/2]; обновился evidence, не выбор удобных записей |
-| На2 «пока partial», на8 completion при D=10 | early partial не absorbing failure; учитывается timely completion с отдельно известной/unknown policy |
-| На11 пришло доказуемое original completion на4 при D=10 | новая report revision того же episode/N; arrival не переносится в event time. Без надёжного original time timely outcome unknown |
+| t0=0,D=10; A timely success на 1, B pending на 5 | fixed N=2: при достаточном claim A bound [1/2,1]; mature subset на 5 пуст. По maturity оба ещё pending, но исход A уже известен — эти оси не суммируются как взаимоисключающие outcomes |
+| На 10 B достоверно не завершился к D | тот же N=2, bound [1/2,1/2]; обновился evidence, не выбор удобных записей |
+| На 2 «пока partial», на 8 completion при D=10 | early partial не absorbing failure; учитывается timely completion с отдельно известной/unknown policy |
+| На 11 пришло доказуемое original completion на 4 при D=10 | новая report revision того же episode/N; arrival не переносится в event time. Без надёжного original time timely outcome unknown |
 | Clock после reboot нельзя связать с t0 | maturity unknown; никаких t0+D≤T по wall clock. Уже доказанный timely факт сохраняется, если его собственная временная связь валидна |
-| В ring осталась одна успешная запись, другая вытеснена | при известном census N=2 вытесненный исход unknown; если census утрачен — denominator unavailable, не100% |
+| В ring осталась одна успешная запись, другая вытеснена | при известном census N=2 вытесненный исход unknown; если census утрачен — denominator unavailable, не 100% |
 | Explicit Stop принят, foreign VPN мог продолжить защиту | admission не доказывает own release; собственная policy и глобальная защита различаются. Task completion после него не автоматически U/P |
 | Settings opened / consent granted / порт отвечает | только соответствующий action/fact receipt; task и protected completion ещё не наблюдались |
 | Resource release подтверждён после D | отдельная R-ось; task failure/missing не исправляются release событием |
@@ -525,7 +525,8 @@ raw→attributed identity/cache и maturity/outcome требуют отдель�
 
 ## 6. Последовательные предложения платформенным владельцам
 
-Это handoff порядка работ; product PLAN и чужие STATE не изменены.
+Это датированные предложения о порядке работ. Текущую очередь и статусы
+задают два плана платформ; сами предложения не подтверждают реализацию.
 
 1. **Сначала semantics без новых механизмов:** Windows убрать повышение
    Scheduler/no-access/порта до protection/repair guarantee; Android сохранить

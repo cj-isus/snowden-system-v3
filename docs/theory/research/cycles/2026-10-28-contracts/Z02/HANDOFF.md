@@ -24,11 +24,11 @@ VPN работает сейчас» остаются unknown.
 
 1. **DNS consistent не означает одинаковые IP.** Exact historical caller
    принимает common nonzero AS как достаточный критерий; local и control
-   DNS sets выбранных3records не пересекаются.
+   DNS sets выбранных 3records не пересекаются.
 2. **HTTP-контроль не address-matched TCP-контроль.** THRequest передаёт URL
    отдельно от IP pairs; сохранённый HTTP control result не содержит chosen
    remote endpoint/operation-time. Общий домен/ASN не закрывает этот пробел.
-3. **Пустой snapshot при HTTP timeout не счётчик0байт.** Saver записывает
+3. **Пустой snapshot при HTTP timeout не счётчик 0 байт.** Saver записывает
    status/headers до чтения тела, а при read error не присваивает partial
    body событию. Это verified source property, не измеренное число bytes.
 4. **Успех HTTPS summary не всегда full-body completion.** В условном exact
@@ -60,7 +60,7 @@ VPN работает сейчас» остаются unknown.
 |---|---|
 | Тип | Ручной логический вывод для конечного designated D; не statistical estimator/новая rate |
 | Основной аргумент | Один достоверный success внутри D свидетельствует exists-success. Все-failure утверждение требует отрицательного evidence всех designated cells; хотя бы одна unknown оставляет universal negative unknown |
-| Конечная формула | При known finite N=s+f+u>0, равных весах и корректных stage classifications: s/N≤theta_D≤(s+u)/N. Края — заполнение всех unknown0 или1; независимость/MAR не нужны |
+| Конечная формула | При known finite N=s+f+u>0, равных весах и корректных stage classifications: s/N≤theta_D≤(s+u)/N. Края — заполнение всех unknown0 или 1; независимость/MAR не нужны |
 | Strongest opposing case | Same published block совместим с неограниченно различающимися unobserved populations. Если N неизвестно либо ошибочны классификации/принадлежностьD, bound не вычисляется/не действует. API5latestrows не denominator РФ |
 | Temporal limit | Snapshot/DNS TTL и общий день не гарантируют stable endpoint/time validity. ОтветDate/Age сообщает возраст representation, не выполнение TH. Publisher/collector timestamp не timestamp каждой network operation |
 | Предлагаемый verdict | Принять только условный finite-D аргумент; отклонить national probability/universal outage по partial sample |

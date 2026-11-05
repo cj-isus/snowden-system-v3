@@ -16,7 +16,13 @@
 | Android profile | EncryptedProfileStore: CE/no-backup, AES-GCM Keystore, CAS, uncertain outcome; ProfileClock: local wall/elapsed continuity; ProfileImportCoordinator: preview/apply/cancel, progress до application commit, свежий exclusive deadline | Production ProfileTrustDriver, accepted-only runtime source/renderer и app composition отсутствуют; контракт T01…14 requested, не принят |
 | Общие модули | `shared/adaptive` существует; рекомендации оставляют admission платформе. В просмотренном registry четыре роли: harness/windows/android/adaptive | `shared/trust` и зарегистрированного trust owner нет. Сначала определить ответственного и принять границы; отсутствие роли не разрешает автоматически создавать пятый слой/владельца |
 
-Кодовые основания: TrustSnapshot — `windows/backend/metadata/trust_snapshot.go`, ProfileSnapshot — `windows/backend/metadata/profile_snapshot.go`, runtime checkpoint — `windows/backend/metadata/runtime_checkpoint.go`, updater source gate — `windows/update_delivery.go`, import source V2-182 — `windows/onboarding_import_source.go`, [vault transaction](../../../../windows/backend/secretvault/identity.go), Android coordinator — `android/profile/src/main/kotlin/org/snowden/android/profile/ProfileImportCoordinator.kt`, composition boundary — `android/app/src/main/kotlin/org/snowden/android/app/SnowdenApplication.kt`.
+Основания в коде: TrustSnapshot — `windows/backend/metadata/trust_snapshot.go`,
+ProfileSnapshot — `windows/backend/metadata/profile_snapshot.go`, checkpoint выполнения —
+`windows/backend/metadata/runtime_checkpoint.go`, проверка источника обновления —
+`windows/update_delivery.go`, источник импорта V2-182 — `windows/onboarding_import_source.go`,
+[транзакция vault](../../../../windows/backend/secretvault/identity.go), координатор Android —
+`android/profile/src/main/kotlin/org/snowden/android/profile/ProfileImportCoordinator.kt`,
+граница композиции — `android/app/src/main/kotlin/org/snowden/android/app/SnowdenApplication.kt`.
 
 Исходники читались последовательными срезами 28.10.2026, не атомарным snapshot репозитория. Частные manifests сохраняют SHA256: initial source cut — `.artifacts/planning/knowledge-application/2026-10-28/captures/C05/current-source-cut.json`, дополнительный срез — `.artifacts/planning/knowledge-application/2026-10-28/captures/C05/current-source-extra.json`, финальный drift review — `.artifacts/planning/knowledge-application/2026-10-28/captures/C05/final-review.json`. При последующих изменениях действуют новые исходники, а не номер V2 в этой таблице.
 

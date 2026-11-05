@@ -118,9 +118,10 @@ NoBody retry и no-write evidence не превращают POST автомат�
 ### P1. Microsoft Learn: FlushFileBuffers
 
 URL: https://learn.microsoft.com/ru-ru/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers .
-Организация Microsoft; metadata ms.date2018-12-05, updated_at2026-01-07,
-translation MT ru-RU. Read date28.10.2026. **FULL_TEXT_READ reference body**:
-parameter/return/remarks/requirements прочитаны через WebFetch и secure raw page.
+Microsoft; metadata ms.date2018-12-05, updated_at2026-01-07,
+перевод MT ru-RU, чтение 28.10.2026. FULL_TEXT_READ основного reference-тела:
+parameters/return/remarks/requirements прочитаны через WebFetch
+и сохранённую HTTPS-страницу.
 
 Подтверждает: flushed file buffers to device/channel, error returns/GetLastError,
 GENERIC_WRITE, performance cost. Не exactly-once probe, не universal hardware
@@ -180,8 +181,8 @@ HTML WebFetch по RFC9162/9110 timeout; alternate official HTTPS TXT obtained.
   SHA-256/source copies/text extraction — разрешённая статическая provenance,
   не statistical execution. Никакие real logs, actual DB/vault/runtime-config
   files или `.env` не открывались.
-- Scoped drift на09:20:20Z: исходные36 inputs без изменений. Финальный
-  cut 09:31:39Z: все43 initial+additional inputs совпали, записано
+- Scoped drift на 09:20:20Z: исходные 36 inputs без изменений. Финальный
+  cut 09:31:39Z: все 43 initial+additional inputs совпали, записано
   `submission-source-cut.json`. Это именованный scope, не freshness всего
   репозитория и не source runtime PASS.
 

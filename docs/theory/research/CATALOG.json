@@ -159,7 +159,7 @@
     {
       "id": "R02-002",
       "topic": "R02",
-      "title": "совместное наблюдение, prefix и shaping contract",
+      "title": "совместное наблюдение, префикс и условия формирования трафика",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-002.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-002.md",
@@ -189,7 +189,7 @@
     {
       "id": "R02-004",
       "topic": "R02",
-      "title": "высокий приоритет: VLESS → ShadowTLS без payload encryption",
+      "title": "VLESS → ShadowTLS без шифрования полезных данных",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-004.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-004.md",
@@ -206,14 +206,14 @@
     {
       "id": "R02-005",
       "topic": "R02",
-      "title": "свойства encrypted replacement по участкам",
+      "title": "свойства шифрующей замены по участкам пути",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-005.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-005.md",
       "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-005.md",
       "reportLayout": "separate",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -226,7 +226,7 @@
     {
       "id": "R02-006",
       "topic": "R02",
-      "title": "IO variants меняют protocol semantics",
+      "title": "варианты ввода-вывода меняют семантику протокола",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-006.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-006.md",
@@ -241,14 +241,14 @@
     {
       "id": "R02-007",
       "topic": "R02",
-      "title": "приоритетная рецензия HRR freshness и TLS minimum",
+      "title": "свежесть HRR и нижняя граница версии TLS",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-007.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-007.md",
       "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-007.md",
       "reportLayout": "separate",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [
         "R02-15"
       ],
@@ -263,7 +263,7 @@
     {
       "id": "R02-008",
       "topic": "R02",
-      "title": "anti-probing first-record boundary",
+      "title": "граница первой записи и защита от активных проб",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-008.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-008.md",
@@ -278,7 +278,7 @@
     {
       "id": "R02-009",
       "topic": "R02",
-      "title": "паспорт границы replay predicates",
+      "title": "проверки свежести и область защиты от повторов",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-009.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-009.md",
@@ -293,14 +293,14 @@
     {
       "id": "R02-010",
       "topic": "R02",
-      "title": "паспорт доступности ready session binding",
+      "title": "доступность готовой привязки к сессии",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-010.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-010.md",
       "sources": "docs/theory/research/02-CENSORSHIP/SOURCES-010.md",
       "reportLayout": "separate",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -313,7 +313,7 @@
     {
       "id": "R02-011",
       "topic": "R02",
-      "title": "паспорт early-data/replay границы HY2 и ShadowTLS conversion",
+      "title": "ранние данные HY2 и потеря полей при адаптации ShadowTLS",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-011.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-011.md",
@@ -323,12 +323,17 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": null,
-      "additionalReviews": []
+      "additionalReviews": [],
+      "editorialNotice": {
+        "kind": "limitation-not-new-scientific-acceptance",
+        "text": "Редакционная поправка: кеш сессий не равен допуску 0-RTT; общий replay-store не выведен из одного кеша",
+        "argument": "docs/theory/research/02-CENSORSHIP/REPORT-011.md"
+      }
     },
     {
       "id": "R02-012",
       "topic": "R02",
-      "title": "паспорт решётки доменов отказа на барьере IP/ASN/allowlist",
+      "title": "домены отказа при ограничениях IP, ASN и списках разрешённого",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-012.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-012.md",
@@ -338,12 +343,17 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": null,
-      "additionalReviews": []
+      "additionalReviews": [],
+      "editorialNotice": {
+        "kind": "limitation-not-new-scientific-acceptance",
+        "text": "Количественные расширения ограничены R02-014-A; прочее не принято целиком",
+        "argument": "docs/theory/research/02-CENSORSHIP/REPORT-012.md"
+      }
     },
     {
       "id": "R02-013",
       "topic": "R02",
-      "title": "Handoff R02-013 — ECH/SVCB: спецификация, bootstrap и область фильтрации",
+      "title": "ECH/SVCB: спецификация, начальное разрешение и область фильтрации",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/02-CENSORSHIP/handoffs/R02-013.md",
       "report": "docs/theory/research/02-CENSORSHIP/REPORT-013.md",
@@ -394,7 +404,7 @@
     {
       "id": "R03-002",
       "topic": "R03",
-      "title": "temporal evidence и выполнимость измерений",
+      "title": "время доказательства и выполнимость измерений",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-002.md",
       "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
@@ -431,7 +441,7 @@
       "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -444,7 +454,7 @@
     {
       "id": "R03-005",
       "topic": "R03",
-      "title": "delayed outcomes и statistical resets",
+      "title": "задержанные исходы и статистические сбросы",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-005.md",
       "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
@@ -459,7 +469,7 @@
     {
       "id": "R03-006",
       "topic": "R03",
-      "title": "optional решение при дрейфе и дорогом переходе",
+      "title": "необязательное решение при дрейфе и дорогом переходе",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-006.md",
       "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
@@ -474,7 +484,7 @@
     {
       "id": "R03-007",
       "topic": "R03",
-      "title": "coherent trial risk и resource tail",
+      "title": "риск полной попытки и остаточные ресурсы",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-007.md",
       "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
@@ -496,7 +506,7 @@
       "sources": "docs/theory/research/03-ADAPTATION/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -509,7 +519,7 @@
     {
       "id": "R03-009",
       "topic": "R03",
-      "title": "паспорт регистрации попыток и exploration allowance",
+      "title": "регистрация попыток и бюджет исследования вариантов",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/03-ADAPTATION/handoffs/R03-009.md",
       "report": "docs/theory/research/03-ADAPTATION/REPORT.md",
@@ -560,14 +570,14 @@
     {
       "id": "R04-002",
       "topic": "R04",
-      "title": "конкуренция TCP/UDP и bounded overload",
+      "title": "конкуренция TCP/UDP и ограничение перегрузки",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-002.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
       "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [
         "R04-06"
       ],
@@ -582,14 +592,14 @@
     {
       "id": "R04-003",
       "topic": "R04",
-      "title": "часы сна, keepalive и энергия",
+      "title": "часы сна, поддержание соединения и энергия",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-003.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
       "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -602,7 +612,7 @@
     {
       "id": "R04-004",
       "topic": "R04",
-      "title": "HY2/BBR clocks и Brutal feedback",
+      "title": "часы HY2/BBR и обратная связь Brutal",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-004.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
@@ -619,7 +629,7 @@
     {
       "id": "R04-005",
       "topic": "R04",
-      "title": "очереди, timestamps и PMTU feedback",
+      "title": "очереди, временные метки и обратная связь PMTU",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-005.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
@@ -634,14 +644,14 @@
     {
       "id": "R04-006",
       "topic": "R04",
-      "title": "BBR flightBefore/flightAfter",
+      "title": "BBR: учёт flightBefore/flightAfter",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-006.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
       "sources": "docs/theory/research/04-PERFORMANCE/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -654,7 +664,7 @@
     {
       "id": "R04-007",
       "topic": "R04",
-      "title": "готовое исправление Brutal и границы переноса callback-контракта",
+      "title": "кандидат исправления Brutal и границы переноса обратных вызовов",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-007.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
@@ -674,7 +684,7 @@
     {
       "id": "R04-008",
       "topic": "R04",
-      "title": "паспорт retention-границы sent history при плохой связи",
+      "title": "удержание истории отправок при плохой связи",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-008.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
@@ -684,12 +694,17 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": null,
-      "additionalReviews": []
+      "additionalReviews": [],
+      "editorialNotice": {
+        "kind": "limitation-not-new-scientific-acceptance",
+        "text": "Общий предел 20 MB ∧ 30 s не обоснован; см. адресное ограничение",
+        "argument": "docs/theory/research/04-PERFORMANCE/REPORT.md"
+      }
     },
     {
       "id": "R04-009",
       "topic": "R04",
-      "title": "паспорт CCA-трилеммы и overload admission",
+      "title": "заявленная трилемма CCA и допуск при перегрузке",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-009.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT.md",
@@ -699,12 +714,17 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": null,
-      "additionalReviews": []
+      "additionalReviews": [],
+      "editorialNotice": {
+        "kind": "limitation-not-new-scientific-acceptance",
+        "text": "Трилемма и общий вывод о допуске и RAM не установлены",
+        "argument": "docs/theory/research/04-PERFORMANCE/REPORT.md"
+      }
     },
     {
       "id": "R04-010",
       "topic": "R04",
-      "title": "Windows/HY2: пакетный путь и ресурсные bounds",
+      "title": "Windows/HY2: пакетный путь и ограничения ресурсов",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-010.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT-010.md",
@@ -721,7 +741,7 @@
     {
       "id": "R04-011",
       "topic": "R04",
-      "title": "паспорт Android Doze/FGS и энергии QUIC",
+      "title": "Android: Doze/FGS и энергия QUIC",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/04-PERFORMANCE/handoffs/R04-011.md",
       "report": "docs/theory/research/04-PERFORMANCE/REPORT-011.md",
@@ -745,7 +765,7 @@
       "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -758,14 +778,14 @@
     {
       "id": "R05-002",
       "topic": "R05",
-      "title": "минимальный durable trust cut",
+      "title": "минимальный устойчиво сохраняемый контекст доверия",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-002.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
       "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Scoped решение и незакрытый пересмотр",
+      "reviewLabel": "Частное решение и незакрытый пересмотр",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -778,7 +798,7 @@
     {
       "id": "R05-003",
       "topic": "R05",
-      "title": "provenance не заменяет authority и adoption",
+      "title": "происхождение, полномочия и принятие результата различаются",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-003.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
@@ -793,7 +813,7 @@
     {
       "id": "R05-004",
       "topic": "R05",
-      "title": "installation и execution имеют разные доказательства",
+      "title": "установка и исполнение требуют разных доказательств",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-004.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
@@ -808,7 +828,7 @@
     {
       "id": "R05-005",
       "topic": "R05",
-      "title": "offline good не current global authority",
+      "title": "офлайн-проверка не подтверждает актуальные глобальные полномочия",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-005.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
@@ -823,7 +843,7 @@
     {
       "id": "R05-006",
       "topic": "R05",
-      "title": "готовый approval search с конкретными ограничениями",
+      "title": "готовый поиск разрешения и его ограничения",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-006.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
@@ -838,14 +858,14 @@
     {
       "id": "R05-007",
       "topic": "R05",
-      "title": "паспорт bootstrap/transition и target agreement",
+      "title": "начальное доверие, переход и согласование целевого файла",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-007.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
       "sources": "docs/theory/research/05-TRUST-SAFETY/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": "docs/theory/research/05-TRUST-SAFETY/R05-007.md",
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -858,7 +878,7 @@
     {
       "id": "R05-008",
       "topic": "R05",
-      "title": "паспорт native backup/recovery примитивов",
+      "title": "системные средства резервного копирования и восстановления",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-008.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT.md",
@@ -868,7 +888,12 @@
       "reviewLabel": "Ожидает рецензии",
       "decisionIds": [],
       "nineWindow": null,
-      "additionalReviews": []
+      "additionalReviews": [],
+      "editorialNotice": {
+        "kind": "limitation-not-new-scientific-acceptance",
+        "text": "Редакционная поправка: DPAPI recovery и OEM D2D условны; обязательный новый сервер не обоснован",
+        "argument": "docs/theory/research/05-TRUST-SAFETY/R05-008.md"
+      }
     },
     {
       "id": "R05-009",
@@ -890,7 +915,7 @@
     {
       "id": "R05-010",
       "topic": "R05",
-      "title": "краткие выводы и ограничения",
+      "title": "TUF: timestamp, Progress и сохранение истории",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/05-TRUST-SAFETY/handoffs/R05-010.md",
       "report": "docs/theory/research/05-TRUST-SAFETY/REPORT-010.md",
@@ -924,7 +949,7 @@
     {
       "id": "R06-002",
       "topic": "R06",
-      "title": "temporal recovery при составном отказе",
+      "title": "восстановление во времени при составном отказе",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-002.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
@@ -984,14 +1009,14 @@
     {
       "id": "R06-006",
       "topic": "R06",
-      "title": "рабочий authenticated proxy при strict VPN и важной сессии",
+      "title": "прокси с аутентификацией, строгая защита и важная сессия",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-006.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
       "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -1004,14 +1029,14 @@
     {
       "id": "R06-007",
       "topic": "R06",
-      "title": "IPv6-only/NAT64: bootstrap и достижимое восстановление",
+      "title": "IPv6-only/NAT64: начальное соединение и достижимое восстановление",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-007.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
       "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -1024,14 +1049,14 @@
     {
       "id": "R06-008",
       "topic": "R06",
-      "title": "proxy и NAT64: placement фактического dial hop",
+      "title": "прокси и NAT64: где фактически устанавливается соединение",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-008.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
       "sources": "docs/theory/research/06-RELIABILITY-UX/SOURCES.md",
       "reportLayout": "cumulative",
       "contract": null,
-      "reviewLabel": "Есть дополнительное scoped решение",
+      "reviewLabel": "Есть дополнительное решение в указанной области",
       "decisionIds": [],
       "nineWindow": null,
       "additionalReviews": [
@@ -1059,7 +1084,7 @@
     {
       "id": "R06-010",
       "topic": "R06",
-      "title": "паспорт рабочих сетей: split DNS/NRPT/PAC, LAN и Android-сочетания",
+      "title": "рабочие сети: split DNS/NRPT/PAC, LAN и Android",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-010.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
@@ -1074,7 +1099,7 @@
     {
       "id": "R06-011",
       "topic": "R06",
-      "title": "паспорт измерения useful-task recovery",
+      "title": "измерение восстановления полезной задачи",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-011.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT.md",
@@ -1106,7 +1131,7 @@
     {
       "id": "R06-013",
       "topic": "R06",
-      "title": "паспорт полезного восстановления и локального privacy-pilot",
+      "title": "полезное восстановление и локальная оценка с сохранением приватности",
       "kind": "research-handoff",
       "handoff": "docs/theory/research/06-RELIABILITY-UX/handoffs/R06-013.md",
       "report": "docs/theory/research/06-RELIABILITY-UX/REPORT-013.md",
@@ -1996,9 +2021,8 @@
     }
   ],
   "lastEditorialUpdate": {
-    "at": "2026-11-04T10:27:41.329Z",
-    "scope": "Reader subjects synchronized; historical capture hash semantics made explicit. No scientific acceptance or product status change.",
-    "prior": "2026-11-04T10:13:09.090Z"
+    "at": "2026-11-04T21:32:57.158Z",
+    "scope": "Русские названия вопросов и согласованные редакционные ограничения; исходные даты, хеши и scientific verdicts сохранены"
   },
   "hashSemantics": {
     "sourceObservations": "Historical capture hashes at observedAt, not current reader-file checksums. Editorial changes do not refresh or attest original acquisitions.",

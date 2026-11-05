@@ -118,7 +118,7 @@ application history продолжаются, а числовой floor подч
 3. Publisher после ротации выпускает timestamp t6 с snapshot version1, как
    допускает соответствующая recovery-ветка; новый snapshot подписан S′.
 4. Загрузка старого t5 под R8 успешна: его signer T не менялся. Go lower layer
-   сравнивает новый snapshot reference1 с сохранённым100 и отклоняет t6.
+   сравнивает новый snapshot reference1 с сохранённым 100 и отклоняет t6.
 5. Сохранение нового root вместе со старым cache повторяет отказ при следующем
    запуске. Одного повторения download или смены транспорта недостаточно.
 
@@ -410,7 +410,7 @@ Root-prefix obligation ещё не является разрешением вы�
 - Проекция обеих историй на `(R8,t5,empty snapshot cache)` одинакова. Storage
   counter без причинной связи не устанавливает, какая история произошла.
 - Новый t6 с snapshot reference1 допустим после обязательного reset в h_pre;
-  в h_post сравнение с уже принятым100 запрещает такой rollback без нового
+  в h_post сравнение с уже принятым 100 запрещает такой rollback без нового
   разрешённого перехода. Сохранять/удалять cache одинаково в обеих историях нельзя,
   если требуется указанная автоматическая recovery способность.
 
@@ -576,10 +576,10 @@ clock rollback из `F<E` не следует `now<E`: после reboot оди�
 Это уточняет и недостаточно типизированное слово deadline в модели R05-001,
 а не объявляет готовый Android producer неправильным: он не исследовался здесь.
 
-Ручной trace: профиль принят при времени1000, timestamp expiry1100, profile
-expiry2000, сейчас1200. Новое TUF принятие требует свежего workflow; running VPN
+Ручной trace: профиль принят при времени 1000, timestamp expiry1100, profile
+expiry2000, сейчас 1200. Новое TUF принятие требует свежего workflow; running VPN
 не обязана истекать в1100 **если** её выданный grant явно не связан с этим сроком.
-Если прежний grant уже ограничен1100, клиент не имеет права продлить его до2000
+Если прежний grant уже ограничен 1100, клиент не имеет права продлить его до 2000
 путём новой интерпретации: требуется новый approved producer contract/proof.
 Все числа — условные метки UTC в одной единице, не измеренные SLO.
 
@@ -600,7 +600,7 @@ durability принадлежит platform adapter/store. Но workspace callbac
 
 Доказательство: crash непосредственно после проверки root, до единственной
 передачи результата, оставляет тот же durable cut, что и crash до проверки.
-Пункт3 различает эти истории, пункты1/2 не позволяют оставить различие.
+Пункт 3 различает эти истории, пункты 1/2 не позволяют оставить различие.
 Это не доказывает небезопасность любого pure verifier: оно ограничивает его
 обещание per-step durability. [Q5] даёт стандартный фон различия completed и
 crash-interrupted операций; наш аргумент о границе API сформулирован отдельно.
@@ -957,15 +957,17 @@ claim об arbitrary-payload bypass. 13 future cases NOT_RUN. SDK не чита�
 26 октября 2026. Полный текст: [R05-008](R05-008.md), краткий разбор
 [handoffs/R05-008.md](handoffs/R05-008.md), [источники](SOURCES.md#sources-r05-008).
 
-**R05-18:** native-примитивы (Windows DPAPI + доменный ms-PKI-DPAPIMasterKeys/
-MS-BKRP; Android Keystore/KeyMint, Backup/Auto-Backup/D2D, BiometricPrompt) —
-слой custody+presence, не authority. Authenticity даёт TUF-подпись, freshness —
-внешний floor-anchor, authority — threshold-политика; restore бэкапа без
-внешнего anchor'а молча откатывает floors (контрпример к «backup = безопасное
-восстановление»). Snowden-потребители это уже фактически соблюдают: DPAPI-blob
-невосстановим на новой учётке, keystore-ключ неэкспортируем, allowBackup=false.
-Минимальная честная схема: restore только не-key material; ключи/floors —
-fresh consent + подписанная серверная floor-позиция. Presence-seam (Biometric/
-Hello) — будущий кандидат, текущее `setUserAuthenticationRequired(false)` не
-дефект доверия, а отсутствие обязательного подтверждения. 12 future cases
-NOT_RUN; native/SDK/state исполнения отсутствуют.
+**R05-18 — уточнённая область.** Защита локального ключа, аутентификация
+пользователя, полномочие и непрерывность истории различаются. При откате всех
+доступных checkpoints нужна пережившая отказ информация, иначе две истории
+неразличимы. Это не доказывает обязательность серверного floor, recovery-secret
+или биометрии. Уже сохранённые документы допускают recovery-agent/backup-key
+для отдельных DPAPI-сценариев и OEM-исключения D2D при allowBackup=false.
+Обычный BiometricPrompt не подписывает смысл показанной операции.
+
+Основной разбор — [R05-008](R05-008.md), поздние условия —
+[R05-009](handoffs/R05-009.md) и [R05-010](handoffs/R05-010.md),
+согласование с кодом — [K5](../../../planning/knowledge-application/sections/TRUST.md#k5).
+Раннее обязательное требование единственной recovery-схемы снято; source-срез
+не доказывает итоговые backup rules, hardware level, native restore или RTO.
+Статусы отдельных научных утверждений не повышены.

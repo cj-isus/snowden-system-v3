@@ -1,6 +1,6 @@
 # R02-008 — ClientHello boundary и цена anti-probing fallback
 
-26 октября2026 · **READY_FOR_REVIEW**.
+26 октября 2026 · **READY_FOR_REVIEW**.
 Последний bounded вопрос текущего окна. [Источники](SOURCES-008.md).
 Source/manual analysis; никакого выполнения TLS/fixtures/сканирования.
 
@@ -12,7 +12,7 @@ TLS record**, затем extractServerName передаёт только эти 
 и до donor fallback. Этот caller ограничивает parser одним record.
 
 В локально доступном reference source Go1.26.7 readClientHello сначала вызывает
-readHandshake; тот получает полный размер handshake message и читает до4+n bytes
+readHandshake; тот получает полный размер handshake message и читает до 4+n bytes
 через readRecord. Только после полного parse вызывается GetConfigForClient.
 Если ClientHello разделён между двумя TLS records, input bytes.Reader содержит
 только первый; продолжение отсутствует и callback не получает полный ClientHello.
@@ -46,7 +46,7 @@ TLS1.3 разрешает такую fragmentation при соблюдении r
 
 ## Цена защищённого fallback
 
-Первая allocation ограничена16-bit record length, но per-record bound не задаёт
+Первая allocation ограничена 16-bit record length, но per-record bound не задаёт
 общий бюджет множества соединений. При Q параллельных inputs bytes порядка Q·L
 сохраняются до parse. verifyClientHello при отсутствии совпадения перебирает U users
 и хеширует handshake; работа масштабируется с Q/U/L. Это размерностная модель,

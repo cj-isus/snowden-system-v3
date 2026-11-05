@@ -11,7 +11,7 @@ Windows/adaptive не читались (вопрос — published data, не pr
 classifier revision и exact Android source revision **UNKNOWN/NOT_DISCLOSED**.
 
 Private captures только `.artifacts/research/r28-contracts/Z02/`.
-`baseline-copies.json` помечает3 raw-records и прочие baseline copies как
+`baseline-copies.json` помечает 3 raw-records и прочие baseline copies как
 **previous public acquisition**, не свежие remote measurements.
 `*.meta.json`: URLs, acquisition UTC, HTTP/effective URL, SHA256,
 TLS verification enabled. `ACQUIRED_NOT_YET_READ` — immutable acquisition
@@ -30,11 +30,12 @@ TLS verification enabled. `ACQUIRED_NOT_YET_READ` — immutable acquisition
 - Applicable root/docs rules и COMMON/Z02 TASK прочитаны. Scoped AGENTS в
   cycles-пути не обнаружены при targeted find; карту проекта не регенерировали.
 
-## 3. P1 — фиксированные3 архивные records и отдельный API-summary
+<a id="3-p1--фиксированные3-архивные-records-и-отдельный-api-summary"></a>
+## 3. P1 — фиксированные 3 архивные records и отдельный API-summary
 
 Producer OONI Probe. Публикация records — archival OONI API; не paper.
-Дата повторного **локального чтения28.10.2026**, remote acquisition прежней
-сессии27.10.2026, указанная в copied receipts. **DATA_FIELDS_READ**:
+Дата повторного **локального чтения 28.10.2026**, remote acquisition прежней
+сессии 27.10.2026, указанная в copied receipts. **DATA_FIELDS_READ**:
 metadata/version/annotations, queries, TCP/TLS/network_events, requests,
 failure/status/body-presence/tags, control fields/headers. HTML response body
 не является самостоятельно разобранной статьёй и не скачивался массово.
@@ -54,7 +55,7 @@ Hashes copied raw matching initial receipts verified28.10; **saved bytes
 identity**, не binary attestation/truth. Не тянули новый набор records.
 
 [Сохранённый summary запроса](https://api.ooni.io/api/v1/measurements?probe_cc=RU&since=2026-01-01&until=2026-02-01&test_name=web_connectivity&domain=explorer.ooni.org&limit=5),
-`ooni-jan2026.raw`, DATA_FIELDS_READ только3/previous context flags relevant
+`ooni-jan2026.raw`, DATA_FIELDS_READ только 3/previous context flags relevant
 S18/S19; page5rows не representative population. API backend_revision
 не disclosure; `anomaly`, `confirmed`, `failure`, `scores`,
 verification_status не подменяют raw outcomes. No fresh summary retrieval.
@@ -137,10 +138,10 @@ SECTIONS_READ. Build constraints у файлов в scoped trace не найде
   per-measurement and per-set start, nonserialized begin and local summary
   interface. URI response-time is not start-time by convention alone.
 
-**Licence:** root [probe-cli LICENSE](https://github.com/ooni/probe-cli/blob/e9b4dc98c04d347f0ee5468c2585e32d94812b73/LICENSE),
-`probe-license.raw`: **SECTIONS_READ header GPL version3**; scope does not
-resolve GPL-or-later wording of every source/dependency. Reference-only,
-нет переноса кода/installation/full compliance approval.
+Корневой [probe-cli LICENSE](https://github.com/ooni/probe-cli/blob/e9b4dc98c04d347f0ee5468c2585e32d94812b73/LICENSE),
+`probe-license.raw`: SECTIONS_READ заголовка GPL version3. Это не разрешает
+вопрос GPL-or-later для каждого source/dependency. Здесь материал — ориентир;
+код не переносился, установка и соответствие всей поставки не проверялись.
 
 ## 5. P3 — OONI primary: temporal DNS mapping, не transplanted classifier РФ
 
@@ -148,13 +149,13 @@ resolve GPL-or-later wording of every source/dependency. Reference-only,
 - «Collateral Damage of IP-Based Blocking During LALIGA Football Streaming
   in Spain: Evidence from OONI Measurements»; публикация **30.06.2026**.
 - URL https://ooni.org/post/2026-laliga-collateral/.
-- Чтение28.10.2026: **SECTIONS_READ** Methods/Identifying blocked IPs/
+- Чтение 28.10.2026: **SECTIONS_READ** Methods/Identifying blocked IPs/
   Identifying affected domains/Temporal coupling/Limitations, extracts
   `laliga.txt:75–110,204–212,259–266`. Other headline/list/search не evidence
   для текущих выводов. Images/whole dataset/notebook NOT_RUN/NOT_READ.
-- Испания01.01–01.06.2026, control Frankfurt; IP×probe-AS×hour, TH>5/<1%
+- Испания 01.01–01.06.2026, control Frankfurt; IP×probe-AS×hour, TH>5/<1%
   и local>=2/>90% — source **эвристики**, не наш confidence theorem и не RF classifier.
-- DNS-scans4/day с04.05.2026; ранние periods use first later scan;
+- DNS-scans4/day с 04.05.2026; ранние periods use first later scan;
   partial means at least one IP not included in blocked set, may be untested.
   No quantitative headline reproduced here (разные totals/denominator в baseline).
 - Source gist notebook https://gist.github.com/hellais/a43e2816178e4c310f5e19dec02d1954
@@ -169,12 +170,12 @@ resolve GPL-or-later wording of every source/dependency. Reference-only,
 - «From Heuristics to Anonymous Credentials: Assessing OONI's Approach to
   Bad Measurements»; **06.07.2026**.
 - URL https://ooni.org/post/2026-faulty-measurements/.
-- Чтение28.10.2026 **SECTIONS_READ** Approach & Methodology, IP geolocation,
+- Чтение 28.10.2026 **SECTIONS_READ** Approach & Methodology, IP geolocation,
   timestamp inconsistencies, Probe OS/version metadata, new heuristics/human
   review (`faulty.txt:48–67,159–160,173–209,215–269`). Таблицы трафика/проценты
   просмотрены только как контекст, не воспроизводятся и не оценены измерением.
 - Check-in logs **19–21.03.2025**; timestamp analysis **02.03–01.04.2025**,
-  не07.2026 data; clientGeoIP vs collector egress, delayed upload vs bad clock,
+  не 07.2026 data; clientGeoIP vs collector egress, delayed upload vs bad clock,
   legitimate fork/dev environment объяснения. Нет каждого user identity.
 - Unknown software string/metadata mismatch не автоматический fraud/нет
   измерения. Sender credential controls не ground-truth proof DNS/TLS.
@@ -184,10 +185,10 @@ resolve GPL-or-later wording of every source/dependency. Reference-only,
 ## 7. P5 — OONI primary: доступность dashboard ≠ upload/no network block
 
 - **Maria Xynou / OONI**, «Russia blocked OONI Explorer, a large open dataset
-  on Internet censorship», **25.09.2024** + un-dated update про02.09.2025/
-  январь2026.
+  on Internet censorship», **25.09.2024** + un-dated update про 02.09.2025/
+  январь 2026.
 - https://ooni.org/post/2024-russia-blocked-ooni-explorer/.
-- Чтение28.10.2026 **SECTIONS_READ** update/Methods/Conclusion
+- Чтение 28.10.2026 **SECTIONS_READ** update/Methods/Conclusion
   `publication2024.txt:19–22,45–64,90–97`; main site/dataset apps/upload
   separated by author. Endpoint graphs/images не оценивались anew.
 - Это historical cited study, not new RF measurements; no extrapolation
@@ -202,33 +203,33 @@ Organisation: **OONI/The Tor Project/spec contributors**.
 Это modern **reference для нормализации**, не mapped historical source3.22/3.26/3.28.
 
 - [df-000-base.md](https://github.com/ooni/spec/blob/8a68ed35b1dfeaeec737c0f1e8985865828d75d7/data-formats/df-000-base.md):
-  **SECTIONS_READ 41–156,173–231**; per-input/per-run timestamp, runtime,
-  optional backend_version/bucket_date и network_type. Базовые examples
-  не current server addresses и не fill for missing fields.
+  SECTIONS_READ41–156,173–231: per-input/per-run timestamp, runtime,
+  optional backend_version/bucket_date/network_type. Примеры не являются
+  действующими server addresses и не заполняют пропущенные поля.
 - [df-005-tcpconnect.md](https://github.com/ooni/spec/blob/8a68ed35b1dfeaeec737c0f1e8985865828d75d7/data-formats/df-005-tcpconnect.md):
-  **FULL_TEXT_READ**; ip/port/status,t,optional IDs unknown if missing;
-  text describes blocked as string but example false. Actual historic
-  ComputeTCPBlocking bool pointer — source priority, inconsistency explicit.
+  FULL_TEXT_READ: ip/port/status,t,optional IDs. Отсутствующее остаётся unknown.
+  Текст называет blocked строкой, пример — false; исторический
+  ComputeTCPBlocking возвращает bool pointer. Противоречие версии явно сохранено.
 - [df-001-httpt.md](https://github.com/ooni/spec/blob/8a68ed35b1dfeaeec737c0f1e8985865828d75d7/data-formats/df-001-httpt.md):
-  **SECTIONS_READ transaction/request/response schema** via targeted search,
-  not whole examples. Metadata transaction/transport/address missing cannot inferred.
+  SECTIONS_READ transaction/request/response schema; не все примеры.
+  Отсутствующие transaction/transport/address нельзя выводить по догадке.
 - [ts-017-web-connectivity.md](https://github.com/ooni/spec/blob/8a68ed35b1dfeaeec737c0f1e8985865828d75d7/nettests/ts-017-web-connectivity.md):
-  **SECTIONS_READ local processing/accessibility+limitations 579–650**,
-  no attempt reproduce spec algorithm in whole. HTTPS server-side block
-  caveat is useful counterexample; spec current snapshot not whole historical parity.
-- [spec LICENSE](https://github.com/ooni/spec/blob/8a68ed35b1dfeaeec737c0f1e8985865828d75d7/LICENSE):
-  **FULL_TEXT_READ 27lines BSD3 conditions** (notice/disclaimer/no endorsement).
-  Data CC licence/engineGPL licences remain separate.
-- data-formats README acquired, **NOT_READ** beyond discovery; no attributed
-  semantic claim from it. Directory/meta commit capture for pinned names,
-  **DISCOVERY_METADATA**, not field/source proof.
+  SECTIONS_READ579–650 local processing/accessibility/limitations; алгоритм
+  спецификации целиком не воспроизводился. Server-side HTTPS block — контрпример,
+  не доказательство полного паритета текущей спецификации и старого engine.
+- [Лицензия spec](https://github.com/ooni/spec/blob/8a68ed35b1dfeaeec737c0f1e8985865828d75d7/LICENSE):
+  FULL_TEXT_READ27 строк BSD3 (notice/disclaimer/no endorsement).
+  CC-лицензия данных и GPL engine рассматриваются отдельно.
+- Data-formats README получен, но NOT_READ за пределами поиска.
+  Семантических выводов из него нет. Directory/meta commit —
+  DISCOVERY_METADATA для имён, не доказательство поля или source-поведения.
 
 ## 9. P7 — OONI developer opposite example HTTPS success versus page denial
 
 - **bassosimone**, «webconnectivity: server-side blocking limitations»,
   https://github.com/ooni/probe/issues/2661.
 - Создано **30.01.2024**; точная дата edits текста неизвестна.
-- Чтение28.10.2026 **SECTIONS_READ тело issue125–132**; описывает v0.5
+- Чтение 28.10.2026 **SECTIONS_READ тело issue125–132**; описывает v0.5
   case и server-side CAPTCHA, **не** historical S18 actual incident.
   Historic source P2 supports same generic HTTPS shortcut independently.
 - Linked test PR code не запущен/не audited. Issue counts/models не
@@ -251,11 +252,11 @@ claim need assumptions, не копируем Poisson commands/generator code.
 ### RFC9111
 
 **R. Fielding, M. Nottingham, J. Reschke (editors)**, «HTTP Caching»,
-**June2022**, Standards Track/STD98.
+June2022, Standards Track/STD98.
 https://www.rfc-editor.org/rfc/rfc9111.txt.
-**SECTIONS_READ §§4.2.3,5.1**, calculating Age/date/current age and difference
-of cached message from current connection,719–782/1056–1078. Datetime+Age
-не TH operation timestamp/clock attestation.
+SECTIONS_READ §§4.2.3,5.1, строки 719–782/1056–1078: Age/date/current age
+и различие кешированного сообщения с текущим соединением.
+Datetime+Age не являются временем операции TH или аттестацией часов.
 
 ### RFC1035
 
@@ -313,7 +314,7 @@ source ECH claims B/C или независимый сетевой witness.
 - Backend code/current API/classifier snapshot отсутствуют в three-record
   inputs; не делали API replay, no substitutes current main.
 - No external measurements/certificates/accounts/user logs; при public raw
-  archive используем3 already-scoped records, не harvesting dashboard.
+  archive используем 3 already-scoped records, не harvesting dashboard.
 - Whole papers/notebooks/figures datasets не объявлены FULL_TEXT_READ только
   потому, что URL/publisher известен. Новое число опубликованных источников
   не proof прибавки эмпирического покрытия.
@@ -323,6 +324,6 @@ source ECH claims B/C или независимый сетевой witness.
 Глубина чтения указана явно; прежние A/B/C/D сохраняют свои области.
 Source manifests/hashes подтверждают полученные bytes и provenance,
 не достоверность сетевых утверждений.
-Comparison fresh source vs previous captures проверяет3files (caller,summary,
+Comparison fresh source vs previous captures проверяет 3files (caller,summary,
 HTTPGet), не всё upstream closure. Документационные link-target проверки
 не build/native/field PASS. Полная source/tree licence compliance NOT_REVIEWED.

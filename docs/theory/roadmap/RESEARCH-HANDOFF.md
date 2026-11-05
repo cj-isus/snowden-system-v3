@@ -1,34 +1,39 @@
-# Исследовательские вопросы и передача в разработку
+<a id="исследовательские-вопросы-и-передача-в-разработку"></a>
+# Решения для разработки и границы применения
 
-[Оглавление теории](../README.md).
+[Оглавление](../README.md) · [Карта вопросов](../KNOWLEDGE-MAP.md) · [Применение знаний](../../planning/knowledge-application/README.md)
 
-Разделы перенесены из авторского сборника с сохранением исходной нумерации, дат и границ доказательства. Исторический статус не является текущим product PASS.
+## Краткий вывод
 
-- [§4 — 4. Реестр ложных блокеров (анти-знание)](#source-4)
-- [§5 — 5. Открытые вопросы и направления (исследовательские заметки)](#source-5)
-- [§13.11 — 13.11. Порядок применения и проверенные модели](#source-13-11)
-- [§15 — 15. Итог исследования и передача в разработку — 2026-10-24](#source-15)
-- [§15.2 — 15.2. Адресное закрытие всех 12 вопросов старого §5](#source-15-2)
-- [§15.4 — 15.4. Уточнение выбора готовых компонентов](#source-15-4)
-- [§15.6 — 15.6. Окончательная последовательность разработки и доказательств](#source-15-6)
-- [§16.7 — 16.7. Что делать в разработке после этого среза](#source-16-7)
-- [Продолжение 2026-10-27: приоритеты исследования](#research-priorities-2026-10-27)
-- [Глубокая сверка 2026-10-28: результаты и следующие вопросы](#research-priorities-2026-10-28)
+Накопленная теория даёт основания для ограниченных решений разработки,
+а не завершённый продукт. Сначала проверяются применимость к точным версиям,
+защита и владение ресурсами; затем измеряется цена одного изменения.
+Прежние исследовательские очереди заменены маршрутом к предметным главам
+и двум действующим планам.
 
----
+**Когда применять.** Чтобы понять, какое решение уже обосновано, какой вопрос
+открыт из-за отсутствующих входов и где находится его основной разбор.
+
+**Граница знания.** Таблицы 24–28 октября 2026 года отражают свои срезы и
+области рецензирования. «Исследовано» означает завершение названного разбора,
+а не закрытие всех поздних вопросов, native-гарантий или сравнительной скорости.
+Команды и адресаты прежних исследований не служат действующими поручениями.
 
 <!-- source-unit: 4 -->
 <a id="source-4"></a>
 ## 4. Реестр ложных блокеров (анти-знание)
 
-Эти «блокеры» были найдены в старом плане/аудите и опровергнуты live-проверкой. Фиксируем, чтобы не повторить:
+Это уроки из прежних инцидентов. Часть основана на сохранённых сообщениях
+о проверках конкретной установки; они не повторялись этой редактурой.
+Обобщение «каждый пункт опровергнут live» слишком широко: ограничения
+ниже относятся только к названным входам.
 
 | Ложный блокер | Откуда | Правда |
 |---|---|---|
 | «nginx возвращает 400 на Sec-WebSocket-Protocol: VLESS» | SERVER-2026-09-01-1 | nginx отдаёт 101; 400 отдаёт сам sing-box на невалидный base64 subprotocol. Литерал «VLESS» не используется реальным клиентом [доказано] |
-| «нужен скрипт vps-diagnose-and-fix-nginx-ws.sh» | тот же | Скрипт решал несуществующую проблему; сервер ни разу не был причиной 400 [доказано] |
-| «CF token IP-restricted = мягкий блокир» | phase-0 evidence | Реального чтения через API не требовалось: всё проверяется DNS/TLS/SSH. Токен вообще не нужен для текущего MVP [доказано] |
-| «нужен второй домен для независимого failure domain» | PLAN §5 Phase B (B1) | Верно, но это не блокер разработки клиента; каналы живут на одном VPS и это документированный компромисс |
+| «нужен скрипт vps-diagnose-and-fix-nginx-ws.sh» | Тот же инцидент | Причина конкретного 400 была не в предлагаемом изменении nginx. Это не доказательство отсутствия любых серверных ошибок |
+| «ограничение CF-token блокирует любую диагностику» | Прежняя запись phase-0 | Для названных тогда проверок API-токен не требовался. Это не универсальный отказ от API: чтение конфигурации зоны и проверка сетевого пути имеют разные контракты |
+| «второй домен сам даёт независимый резерв» | Старое B1-предположение | Исправлено: домен не устраняет общие аккаунт, origin, IP или маршрут. Независимость определяется графом; второй домен не является обязательным блокером разработки |
 | «WS 400 — ожидаемо, реальный клиент пройдёт» | PHASE-8A journal | Дважды неверно: и 400 не от nginx, и «пройдёт» оказалось ложью, пока не починили серверный route.final [доказано] |
 | «сертификат snowdensys не соответствует → Full (Strict) недоступен» | RELEASE-2026-08-28-1 | Починено и не имеет отношения к клиентскому пути |
 
@@ -37,7 +42,8 @@
 
 Мета-вывод: история содержит реальные серверные ошибки, но доля «почти все»
 не посчитана. Проверка обоих концов ускоряет локализацию; clean logs и живой
-/ip не исключают остальные причины. Текущий офлайн-режим сохраняется.
+/ip не исключают остальные причины. Режим исполнения определяется отдельной политикой; историческая таблица
+не разрешает SSH, изменение сервера или локальной сети.
 
 ---
 
@@ -48,54 +54,27 @@
 <a id="source-5"></a>
 ## 5. Открытые вопросы и направления (исследовательские заметки)
 
-Статусы исполнения принадлежат PLAN §5.1/§5.3. Ниже — история вопросов и
-уточнения, не параллельная очередь разработки.
+Исходные двенадцать вопросов получили датированные решения в
+[§15.2](#source-15-2). Их повторный список с промежуточными статусами удалён
+из основного чтения: прежние «ещё исследовать» не должны конкурировать
+с более поздним ответом. Остаток знания отличается от задачи реализации.
 
-- REALITY/XHTTP как канал B: **исследовано 2026-09-11** (docs/B1-REALITY-RESEARCH.md, PLAN V2-031): ядро умеет REALITY (клиент под with_utls), XHTTP — нет (форки client-only); выбран VLESS+TCP+REALITY без Vision. Осталось открытым: live-поведение REALITY в целевых РФ-сетях после деплоя VPS-B [требует полевой проверки];
-- ECH через Cloudflare для VLESS+WS: **частично закрыто 2026-09-16**: ECH на CF
-  (public_name cloudflare-ech.com) блокировался в описанных сетях с 2024-11-05
-  (§2.9, #417) — рассчитывать только на ECH через CF
-  как на защиту нельзя; ECH с собственным public_name на своём домене — открытый
-  вариант [гипотеза, требует серверного эксперимента];
-- XHTTP вместо WS: **изучено 2026-09-11**: в pinned upstream-ядре отсутствует (SagerNet/sing-box#3076 открыт), есть только в форках (sing-box-lx — client transport, сервер = Xray). Смена ядра отклонена (V2-031); переоценить, если XHTTP попадёт в upstream;
-- anti-probing: сравнить всю матрицу WS/REALITY ответов с cover-сайтом;
-  исторический 400 не доказательство VPN, дизайн REALITY не закрывает E-04;
-- национальный DNS: поведение клиента в сети, где домены удаляются из резолверов [исследование];
-- классификатор причин срыва (§2.10 п.16): словарь ResetInjected / SilentFreeze /
-  TlsPolicing443 / PortBlackholed / DnsSubverted / WhitelistMode /
-  DirectLeakConfirmed — **v2 интегрирован 2026-09-23** (windows/failclass.go,
-  PLAN V2-087): детерминированный, поверх probe-отчёта; leak и allowlist дают
-  отдельную реакцию, transport/port-классы меняют порядок кандидатов;
-  честные границы: probe ≤256 байт не видит 16КБ-заморозку, confidence —
-  экспертные константы, валидация на ground truth — Controlled Lab. Осталось:
-  live-калибровка class-aware решений остаётся в Controlled Lab;
-- failure domains / независимость каналов (§2.10 п.18): **модель v1 реализована
-  2026-09-16** (windows/backend/render/fdmodel.go, PLAN V2-059; PLAN §5 Phase B):
-  домены отказа в дескрипторе (carrier/asn/origin/port_class/tls_donor/layer) с
-  деривацией из уже валидированных полей; Independence(a,b) = 1−Σштрафов, порог
-  0.35 (archive/plan_gpt §6) — детерминированная policy-модель для будущей C2-сортировки
-  кандидатов failover, не физика; веса — инженерные константы до калибровки на
-  ground truth. Unknown не штрафуются в текущей формуле, но **не подтверждают
-  независимость**. Старый пример «0.55 < 0.35» арифметически неверен. CDN-вход
-  не общий carrier прямого HY2; общий origin/exit/аккаунт всё равно может
-  объединять их. Реальный effectiveFD для любого ws по умолчанию предполагает
-  Cloudflare; это предположение требует устранения/явной аттестации (§7.4);
-- первый хоп внутри РФ (§2.10 п.14): RU-VPS как транзит — серверный эксперимент
-  (нужен второй VPS в РФ-датацентре) [гипотеза, вне MVP];
-- альтернативный CDN-фронт (Azure Front Door, §2.11): аварийный путь, если
-  CF-ветка канала A деградирует целиком; проверить WS-проксирование и стоимость
-  [гипотеза → эксперимент];
-- IPv6-утечки в TUN-режиме [проверить];
-- семантика `dns.rules.outbound: any` vs `"outbound": ["proxy"]` в sing-box 1.13 [документировано частично, протестировать];
-- Egress/site policy ≠ отказ туннеля: в V2-041 (2026-09-12) наблюдались
-  challenge на одном сайте при живых контрольных целях, а WARP outbound менял
-  trace IP. Это не доказывает, что ASN был единственной причиной, WARP снял
-  challenge или браузер обязательно его пройдёт. Cookies, клиентская TLS/HTTP
-  реализация, rate и политика сайта также существенны. Дополнительный exit
-  проверять по целевой задаче; вход через CDN не подменяет выход VPS.
+Три полезных уточнения прежнего списка сохраняются:
 
----
-
+- В сентябрьской модели `windows/backend/render/fdmodel.go` оценка независимости
+  была `1−Σштрафов` с порогом 0.35; неизвестные поля не штрафовались.
+  Это эвристический порядок, не вероятность. Неизвестность не подтверждает
+  независимость; пример «0.55 < 0.35» был арифметической ошибкой.
+- Исторический классификатор использовал имена ResetInjected/SilentFreeze/
+  TlsPolicing443/PortBlackholed/DnsSubverted/WhitelistMode/DirectLeakConfirmed.
+  Эти имена не доказывают причины; малой пробы недостаточно для объёмной
+  остановки. [Основной разбор адаптации](../adaptation/POLICY-AND-EVIDENCE.md)
+  отделяет наблюдение, допустимое действие и неопределённость.
+- В V2-041 сообщалось об изменении trace IP через дополнительный выход при
+  challenge отдельного сайта. Это не доказывает единственную причину ASN
+  или успешное прохождение браузером. Cookies, TLS/HTTP-поведение, нагрузка
+  и политика сервиса остаются альтернативами. CDN-вход не меняет выход
+  сам по себе; [границы сетевой проверки](../observability/PROBE-PROOF-BOUNDARIES.md).
 
 <!-- /source-unit: 5 -->
 
@@ -112,10 +91,10 @@ paired replay/lab → device/native → owner-authorized field/canary. Не со
 | Модель | Что действительно проверено | Чего из неё не следует |
 |---|---|---|
 | M01 | Common-node availability ceiling и ошибочный independent подсчёт | Доступность наших операторов/VPS |
-| M02 | До27 lower attempts при3×3×3 против3 при одном owner | Фактические retries/latency текущих приложений |
+| M02 | До 27 lower attempts при 3×3×3 против 3 при одном owner | Фактические retries/latency текущих приложений |
 | M03 | Fixed-window boundary burst и отличие token bucket от rolling cap | Необходимость заменить уже имеющийся rolling budget |
 | M04 | BDP≈1MB; drain условной full16MiB queue≈13.42s | Универсальный socket buffer или observed bufferbloat |
-| M05 | Outer IPv6 UDP budget1232 при PMTU1280; с Salamander salt8 остаётся1224 для QUIC; inner overhead отдельно | Рекомендация снизить inner IPv6 MTU ниже1280 или доказанный PMTU defect |
+| M05 | Outer IPv6 UDP budget1232 при PMTU1280; с Salamander salt8 остаётся 1224 для QUIC; inner overhead отдельно | Рекомендация снизить inner IPv6 MTU ниже 1280 или доказанный PMTU defect |
 | M06 | Exact zero-failure iid upper bounds | Независимость полевых samples или абсолютный no-leak |
 | M07 | Average of p99 не pooled p99 | Один подходящий percentile для всех workloads |
 | M08 | Switch cost может превышать условный выигрыш | Новая production threshold/calibrated probability |
@@ -124,9 +103,14 @@ paired replay/lab → device/native → owner-authorized field/canary. Не со
 | M11 | 15s schedule —5760 opportunities/day | Измеренные wakeups/энергия |
 | M12 |9MiB raw→12MiB base64, multiplicative live copies | Измеренный RSS или право менять trust bounds |
 
-Запуск: `node .artifacts/research/2026-10-23-deep-reliability/models.mjs`;
-результаты — models.json. Это bounded детерминированные модели, без импорта/исполнения
-product/upstream кода и без сети. Полные условия, hashes и будущая приёмка — evidence.
+Модели описывают арифметику и условные контрпримеры, а не измерения
+продукта. Таблица не является командой запуска или свидетельством текущей
+приёмки. Формулы и предпосылки находятся в предметных главах:
+[граф отказов](../foundations/THREAT-MODEL.md#source-7-3),
+[ресурсы](../performance/TRANSPORT-AND-RESOURCES.md),
+[адаптация](../adaptation/POLICY-AND-EVIDENCE.md),
+[метод измерения](../methodology/RESEARCH-METHOD.md).
+Сохранённые подробные результаты остаются основанием именно своих моделей.
 
 
 <!-- /source-unit: 13.11 -->
@@ -143,21 +127,24 @@ product/upstream кода и без сети. Полные условия, hashe
 <a id="source-15-2"></a>
 ### 15.2. Адресное закрытие всех 12 вопросов старого §5
 
-Нумерация ниже повторяет исходный список; C01…C14 — labels выводов, не новый backlog.
-Полные доказательства, источники и границы: censorship findings — `.artifacts/research/2026-10-24-research-completion/censorship/findings.md`.
+Таблица фиксирует решения 24 октября по исходному списку.
+C01…C14 — координаты выводов, не новая очередь разработки.
+Столбец приёмки указывает, что требовалось доказать, а не текущий статус
+каждого владельца. Меняющиеся API/тарифы и конфигурации относятся к тому срезу;
+поздние поправки имеют приоритет в своей области.
 
-| Старый вопрос | Окончательный desk-вывод / решение | Будущий gate в существующем плане |
+| Старый вопрос | Окончательный вывод документального разбора / решение | Будущий gate в существующем плане |
 |---|---|---|
 | 1. REALITY/XHTTP, канал B | **Reuse REALITY; defer XHTTP.** В exact sing-box1.13.19 parser нет xhttp/splithttp; неизвестный transport отвергается. Нельзя включить его флагом в текущем renderer. C01 | TH-05/AND-18: reopen только при доказанном недостающем сценарии, compatible core/ADR и E-02/03/04/08; замена ядра сейчас не выбрана |
 | 2. ECH со своим public_name | **Defer deployment.** ECH скрывает часть ClientHello в пределах anonymity set; отдельные IP/public_name/traffic/config delivery могут сохранять отличимость. Свой домен не универсальный обход. C02 | TH-05/E-04: owned endpoint, exact client/server, authenticated config/cert, reject/retry/rotation, отсутствие insecure fallback; paired ISP/time/family |
 | 3. XHTTP вместо WS | **Сохранить WS baseline.** Тот же source ответ C01, а не второй transport engine или поиск случайного preset | TH-05/E-08: сравнение кандидата только после compatible seam и safety gate |
-| 4. WS/REALITY anti-probing | **Adapt adversary/cover matrix.** 400/404 и auth не доказывают неотличимость; passive TLS-in-TLS и active probing — разные механизмы, результаты GFW не доказательство current RF. C03 | TH-05/E-04: свои серверы, wrong/absent/replayed auth, malformed/short/timing/close/concurrency, benign corpus и held-out days |
+| 4. WS/REALITY anti-probing | **Adapt adversary/cover matrix.** 400/404 и auth не доказывают неотличимость; passive TLS-in-TLS и active probing — разные механизмы, результаты GFW не доказательство нынешней РФ. C03 | TH-05/E-04: свои серверы, wrong/absent/replayed auth, malformed/short/timing/close/concurrency, benign corpus и held-out days |
 | 5. Национальный DNS/удаление домена | **Adapt authenticated bootstrap.** Подмена локального ответа, отказ resolver и authoritative/delegation loss различаются. Reachable trusted resolver помогает не во всех случаях; DNSSEC подтверждает данные/отсутствие, не доступность. Подписанный numeric endpoint убирает lookup, сохраняя identity/hostname/pin/expiry; NAT64 отдельно. C04 | TH-03/RQ-07/08/09: controlled NXDOMAIN/NODATA/SERVFAIL/timeout/poisoned AAAA/resolver outage; no circular DoH bootstrap, negative-cache scope; protected user DNS без direct fallback |
 | 6. Калибровка classifier | **Adapt observable facts + unknown.** Таймаут/RST/x509/порт не устанавливают причину; литература не калибрует probability текущего ISP. C05 | TH-02/E-06: known faults + held-out ISP/day/family confusion matrix, abstain/coverage/false-switch против fixed-policy baseline |
 | 7. Failure domains/веса/unknown | **Adapt dependency graph + provenance.** Два транспорта могут разделять origin/ASN/CDN/publisher/resolver. Unknown не independence, score не probability; implicit WS=CF убрать на реализации. C06 | TH-03/E-07/RQ-14/20: shared-node outage и unknown edges; joint outage estimates только из подходящих paired blocks |
 | 8. Первый hop в РФ | **Defer paid infrastructure experiment.** Меняется dependency первого участка, добавляются trust/cost/failure domains. RU ASN не подтверждает allowlist. C07 | TH-07/E-07: owner-approved two-leg setup, whitelist-active evidence той же сети/периода, оба legs/end-to-end TCP+UDP/overhead |
 | 9. Альтернативный CDN/Front Door | **Defer deployment по стоимости/ценности.** Standard/Premium поддерживает WS при disabled cache, idle5min/max2h; исключения SNI/Host требуют своих domains в одной subscription/routes. Чужой fronting отвергнут, base+usage оплачиваются. C08 | TH-03/07: budget/domain/origin TLS/Upgrade/WAF/close-recovery и signed carrier facts; проверить реальную независимость и ISP path |
-| 10. IPv6 TUN leaks | **Adapt full family policy.** Outer family, inner IPv6 и DNS — три оси. DNS64 не исправляет numeric IPv4; Pref64 network-scoped. Android getNat64Prefix API30+, для29 reuse OS resolver/observed CLAT; без proof IPv4 literal на v6-only unsupported/unknown. C09 | TH-01/RQ-03/09/AND-05/06/15/E-01/05: v4/v6/NAT64/CLAT/MTU/PTB/handover; capture-or-block обеих защищённых families. ipv4only.arpa не connectivity probe |
+| 10. IPv6 TUN leaks | **Adapt full family policy.** Outer family, inner IPv6 и DNS — три оси. DNS64 не исправляет numeric IPv4; Pref64 network-scoped. Android getNat64Prefix API30+, для 29 reuse OS resolver/observed CLAT; без proof IPv4 literal на v6-only unsupported/unknown. C09 | TH-01/RQ-03/09/AND-05/06/15/E-01/05: v4/v6/NAT64/CLAT/MTU/PTB/handover; capture-or-block обеих защищённых families. ipv4only.arpa не connectivity probe |
 | 11. dns.rules.outbound:any / [proxy] | **Точный source ответ:** any означает metadata.Outbound≠пусто; именованный список — exact tag, а не тип proxy. VLESS и direct выставляют tag до dial, поэтому any охватывает и внутренние contexts. Условие не выбирает resolver и не доказывает protected OS/app DNS. В pinned docs deprecated/removal1.14; adapt domain_resolver/default_domain_resolver при обычном schema gate. C10 | TH-03/RQ-07/08/AND-06: renderer tags/user-vs-bootstrap scopes/other match fields/actions/negative results/cache/no-loop/signed migration; без массового upgrade |
 | 12. Egress/site policy | **Reuse independent health axes.** HTTP403/challenge/geo-block при здоровых controls — scoped site/egress observation. CDN ingress не меняет exit; смена IP не гарантирует доступ и не всегда нужна. C11 | TH-02/04/COM-07/11/E-06: independent protected controls + выбранный target, workload parity, свежий proof после exit change; без входа в аккаунты |
 
@@ -177,7 +164,7 @@ product/upstream кода и без сети. Полные условия, hashe
 - **РФ:** нет подтверждённого вечного общероссийского protocol/IP ranking.
   Cloudflare report относится к их сети/периоду, issue650 — к трём MTS testers,
   issue516 — одному Beeline report. Разделять обычный DPI, active allowlist и
-  shutdown; current field evidence возможно только на конкретных ISP/time/endpoint.
+  shutdown; актуальное полевое свидетельство возможно только на конкретных ISP/time/endpoint.
 - **Один новый carrier-кандидат:** NaiveProxy, defer integration до TH-01/03/04.
   На 2026-10-24 официальный stable v154.0.8037.49-5, commit
   `d04efe1ea4477c2db24a7d0e2f068b3bee931e45`. Upstream advisory о compromised
@@ -198,14 +185,14 @@ product/upstream кода и без сети. Полные условия, hashe
 ### 15.4. Уточнение выбора готовых компонентов
 
 1. **Pinned netmon adapt:** tag SagerNet/tailscale
-   `v1.92.4-sing-box-1.13-mod.9` теперь разрешён в immutable commit
+   `v1.92.4-sing-box-1.13-mod.9` теперь разрешён в неизменяемый commit
    `867c1f0012d915fa5fd57481dbf2a1ad16669fe7`. Exact Windows callback/go.mod/LICENSE
    получены, Git blobs проверены; Go1.24.1/BSD-3-Clause. COM-03 развивает один
-   existing owner/epoch monitor. Наличие callback/unregister API и indirect
-   dependency не доказывает full integration/actual OS delivery.
+   существующий владелец/epoch monitor. Наличие callback/unregister API и indirect
+   dependency не доказывает полную интеграцию и фактическую доставку событий ОС.
 2. **TUF** не оставлять «подобрать compatible release»: выбран v2.4.2
    `f5edbde31e5507f46db2069402dc38903fe6d9d4`, Apache-2.0, ADR-001. Head Go1.27
-   — historical comparator. Android переиспользует portable verifier seam,
+   — исторический объект сравнения. Android переиспользует portable verifier seam,
    а не Windows module и не Kotlin serializer для canonical signed bytes.
 3. **Glorytun defer:** stable branch и latest release v0.3.4 указывают на
    `c113724eb0370ecd80d038192deeeb82a13ebed3` от 2020-03-25. Stable README описывает
@@ -213,19 +200,19 @@ product/upstream кода и без сети. Полные условия, hashe
    для оценки безопасности. Для core release кандидат отклонён по интеграционной
    цене и отсутствию обязательного bonding use case. Полный native/crypto audit
    не нужен для такого отказа; при новом сценарии COM-17 нужен отдельный аудит.
-4. Остальной список14 COM upstream и10 Android pins/лицензий остаётся §6/§12;
-   source license review не лицензирует assets/бренд/сервис и весь будущий
+4. Остальной список 14 COM upstream и 10 Android pins/лицензий остаётся §6/§12;
+   просмотр лицензии исходника не лицензирует assets/бренд/сервис и весь будущий
    transitive binary graph. Exact composed artifact получает отдельный SBOM.
 
-Sources: [netmon commit](https://github.com/SagerNet/tailscale/blob/867c1f0012d915fa5fd57481dbf2a1ad16669fe7/net/netmon/netmon_windows.go),
+Источники: [netmon commit](https://github.com/SagerNet/tailscale/blob/867c1f0012d915fa5fd57481dbf2a1ad16669fe7/net/netmon/netmon_windows.go),
 [TUF release](https://github.com/theupdateframework/go-tuf/tree/f5edbde31e5507f46db2069402dc38903fe6d9d4),
 [Glorytun stable](https://github.com/angt/glorytun/tree/c113724eb0370ecd80d038192deeeb82a13ebed3),
 [release](https://github.com/angt/glorytun/releases/tag/v0.3.4).
 
 Отказ от build+sshx как постоянного VPS опирается на
 [Workers Builds limits](https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/)
-и назначение [sshx](https://github.com/ekzhang/sshx). Temporary build disk не
-означает зарезервированное persistent gateway storage; другие продукты Cloudflare
+и назначение [sshx](https://github.com/ekzhang/sshx). Временный диск сборки не
+означает зарезервированное постоянное хранилище шлюза; другие продукты Cloudflare
 не оцениваются по ограничениям build job.
 
 
@@ -235,30 +222,25 @@ Sources: [netmon commit](https://github.com/SagerNet/tailscale/blob/867c1f0012d9
 <a id="source-15-6"></a>
 ### 15.6. Окончательная последовательность разработки и доказательств
 
-| Шаг / существующий owner | Конкретный выход | Что позволяет идти дальше |
-|---|---|---|
-| 1. PC P0 TH-01/03/04, OFF-01/02/04 | Довести current deadlines/activation/cold trust/custody/private history и lifecycle barriers по STATE; один active slice | Source review → разрешённые targeted local checks → native OS durability/old-client fault matrix. Никакого нового carrier до safety |
-| 2. Android P0 AND-04/06 + AND-01…05 | Текущий graph composition → portable trust driver/accepted-only producer → один patched whole AAR + repository/service, без mock SDK | Exact byte golden/parity, patch/API/JNI/ABI16KiB provenance, реальный controlled lifecycle/capture/owner/DNS на devices |
-| 3. TH-02/04/06 + AND-07/11 | Truthful observations, classifier abstain, retry/queue/resource admission, DNS/family scopes | Known mechanisms/faults, stale/late/blocked work, no protected direct fallback, resource bounds under load; отдельные слой/command/inputs |
-| 4. COM-01…14 + TH-08; AND-08…14 | Повседневные profiles, explain/readiness, grants/quiet/portal, transfer/revoke, coherent pages/quick surfaces/update | Flow-by-flow UX + a11y/adaptive/backend-state evidence; эффективные scope/expiry, no fake connected/empty zeros; signing/install отдельно |
-| 5. TH-07/AND-13/15, COM-15 | Разрешённая IaC/release configuration и оплаченная минимальная инфраструктура; per-device identities, backup/custody/runbook | Server/client same pins, cert/expiry/ports actual behaviour, failure/resource/DR evidence; paid/open port сами не PASS |
-| 6. E-01…08 / AND-15/16 / FR-012 | Controlled lab → matched real ISP/time/family/workload blocks → one optional candidate | Raw counts/failures/coverage/TTFB/recovery/tails/loaded latency/goodput/resources/energy; predeclared SLO/fairness/stop rule, held-out blocks |
-| 7. TH-08/AND-17 | Limited RC/canary/support/known-good rollback с честной support matrix | Все заявленные P0 и конкретные release/native/UX/live gates приняты; отдельное разрешение публикации. Optional AND-18/COM-16…19 после этого |
+Полная последовательность, владельцы, зависимости и критерии находятся
+только в [плане ПК](../../planning/knowledge-application/PC-PLAN.md) и
+[плане Android](../../planning/knowledge-application/ANDROID-PLAN.md).
+Старая семишаговая копия из теории больше не является отдельным планом.
 
-Нельзя пропускать шаг1 ради новой маскировки или считать source-only Android
-готовым SDK. Сначала разрешение текущей execution-policy для конкретных проверок;
-само наличие команд в плане его не меняет. User inputs для будущего исполнения:
-доступные devices/OS/OEM, измеримые SLO/use case, выбранный release channel/key
-custody, оплаченная infra и current field access. Их отсутствие не оставляет
-литературный вопрос открытым и не разрешает выдумать наблюдения.
+Устойчивый принцип порядка: подтверждённый дефект защиты и доверия →
+ограничение ресурсов и наблюдаемость → одно обоснованное улучшение →
+раздельные native/device/полевые доказательства. Совмещать новое ядро,
+mux, MTU, CC и сервер в одном сравнении нельзя без возможности отделить
+вклад изменений. Новая маскировка не закрывает P0-владение и безопасность.
 
-**Research stop condition выполнен:** весь оговорённый desk scope имеет решения
-и владельцев; дальнейшее движение — существующие implementation/evidence gates.
-Постоянное расширение списка протоколов без нового доказанного сценария не
-повышает теоретический максимум. Переоткрывать адресный вопрос только по новому
-входу, который действительно меняет выбранное решение.
+Полезные будущие входы: точные устройства/ОС, сценарий и измеримые цели,
+состав релиза, полномочия на ключи, инфраструктура и доступ к нужному пути.
+Их отсутствие фиксируется как отсутствующий вход, а не заполняется
+предположением. Наличие команды в документе не меняет разрешённый режим.
 
-
+Историческое завершение разбора 24 октября касалось оговорённого тогда набора.
+Позднее обнаруженные ошибки и ограничения сохраняют собственные решения.
+Новых исследований или внедрения из этой главы автоматически не следует.
 
 <!-- /source-unit: 15.6 -->
 
@@ -266,20 +248,13 @@ custody, оплаченная infra и current field access. Их отсутст
 <a id="source-16-7"></a>
 ### 16.7. Что делать в разработке после этого среза
 
-1. **P0 AND-04-S4/TH-03:** выбрать explicit portable verifier seam по OP-03;
-   сохранить current platform owner backlog, full trust workflow/progress и
-   source-only blockers. Android app/journal не accepted profile/готовый VPN.
-2. **P0/P1 TH-02/03, RQ-07/08/09/12:** отдельно довести bootstrap и protected
-   observation scope/cache/clock/transport contracts OP-01/02. Начать с source
-   cache/proxy/namespace рисков, без обещания actual direct leak.
-3. **P1 COM-07/12/13, AND-11/12/14:** producer inventory и explicit support
-   snapshot/export/clear semantics OP-04/05; custody UX OP-06. Расширять существующие
-   типы/компоненты, не добавлять telemetry backend.
-4. После разрешения — targeted protocol/clock/progress/retention/privacy проверки,
-   затем native/device/field и task-based UX. Все прежние release/comparative
-   gates сохранены. Новые transport/ML/декоративные задачи этим не приоритизированы.
-
-
+После этого среза оставались контракты portable TUF, начального DNS,
+измерения и поддержки пользователя. Их предметные основания находятся в
+[архитектуре доверия](../architecture/SAFETY-AND-TRUST.md#source-16-3),
+[DNS](../observability/DNS-AND-DIAGNOSTICS.md) и
+[повседневных сценариях](../ux/COMPETITOR-FEATURES.md).
+Статус adapter/JNI/AAR и очередной ограниченный срез определяет владелец
+платформы. Прежний список адресатов не выдаётся за действующее поручение.
 
 <!-- /source-unit: 16.7 -->
 
@@ -299,7 +274,7 @@ custody, оплаченная infra и current field access. Их отсутст
 количестве названий протоколов, а в **связи конкретного утверждения с полным
 путём, проверяемыми предпосылками и действием, которое оно меняет**.
 
-Обнаружены основания для адресного продолжения: противоречие Vision между
+В срезе 27 октября были выделены пробелы: противоречие Vision между
 тематической главой и R02-01; недостаточно раскрытый ECH/DNS bootstrap;
 смешение byte/packet observations; pending trust/callback/producer contracts.
 Закрытие прежнего desk scope в §15 не означает, что исчерпаны все исследования.
@@ -307,9 +282,10 @@ custody, оплаченная infra и current field access. Их отсутст
 
 ### Пять выбранных направлений
 
-Приоритеты ниже относятся к **исследованию**, не меняют порядок safety и
-разработки из PLAN. Один следующий срез, один конечный выход; направления
-соседних авторов соединяются вопросом, а не новым владельцем их состояния.
+Ниже сохранена **историческая карта вопросов 27 октября**. Она объясняет,
+зачем появился последующий разбор; будущие формулировки в её строках
+не запускают продолжение и не определяют нынешний порядок реализации.
+Итоги 28 октября и их принятые области указаны ниже и в предметных главах.
 
 | Очередь | Вопрос и причина выбора | Следующий конечный результат | Основание / граница |
 |---|---|---|---|
@@ -345,11 +321,12 @@ unknown или handoff. Ещё один обзор не заменяет так�
 ML, padding presets и дорогое provisioning не вытесняют выбранные вопросы
 без нового конкретного сценария или доказанного ограничения baseline.
 
-Следующее рекомендуемое **desk**-действие: review R02-005 с одной матрицей
-защищаемых bytes/identity/replay для зашифрованной замены ShadowTLS-композиции.
-Для trust — адресный выбор supported reset/durability contract по R05-002,
-когда будут доступны actual adapter/publisher inputs.
-Никаких probes/tests/build/SDK/native/admin/live/deploy из этого плана не следует.
+Указанные в прежнем срезе R02-005 иR05-002 получили последующие уточнения:
+[композиция TLS](../transports/COMPOSITION-AND-TLS-CONTRACTS.md),
+[различимость истории доверия](../architecture/TRUST-CONTINUITY-AND-AGREEMENT.md).
+Это не означает принятия каждого утверждения исходных пакетов.
+Открытые вопросы сохраняются в своей области; повторное поручение review
+из исторической очереди не требуется.
 
 <a id="research-priorities-2026-10-28"></a>
 <a id="после-глубокой-сверки-28-октября-где-исследование-даст-следующий-результат"></a>
@@ -382,12 +359,12 @@ ML, padding presets и дорогое provisioning не вытесняют вы�
 
 | Приоритет | Один конечный вопрос | Выход и условие завершения |
 |---|---|---|
-| **P0 — композиционная безопасность** | Какие найденные TLS/version/identity ветки достижимы в фактическом актуальном profile→renderer→artifact? | Exact manifest/caller matrix и один допустимый encrypted candidate. При отсутствии основного code tree — адресный handoff, не guessed product defect. TH-01/03/05 |
-| **P1 — семантика adapter и ресурсов** | Как согласовать current sender/controller, ordinary/PMTU/PATH events, fragment admission и actual last owner? | Уточнённый R04-14 oracle и finite ownership/accounting matrix; source compatibility раньше любого performance сравнения. TH-02/06 |
+| **P0 — композиционная безопасность** | Какие найденные TLS/version/identity ветки достижимы в фактическом актуальном profile→renderer→artifact? | Exact manifest/caller matrix и один допустимый encrypted candidate. Без чтения точного актуального дерева вывод о дефекте продукта остаётся открытым; наличие исходников в библиотеке не заменяет анализ вызывающей цепочки. TH-01/03/05 |
+| **P1 — семантика adapter и ресурсов** | Как согласовать точные sender/controller рассматриваемой версии, ordinary/PMTU/PATH events, fragment admission и actual last owner? | Уточнённый R04-14 oracle и finite ownership/accounting matrix; source compatibility раньше любого performance сравнения. TH-02/06 |
 | **P1 — границы знаний adaptive** | Кто гарантирует полноту cohort, совместный Γ/β и конкретный bridge к нужной future задаче? | Producer-owned proof assumptions и deterministic abstain при отсутствии. Для эффекта policy — назначение полного изолированного домена либо доказанный sequential/exposure support. TH-02/04 |
 | **P1 — recovery при смене полномочий** | Как трактуются overlap/threshold-only/S→S′→S и continuation через expired root? | Явный supported ResetAllowed и эквивалентная различимость existing store; full old/new authority predicates. Новое поле/DB только при доказанной необходимости. TH-03 |
 | **P1 — поздняя отличимость camouflage** | Отличим ли late inner handshake после finite padding-prefix на тёплом carrier от benign late activity? | Определённый full-window observer, будущие day/endpoint/transport splits, контролируемый stop/restart cost. Сначала план/контрпримеры; E-04/E-08 требуют разрешённого корпуса |
-| **P2 — временное и географическое покрытие** | Как отделить execution path от upload path и сохранить contemporaneous DNS/IP/AS evidence при смене сети? | Одна bounded модель temporal joins/quality labels; затем согласованный dated dataset. Новые статьи и сообщение об unblock не current field evidence. TH-02/07 |
+| **P2 — временное и географическое покрытие** | Как отделить execution path от upload path и сохранить contemporaneous DNS/IP/AS evidence при смене сети? | Одна bounded модель temporal joins/quality labels; затем согласованный dated dataset. Новые статьи и сообщение об unblock не актуальное полевое свидетельство. TH-02/07 |
 
 Платформенные тесты/эксперименты остаются отдельными gates. В текущем исследовании
 не запускались native/code tests, SDK, simulator, VPN, VPS или реальные сетевые

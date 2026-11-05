@@ -1,57 +1,74 @@
 # Архитектура защиты, доверие и обновления
 
-[Оглавление теории](../README.md).
+[Оглавление](../README.md) · [Термины](../GLOSSARY.md) · [Непрерывность доверия](TRUST-CONTINUITY-AND-AGREEMENT.md) · [Границы поставки](RELEASE-EVIDENCE-BOUNDARIES.md)
 
-Углубление 2026-10-28: [различимость trust history и multirepo agreement](TRUST-CONTINUITY-AND-AGREEMENT.md),
-[время revocation evidence, bytes и первое исполнение](RELEASE-EVIDENCE-BOUNDARIES.md).
-Новый review не принимает platform durability/implementation автоматически.
+## Краткий вывод
 
-Разделы перенесены из авторского сборника с сохранением исходной нумерации, дат и границ доказательства. Исторический статус не является текущим product PASS.
+Подлинность, свежесть, разрешение действия, сохранение истории и работа
+сетевого барьера — разные контракты. Подпись не назначает полномочия сама себе,
+ошибка не означает отсутствие допустимого прогресса, а успешный ответ API
+не доказывает долговечность записи или защиту существующих потоков.
 
-- [§3 — 3. Архитектурные принципы защищённого клиента (выводы из практики)](#source-3)
-- [§7.4 — 7.4. Что в коде сейчас, а что ещё целевой контракт](#source-7-4)
-- [§7.5 — 7.5. Control plane, ключи и автономность](#source-7-5)
-- [§13.9 — 13.9. Windows: барьер, существующие потоки и время](#source-13-9)
-- [§15.3 — 15.3. Trust, эксплуатация и повседневный UX: окончательные решения](#source-15-3)
-- [§16.3 — 16.3. OP-03 — portable TUF: конфигурацией diskless режим не получить](#source-16-3)
-- [§16.6 — 16.6. OP-06 — first policy SHA и custody нельзя получить из того же пакета](#source-16-6)
-- [Дополнение 2026-10-27: TUF progress, expiry и разрешённый reset](#tuf-progress-and-reset-2026-10-27)
+**Когда применять.** При импорте профилей, обновлении доверия, восстановлении
+после сбоя, проектировании защиты и выборе границ платформенного SDK.
 
----
+**Граница знания.** Здесь объединены принципы и датированные срезы 21–28 октября 2026 года.
+Они не утверждают, что целевой ProtectionController, служба, portable SDK или
+все native-гарантии уже реализованы. Детали хранилищ и применения находятся
+у владельцев. Научное принятие ограниченного вывода не является приёмкой продукта.
+
+Основные вопросы: [защитные принципы](#source-3), [доверие и автономность](#source-7-5),
+[существующие потоки Windows](#source-13-9), [выбор реализации TUF](#source-16-3),
+[первое независимое подтверждение](#source-16-6), [ошибка и история TUF](#tuf-progress-and-reset-2026-10-27).
 
 <!-- source-unit: 3 -->
 <a id="source-3"></a>
 ## 3. Архитектурные принципы защищённого клиента (выводы из практики)
 
-1. **Fail-closed** — при отсутствии подтверждённого защищённого пути трафик не выпускается. Никакого «а вдруг напрямую получится».
-2. **Доказательство, а не индикация**: protected probe = DNS через туннель + 2 HTTPS-цели + ожидаемый egress + negative direct-leak test. HTTP 101/открытый порт/успешный handshake — НЕ доказательство [доказано нами: сервер с route.final=block принимал VLESS-сессии и блокировал весь трафик, при этом клиент выглядел «подключённым»].
-3. **Один владелец lifecycle**: обёртка владеет контекстом движка. Операционный таймаут операции (Start/Reload) не должен быть контекстом движка — иначе движок умирает сразу после старта [доказано нами: P0-дефект Manager].
-4. **Секреты только по ссылке**: конфиги в git — с плейсхолдерами; рендер в runtime — локально; секреты никогда не в чат/лог/diff.
-5. **Сертификат pinned, не disabled**: self-signed сервер = пиннинг PEM в клиенте, `insecure` запрещён.
-6. **Два протокола не означают два независимых пути**: TCP/CDN и UDP/direct
-   различаются частью причин отказа, но один VPS/аккаунт/exit/publisher может
-   отключить оба. Нужна карта общих зависимостей (§7.3).
-7. **Валидация конфига до запуска**: references, selector без direct, отсутствие плейсхолдеров, strict JSON.
-8. **Клиентская фича транспорта = контракт ОБОИХ концов**: при включении транспортной оптимизации на клиенте (mux, padding, новые поля) серверный inbound обязан уметь её терминировать ТЕМ ЖЕ изменением — иначе получаем невидимую снаружи деградацию: CDN жив, TLS жив, auth проходит, а данные рвутся (EOF) [доказано нами 2026-09-12: клиентский h2mux+padding по умолчанию против сервера без multiplex → probe «3 of 4 failed: EOF» при полностью рабочем пути]. Отсюда же: default-on транспортных фич небезопасен при гетерогенной серверной ферме — включать фичу стоит вместе с сервером или через дескриптор (per-канал), а не глобальным дефолтом.
-9. **Провал probe ≠ утечка ≠ недоступность канала**: одиночный liveness failure
-   допускает bounded reprobe при сохранённом барьере. Наличие барьера подтверждать
-   отдельно, из timeout его не вывести. Совпавший direct/tunnel IP бывает при
-   общем NAT/exit; различный IP тоже не доказывает отсутствие всех OS-утечек.
-   Подтверждённый safety outcome — немедленный fail-closed; неопределённость
-   нельзя превращать в security PASS. Исторический V2-026 показывает цену
-   ложных остановок, но его атрибуция именно CGNAT не установлена здесь.
-10. **Bootstrap не должен быть единственным и экзотичным**: резолв имени туннельного сервера ДО старта движка — мультистратегичный (plain UDP флот + DoH по IP-литералу + кэш последнего хорошего), в коде приложения, а не в конфиге ядра: политика владеет кодом, а не hopes. DoT/853 — популярная тихая точка отказа в фильтрующих сетях [вывод из THEORY §2.1; реализация preflight в V2-037].
-11. **Idle требует проверки и восстановления**: keep-alive, app heartbeat,
-   срок жизни carrier и NAT — разные параметры (§2.10 п.10). Исторические
-   60/20с/TFO не универсальный default. Parser/check не доказывает семантику:
-   в инциденте 2026-09-12 REALITY без принятого server_name отвергал аутентичных
-   клиентов, хотя TCP/донор отвечали. Это evidence конкретной конфигурации.
-12. **Multiplex имеет разнонаправленные эффекты**: меньше хендшейков, общие
-   очереди/потери и больший объём carrier. Не «маскирует объём» автоматически.
-   Выбирать согласованный профиль по E-02/E-03 и workload, не по догадке о DPI.
-
----
-
+1. **Защита сохраняется при автоматическом отказе.** Отсутствие разрешённого
+   подтверждённого пути не открывает защищаемому трафику прямой выход.
+   Явное отключение и ошибка имеют разные переходы по политике платформы.
+2. **Готовность имеет область.** Исторический набор DNS+HTTPS+egress+negative
+   leak checks был конкретной схемой приёмки, а не универсальным доказательством
+   защиты всей ОС. [Точный смысл сетевой проверки](../observability/PROBE-PROOF-BOUNDARIES.md)
+   задаёт наблюдаемую область. HTTP101, открытый порт и handshake подтверждают
+   свои этапы, но не завершение полезной операции.
+3. **Один владелец жизненного цикла.** Контекст времени операции Start/Reload
+   не подменяет контекст жизни движка. Отмена наблюдателя и возврат метода
+   не доказывают освобождение всей порождённой работы. Старые инциденты Manager
+   объясняют причину принципа, а не текущее состояние кода.
+4. **Секреты имеют явные роли.** В публикуемых конфигурациях — ссылки и
+   placeholders; значения не попадают в Git, чат, журнал и diff. Ссылка на
+   секрет не даёт права произвольно раскрыть его или применить к другому каналу.
+5. **Проверяется нужный участник.** Для TLS выбирается действительное доверие
+   PKI либо обоснованный pin; self-signed не исправляется через `insecure`.
+   REALITY и составные транспорты имеют свои роли аутентификации:
+   [основной разбор композиции](../transports/COMPOSITION-AND-TLS-CONTRACTS.md).
+6. **Разнообразие не равно независимости.** TCP/CDN и UDP на одном VPS сохраняют
+   общую машину, адрес и управление. [Граф отказов](../foundations/THREAT-MODEL.md#source-7-3)
+   важнее числа строк в селекторе.
+7. **Профиль проверяется до исполнения.** Нужны строгая схема, роли ссылок,
+   совместимость, отсутствие placeholders и запрет неразрешённого fallback.
+   Возможность поля upstream не означает его поддержку нашим рендером и UI.
+8. **Транспорт — договор обоих концов.** Mux, заполнение и новые поля требуют
+   совместимости клиента и сервера. Успех CDN/TLS/auth не исключает отказ данных.
+   Исторический инцидент 12 сентября с h2mux+padding иллюстрировал это различие;
+   глобальный default без согласования разнородных серверов из него не следует.
+9. **Провал пробы не равен утечке.** Liveness timeout допускает ограниченное
+   уточнение с сохранённой защитой. Совпадение IP при общем NAT и различие IP
+   не доказывают соответственно утечку и отсутствие всех утечек.
+10. **Начальное разрешение имеет отдельную политику.** До запуска туннеля нужны
+    допустимые способы получения адреса, границы доверия/свежести и явные
+    исключения. Plain DNS, DoH и кеш не назначаются универсально обязательными.
+    [Основной DNS-разбор](../observability/DNS-AND-DIAGNOSTICS.md) разделяет
+    bootstrap, пользовательский DNS и измеритель.
+11. **Бездействие и восстановление учитываются отдельно.** NAT mapping, keepalive,
+    прикладной heartbeat и срок канала различаются. Числа 60/20 с/TFO старой
+    конфигурации не являются измеренным оптимумом. Parser/check не доказывает
+    правильную аутентификацию и фактическую передачу.
+12. **Оптимизация имеет цену.** Mux сокращает часть установлений соединения,
+    но объединяет очереди и область отказа. Он не скрывает объём автоматически;
+    профиль выбирается под нагрузку и проверку обоих концов.
 
 <!-- /source-unit: 3 -->
 
@@ -70,8 +87,10 @@
 | PLAN OFF-01…09 | есть локальные инкременты, OS/native/live/comparative gates открыты | Здесь не объявляется реализованной production-служба/ProtectionController или универсальный TUN |
 | V2-108 | Во время V2-109 появились новые code/evidence: root build failure исправлен, capability отмечена locally-tested | [Отдельное evidence](../../evidence/2026-10-21-binding-migration.md); V2-109 читает сохранённые результаты, не приписывает себе их запуск. Реальные owner profiles/pins не мигрировались |
 
-Это конкретные открытые расхождения с теорией, а не просьба переписать всё ядро.
-Реализация по одному ограниченному срезу, через существующие App/Manager/Engine.
+Это расхождения среза 21 октября, не список доказанных нынешних дефектов.
+Актуальное сопоставление выполняется по двум планам и текущим исходникам
+владельца. Сам принцип сохраняется: ограниченный срез через существующие
+App/Manager/Engine вместо второго владельца.
 
 
 <!-- /source-unit: 7.4 -->
@@ -88,7 +107,8 @@
 [TUF 1.0.37, 2026-10-08](https://theupdateframework.github.io/specification/v1.0.37/) — зрелый референс разделения ролей/thresholds,
 rollback/freeze/mix-and-match защиты и ротации root. Это не утверждение, что
 наш envelope уже реализует TUF. Адаптировать требования и regression scenarios,
-решение о библиотеке/миграции принимать отдельно в OFF-06.
+исторический вопрос OFF-06 позднее получил решение по ADR-001 и совместимому
+go-tuf2.4.2. Это смена этапа решения, не доказательство готовности всех адаптеров.
 
 До выдачи профиля: ChannelID→SecretID→pin/capabilities, min/max client/core
 version, auth и signed validity. Rotation: current+next, overlap, отзыв, crash
@@ -127,7 +147,7 @@ Monotonic не означает одинаковую suspend-семантику 
 Android elapsedRealtime включает deep sleep (§12.6). TTL grant, trust expiry,
 measurement freshness и deadline активной работы требуют своих clocks/boot scopes.
 После resume нельзя продлить grant, объявить старый proof свежим или сразу породить
-все пропущенные periodic jobs. Отдельно проверить запрограммированные timers и
+все пропущенные periodic jobs. Отдельно проверить запрограммированные таймеры и
 фактическое время callback под CPU pressure. [D23]
 
 
@@ -139,12 +159,13 @@ measurement freshness и deadline активной работы требуют �
 
 | Область | Выбранный путь / почему он достаточен для разработки | Конечная приёмка |
 |---|---|---|
-| TUF/delivery | **Reuse go-tuf2.4.2, ADR-001**, уже source-integrated unverified. Новая криптобиблиотека не нужна. Delivery authenticity/roles/freshness и application grant/epoch/owner authority различны; TUF не installer EXE/APK | TH-03/08, AND-04/14: golden bytes/negative authority/clock/rotation/revoke/fixed-target atomic commit и реальная установка отдельно |
+| TUF/delivery | **Reuse go-tuf2.4.2, ADR-001**; в срезе 24 октября интеграция по исходникам
+не имела полного подтверждения. Новая криптобиблиотека не нужна. Delivery authenticity/roles/freshness и application grant/epoch/owner authority различны; TUF не installer EXE/APK | TH-03/08, AND-04/14: golden bytes/negative authority/clock/rotation/revoke/fixed-target atomic commit и реальная установка отдельно |
 | Cold bootstrap/authority custody | **Adapt existing issuer/repository/cache.** Initial root/key fingerprint приходит из независимого доверенного канала; download с заблокированного origin не становится новой authority. No safe current trust/cache → BLOCKED/recovery intent | TH-03/07/COM-13: cold latest-known floor, root/threshold loss/rotation, offline backup/restore с внешним approved state; bounded transport bootstrap не снимает expiry |
 | Deadline/retry/failure control | **Reuse owner/epoch/actual-return fences**, единые end-to-end deadline и admission budgets; timeout/cancel не завершение underlying work. Safety прежде optional quiet/refresh/probe | TH-01/02/04/RQ/TR/AND-02…07/11: blocked IO/native/late returns, stale result, queue saturation, no overlap/no direct gap; фактическая свежесть и useful completion |
-| Один VPS/несколько узлов | **Один anchor достаточен для первого клиента, но остаётся SPOF.** Несколько transports на нём не независимые серверы. Второй узел выбирается после shared-failure graph, а не количества стран | TH-03/07/COM-15: actual paid infrastructure/cost/quota/routes, independent origin/ASN/publisher/resolver по цели; бюджет12000р/год не источник гарантии |
+| Один VPS/несколько узлов | **Один anchor достаточен для первого клиента, но остаётся SPOF.** Несколько transports на нём не независимые серверы. Второй узел выбирается после граф общих причин отказа, а не количества стран | TH-03/07/COM-15: фактическая инфраструктура, оплата, стоимость, квоты и маршруты, independent origin/ASN/publisher/resolver по цели; бюджет 12000 р/год не источник гарантии |
 | Cloudflare build+sshx recipe | **Reject как постоянный VPS.** Удалённый terminal build job не даёт владельцу зарезервированный always-on gateway/порты/диск/availability contract. Платформенный worker/tunnel требует отдельного supported carrier contract | Нет обязанности разворачивать этот обход CI lifetime; новый официальный продукт/use case потребует отдельного ADR и условий сервиса |
-| Мониторинг/диагностика | **Reuse scoped observations + optional blackbox ideas.** Paid-until manual с provenance; provider API read-only только по конкретной пользе. Не ставить тяжёлый observability stack ради пары метрик | COM-07/11/12/15, TH-07: endpoint-dead≠tunnel-dead, stale/unknown distinct, diagnostic bytes/work caps, redacted export preview, без admin key в APK |
+| Мониторинг/диагностика | **Reuse scoped observations + optional blackbox ideas.** Дата оплаты с явным происхождением; provider API read-only только по конкретной пользе. Не ставить тяжёлый observability stack ради пары метрик | COM-07/11/12/15, TH-07: endpoint-dead≠tunnel-dead, stale/unknown distinct, diagnostic bytes/work caps, redacted export preview, без admin key в APK |
 | Навигация/каждая страница | **Adapt existing UI/component API.** Windows left menu=раздел, top tabs=его подпункты, без дубликатов. Android отдельный adaptive scaffold. Status/service readiness/scope/freshness объясняются одним snapshot | TH-08/COM-01/02/07/11 и AND-08/09/12: onboarding, home, channels, checks, journal, settings/transfer; loading/empty/error/success/stale, narrow/wide/fonts/keyboard/TalkBack и основные пользовательские задачи |
 | Доступность сервиса для работы | **Adapt task profiles/readiness, explicit quiet/portal/grants.** Нет mic/screen surveillance или авто-логина. Обход корпоративной policy не feature; incompatible full-tunnel честно unsupported/managed | COM-04…11/AND-06/09/10: effective route+DNS+identity/explain, TTL/reboot/network revoke, conflicts/portal возврат к protected proof; UX success/time/error/comprehension заранее |
 | Release/security | **Reuse signed staged pipeline + platform signer.** Cargo-cult latest dependency, прямой launch downloaded code и unsafe recovery не выбраны | TH-08/OFF-07, AND-14/17: dependency/security/license inventory, reproducible inputs, signer custody, canary/revoke/known-good recovery без trust downgrade; support matrix |
@@ -164,49 +185,50 @@ FR-012 сравнения, даже если отдельные компонен
 ### 16.3. OP-03 — portable TUF: конфигурацией diskless режим не получить
 
 Проверены exact go-tuf2.4.2/f5edbde исходники updater/config/trustedmetadata/go.mod,
-4 authoritative Git blobs. Утверждения Android ADR-017 подтверждены:
+4 сверенных Git-объекта. Утверждения Android ADR-017 подтверждены:
 
 - DisableLocalCache пропускает запись/создание путей, но loadTimestamp/Snapshot/
   Targets всё равно используют loadLocalMetadata→os.ReadFile. Memory Fetcher
   перехватывает download, а не эти чтения; пустой LocalMetadataDir не изоляция.
 - GetTrustedMetadataSet возвращает struct value с pointer/map fields, не deep
   owned snapshot и не все original signed bytes. UnsafeSetRefTime назван
-  upstream testing helper. Это не отсутствие expiry checks в SDK.
+  вспомогательный API upstream для тестирования. Это не отсутствие expiry checks в SDK.
 - Lower-level TrustedMetadata имеет **exported instance RefTime**; после New
   его можно установить до update workflow без process-wide clock и Unsafe helper.
   Но этот слой не выполняет сам полный updater workflow/persistence/lookup.
-- UpdateTimestamp/UpdateSnapshot могут изменить **внутреннее** intermediate state
+- UpdateTimestamp/UpdateSnapshot могут изменить **внутреннее** промежуточное состояние
   **до возврата expiry/version error**. Это не разрешение сохранить новый rejected
   объект как trusted cache; error также не означает отсутствия допустимого
   predecessor progress. [Уточнение R05-001-A](#tuf-progress-and-reset-2026-10-27).
-  Root rotation и rollback-state loading имеют порядок; New(root) self-signature
-  check не устанавливает внешнюю authority и не доказывает final-root freshness.
+  Ротация root и rollback-state loading имеют порядок; New(root) self-signature
+  check не устанавливает внешнюю authority и не доказывает свежесть конечного root.
 
-Нынешний PC adapter использует full Updater/private workspace и извлекает
-retainedState даже при Refresh error; это существующий source pattern для
-progress/application-result разделения. Его временный FS-контракт не превращается
-автоматически в memory-only Android API.
+В срезе этого анализа PC adapter использовал полный Updater и приватный
+рабочий каталог, извлекая retainedState также при Refresh error. Это пример
+разделения прогресса доверия и результата приложения, а не принятие всех
+состояний при любой ошибке. Временный файловый контракт не становится
+автоматически API без файлового ввода-вывода для Android.
 
 | Вариант | Решение и цена |
 |---|---|
 | Full Updater + memory Fetcher + DisableLocalCache | **Reject как diskless решение:** скрытые local reads остаются |
-| Full Updater + явный private workspace | **Reuse PC pattern**, если платформенный owner отдельно принимает FS-контракт; не удовлетворяет текущему запрету ambient/file-I/O автоматически. Нужны CE/no-backup, fixed inventory, ownership, bounded reads/writes/cleanup и exact bytes |
+| Full Updater + явный private workspace | **Reuse PC pattern**, если платформенный owner отдельно принимает FS-контракт; не удовлетворяет текущему запрету ambient/файловый ввод-вывод автоматически. Нужны CE/no-backup, fixed inventory, ownership, bounded reads/writes/cleanup и exact bytes |
 | Pinned TrustedMetadata + узкий portable workflow | **Feasible source seam, conditional adapt.** Криптография остаётся upstream; наш workflow обязан покрыть ВСЕ root/rotation/floors/metadata/target hash/length/delegation-policy/expiry/progress шаги и exact-byte ownership. Это не подпись-only verifier и не выбранный готовый SDK |
 | Поддерживаемые upstream Storage/Clock hooks | **Предпочтительный full-updater контракт** для жёсткого memory-only требования; нужен принятый API/patch/version, не предположение о наличии. До него либо отдельно одобренный lower-layer workflow, либо blocker сохраняется |
 
-**Конечный выход исследования:** совместимость требований установлена. В exact
+**Конечный выход исследования:** границы имеющихся API установлены для исследованной версии. В exact
 full Updater нет config-only diskless режима; lower-layer даёт instance clock,
 но требует отдельной оркестрации. Это конечный architecture decision для AND-04-S4,
 а не повод искать случайный compatible SFA HEAD или молча ослабить memory-only.
 Рекомендация — согласовать один из двух явных seams до написания adapter:
 поддерживаемый full-updater Storage/Clock API либо отдельно reviewed lower-layer
-full workflow. Второй AAR, global chdir/clock/logger override, source fork TUF и
+полный workflow. Второй AAR, global chdir/clock/logger override, source fork TUF и
 UnsafeLocalMode shortcut не выбраны.
 
 **Gate TH-03/AND-04-S4/AND-14:** golden original bytes; новый rejected expired
 timestamp/snapshot отдельно от ранее принятого cache и valid predecessor;
 retained progress только по разрешённым переходам; same-version equivocation;
-root/key rotation, missing roles, target length/hash, fixed-start-time и fresh
+root/key rotation, missing roles, target length/hash, фиксированное время начала и fresh
 application commit-time отдельно; no ambient FS/network; one artifact/JNI
 provenance. Signature-verified intermediate не разрешает профиль или Connect.
 [Pinned SDK](https://github.com/theupdateframework/go-tuf/tree/f5edbde31e5507f46db2069402dc38903fe6d9d4),
@@ -233,7 +255,7 @@ recipient/scope/as-of/version. Это лишь представление уже
 быть получен по доверенному независимому каналу; QR сам себя не аутентифицирует.
 Никакого нового production wire field этим исследованием не вводится.
 
-Custodian receipt хранит exact approved baseline/checkpoint identity, где/когда
+Custodian receipt хранит точную идентичность одобренного baseline/checkpoint, где/когда
 проверен и для какой enrollment/recovery операции; publisher backup checksum не
 подменяет receipt. Потеря checkpoint/key или uncertain clock → существующий
 recovery/blocked, не fresh-install reset старого устройства. Копирование root
@@ -241,7 +263,7 @@ recovery/blocked, не fresh-install reset старого устройства. 
 
 **Gate TH-03/07/COM-13, AND-04/13/14:** валидный old package с omitted revocation,
 задержанный policy record, same-channel hash substitution, wrong recipient,
-ошибка копирования128hex/QR, потеря key/checkpoint и backup restore. UX task:
+ошибка копирования 128hex/QR, потеря key/checkpoint и backup restore. UX task:
 пользователь понимает, что он подтвердил и откуда взял reference. Тут нет нового
 SLO или результата user testing; TUF fixed workflow time не trusted wall clock
 и не разрешение позднего application commit.
@@ -254,7 +276,7 @@ SLO или результата user testing; TUF fixed workflow time не trust
 
 **2026-10-27.** R05-001-A и ограниченная часть R05-001-B приняты после
 [независимой сверки](../research/reviews/2026-10-27-R05-001-PROGRESS.md)
-TUF 1.0.37/1.0.36 и public go-tuf v2.4.2
+TUF 1.0.37/1.0.36 и публичный go-tuf v2.4.2
 (`f5edbde31e5507f46db2069402dc38903fe6d9d4`). Это уточнение OP-03.
 Поведение текущего адаптера Snowden и durable storage не установлено.
 
@@ -275,7 +297,7 @@ TUF 1.0.37/1.0.36 и public go-tuf v2.4.2
 срока конечного root. Общее правило «сохранять всё при error» ошибочно так же,
 как «при error никогда нет progress».
 
-**Source-основание:** `TrustedMetadata.UpdateTimestamp/UpdateSnapshot` меняют
+**Основание по исходникам:** `TrustedMetadata.UpdateTimestamp/UpdateSnapshot` меняют
 указатели до final checks, чтобы поддержать загрузку старого cache для rollback
 protection. Но `Updater.loadTimestamp/loadSnapshot` сохраняют **новые downloaded**
 bytes после успешного `Update*`. API snapshot не сообщает сам по себе, каким
@@ -291,19 +313,12 @@ trusted **timestamp и snapshot**, если timestamp и/или snapshot keys б
 Удалить лишь snapshot при смене snapshot keys недостаточно: его version floor
 может остаться в timestamp.
 
-Проверенный условный пример: под R7 принят t5→snapshot100; fresh R8 полностью
-меняет snapshot signer S на S′, сохраняя timestamp signer T. Новый t6→snapshot1
-после разрешённого reset должен пройти обычные дальнейшие проверки. Если
-сначала заново загрузить t5 как active cache под неизменённым T, сравнение
-1<100 остановит этот путь. Такой trace следует из bare pinned Go callers;
-это не воспроизведённый дефект приложения или утверждение обо всех rotations.
-
-Прочитанный Python reference case для snapshot recovery меняет одновременно
-T и S. Когда прежний timestamp не проходит новый quorum, конкретный барьер
-t5 не возникает. Поэтому **paired-key recipe и поддержка всех lawful rotations
-не эквивалентны**. Какой набор переходов обещает publisher, нужно решить явно;
-добавление keyID, threshold change, overlap и reuse key material требуют
-собственных правил. [Source и контрпример](../research/reviews/2026-10-27-R05-001-PROGRESS.md).
+Условный пример t5→snapshot100 и разрешённой смены signer, а также
+отличие полной замены от перекрытия ключей разобраны в основном разделе
+[непрерывности доверия](TRUST-CONTINUITY-AND-AGREEMENT.md).
+[Первичная рецензия](../research/reviews/2026-10-27-R05-001-PROGRESS.md)
+сохраняет границы источников. Увеличение root version само по себе не разрешает
+reset; «оба ключа заменены» не тождественно всем поддерживаемым ротациям.
 
 **Проектная граница:** TUF reset не сбрасывает application profile/update floors,
 epochs, cumulative bans, enrollment/custody и protection intent. Новый root,
@@ -323,7 +338,7 @@ application deadlines и owner/source gates. Отказ обновления met
 себе не делает текущий ещё-допустимый data plane неисправным.
 
 Принятие verifier, фактическое сохранение и применение приложением — разные
-события. Returned success или readback файла не доказывают power-loss durability;
+события. Успешный возврат или readback файла не доказывают сохранность после потери питания;
 timeout не доказывает отсутствие записи. Pure API с единственным возвратом не
 может подтвердить сохранение volatile root progress при hard kill до возврата.
 Per-step durability требует реальной границы передачи store; per-return promise
@@ -331,9 +346,9 @@ Per-step durability требует реальной границы переда�
 
 ### Конечная приёмка существующего trust boundary
 
-Адресаты **TH-03, FR-008/011**; Android — через его владельца. Сначала exact
-adapter/publisher mapping и выбор поддерживаемых rotations, затем разрешённые
-проверки. Все случаи ниже **NOT_RUN**, исполняемые tests/fixtures не добавлены.
+Координаты прежних требований — TH-03/FR-008/011 и отдельный Android-реестр.
+Сначала согласуются точные adapter/publisher и поддерживаемые ротации;
+исполнение требует своей приёмки. Все случаи ниже **NOT_RUN**.
 
 | Случай | Ожидаемое различие |
 |---|---|
@@ -350,3 +365,28 @@ adapter/publisher mapping и выбор поддерживаемых rotations, 
 Reuse выбранной криптографии и существующего store остаётся исходной позицией.
 Полная conformance, ресурсы, native durability и recovery конкретного продукта
 потребуют своих inputs и evidence; они не следуют из научного принятия A/B.
+
+[D21]: https://learn.microsoft.com/en-us/windows/win32/fwp/object-management
+[D22]: https://learn.microsoft.com/en-us/windows/win32/fwp/ale-re-authorization
+[D23]: https://pkg.go.dev/time#hdr-Monotonic_Clocks
+
+## Применение в двух планах
+
+Для [ПК](../../planning/knowledge-application/PC-PLAN.md) основные этапы —
+PC-01 (барьер), PC-02 (доверие) и PC-08 (поставка/восстановление).
+Для [Android](../../planning/knowledge-application/ANDROID-PLAN.md) —
+ANDR-01/04/09 с отдельными полномочиями ОС и артефактом JNI/AAR.
+Универсальная криптографическая часть не получает владельца WFP, VpnService,
+файловой долговечности или применения профиля.
+
+Переиспользуются выбранная библиотека проверки и существующие issuer/store/
+импорт. Выбор между полноценным Updater с явным файловым контрактом и
+проверенным lower-level workflow зависит от требований платформы. Цена второго
+варианта — полная оркестрация ролей, делегирования, сроков и сохранения истории;
+она не исчезает из-за использования готовой криптографии. Лицензия, точные
+версии и итоговый состав фиксируются до переноса кода.
+
+Текущие статус реализации и разрешённая приёмка находятся в планах владельцев.
+Эта редактура не выполняла OS/device/live или проверку потери питания.
+Сохранены как открытые проверка долговечности, реальных полномочий,
+поддержанных ротаций и защищённого применения.

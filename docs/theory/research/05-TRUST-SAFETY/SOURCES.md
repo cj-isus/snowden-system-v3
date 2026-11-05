@@ -89,7 +89,7 @@ checksum расхождения записан в `drift.json`. Это не пр
 | Q2 | [go-tuf2.4.2 Updater](https://github.com/theupdateframework/go-tuf/blob/f5edbde31e5507f46db2069402dc38903fe6d9d4/metadata/updater/updater.go#L590), [TrustedMetadata](https://github.com/theupdateframework/go-tuf/blob/f5edbde31e5507f46db2069402dc38903fe6d9d4/metadata/trustedmetadata/trustedmetadata.go#L60) | Commit `f5edbde31e5507f46db2069402dc38903fe6d9d4`, Apache-2.0. Existing exact source replay: persistMetadata590…635, loadRoot/onlineRefresh, UpdateRoot/Timestamp/Snapshot. Workspace write/close/rename ≠ platform durable receipt; memory-only/pure-step contract не выбран |
 | Q3 | [legacy go-tuf0.7.0](https://github.com/theupdateframework/go-tuf/blob/6ad7fe593e4042db3544c4b0fedbe66bac371c42/client/client.go#L224); compare [Python7.0.1](https://github.com/theupdateframework/python-tuf/blob/49eb1da48c58cf0cbb0f2e490f7ad39fbd8c1f15/tuf/ngclient/updater.py#L381) | BSD-3-Clause legacy comparison/invalidation335…361 с комментарием о старом draft; Python Apache-2.0 OR MIT. Эти implementations не уравниваются с одним normative reset predicate и не становятся новым SDK |
 | Q4 | [bbolt1.5.0 tx.go](https://github.com/etcd-io/bbolt/blob/e7a8b2dd498494a3766ba24dd94d3509e5588485/tx.go#L170), [db.go](https://github.com/etcd-io/bbolt/blob/e7a8b2dd498494a3766ba24dd94d3509e5588485/db.go#L1140), [go.mod](https://github.com/etcd-io/bbolt/blob/e7a8b2dd498494a3766ba24dd94d3509e5588485/go.mod), [LICENSE](https://github.com/etcd-io/bbolt/blob/e7a8b2dd498494a3766ba24dd94d3509e5588485/LICENSE) | Release2026-06-21, commit `e7a8b2dd498494a3766ba24dd94d3509e5588485`, MIT. Tx.Commit170…294→write520→writeMeta595, handlers после close; NoSync и recovery meta selection. Go1.25.0/toolchain1.25.11 declared; API read, не сборка/подтверждение Android/Windows compatibility |
-| Q5 | [Izraelevitz, Mendes, Scott, TR999](https://www.cs.rochester.edu/u/scott/papers/2016_Izraelevitz_TR999.pdf), University of Rochester, July2016 | Full-system-crash NVM model и durable vs buffered durable linearizability, определения3/4 (§2, PDF pages4–5). Терминологический фон; его ISA/NVM results не переносятся автоматически на файловую систему или наш SDK. Собственные различимость/K/API proofs сформулированы отдельно |
+| Q5 | [Izraelevitz, Mendes, Scott, TR999](https://www.cs.rochester.edu/u/scott/papers/2016_Izraelevitz_TR999.pdf), University of Rochester, July2016 | Full-system-crash NVM model и durable vs buffered durable linearizability, определения 3/4 (§2, PDF pages4–5). Терминологический фон; его ISA/NVM results не переносятся автоматически на файловую систему или наш SDK. Собственные различимость/K/API proofs сформулированы отдельно |
 | Q6 | [SQLite atomic commit](https://sqlite.org/atomiccommit.html), [synchronous](https://sqlite.org/pragma.html#pragma_synchronous), [copyright](https://sqlite.org/copyright.html) | Reference journal/commit и различие durability режимов. WAL NORMAL против WAL FULL; rollback режим отдельно. Deliverable code/docs — public domain по заявлению upstream, build scripts могут иметь иные условия. Binary/driver/VFS version не выбраны, dependency не вводится |
 | Q7 | [python-tuf7.0.1 reference test source](https://github.com/theupdateframework/python-tuf/blob/49eb1da48c58cf0cbb0f2e490f7ad39fbd8c1f15/tests/test_updater_top_level_update.py#L410) | Только прочитанный исходник: timestamp recovery410, snapshot491 (paired rotation), targets599. Это сильное counterevidence к обобщению S-only ветки. Код не исполнялся; тесты/fixtures проекта не создавались |
 
@@ -176,7 +176,7 @@ blob archive. `sigstore-go-pin-verified.json` — действительная �
 `sigstore-go-pin.json` с null commit и `sigstore-go-ref.json` — failed fetch
 evidence; использовать их как pin нельзя. GitHub API ref timeout и read-only
 git ls-remote DNS failure сохранены в пояснении; OS сеть не перенастраивалась.
-Несуществующий pkg/verify/policy.go вернул404; policy изучена в signed_entity.go.
+Несуществующий pkg/verify/policy.go вернул 404; policy изучена в signed_entity.go.
 
 `web-primary-specs.txt` и `web-verification-docs.txt` включают web-rendered docs;
 main README/verification examples служили ориентацией. Старый Go minimum из
@@ -197,7 +197,7 @@ offline wrapper dependency closure остаются адресными посл�
 
 ## R05-004 — OS signing, installation, execution
 
-Проверено2026-10-26, новый source-only срез. Публичные данные не команды на запуск.
+Проверено 2026-10-26, новый source-only срез. Публичные данные не команды на запуск.
 
 | ID | Exact primary / version / caller | Использование и предел |
 |---|---|---|
@@ -230,7 +230,7 @@ update_readiness.go и ANDROID-PLAN.md; snapshots/hashes в local-inputs.json.
 
 ## R05-005 — отрицательное знание и офлайн отзыв
 
-Primary чтение2026-10-26. Версионные RFC/reference; никаких crypto/provider runs.
+Primary чтение 2026-10-26. Версионные RFC/reference; никаких crypto/provider runs.
 
 | ID | Primary / дата / exact section | Применение и предел |
 |---|---|---|
@@ -251,13 +251,13 @@ Captures в `.artifacts/research/theory-05/R05-005/upstream/`: web-rendered sour
 records, не raw RFC archive. Их hashes — capture provenance. Baseline relevant
 THEORY §16.6 прочитан; повтор прежнего impossibility claim явно отделён от новых
 уточнений. Собственных local product inputs нет; ранее собранные R05-004 facade
-inputs не выданы за fresh runtime proof. Все10 будущих cases NOT_RUN.
+inputs не выданы за fresh runtime proof. Все 10 будущих cases NOT_RUN.
 
 <a id="sources-r05-006"></a>
 
 ## R05-006 — TAP4 / pinned multirepo
 
-Primary public чтение2026-10-26, никаких runs/crypto. Готовое не значит approved.
+Primary public чтение 2026-10-26, никаких runs/crypto. Готовое не значит approved.
 
 | ID | Exact primary / version / caller | Scope |
 |---|---|---|
@@ -272,7 +272,8 @@ multirepoupdater не являлось доказательством имени
 не удался; exact raw pinned code доступен и прочитан. No dependency installation.
 Публичный upstream caller chain в X1 рассмотрен; актуальное использование этого
 API продуктом не утверждается. Opposing review и границы — §последний R05-006.md.
-10 future cases NOT_RUN. Shared theory/product plans/SDK не изменены.
+Десять будущих случаев — NOT_RUN; описание не подтверждает реализацию SDK
+или приёмку продукта.
 
 В TAP4 указаны Public Domain и old-client ignore compatibility. `types.go`
 сохранён как source capture, но внутренний аудит `Hashes.Equal` не завершён
@@ -282,7 +283,7 @@ API продуктом не утверждается. Opposing review и гра�
 
 ## R05-007 — map governance, migration и exact hash compatibility
 
-Публичные источники/dated consumers прочитаны2026-10-26 в новом4h окне,
+Публичные источники/dated consumers прочитаны 2026-10-26 в новом 4h окне,
 первый UTC10:54:29Z; основные raw/refetch batches11:19…11:25Z. Вызовы до/после
 ограничивались UTC checks. Никакой verifier/crypto/client IO не исполнялся.
 
@@ -307,9 +308,9 @@ config refetch SHA совпал с R05-001: web line labels удаляют blank
 records не считаются доказательством содержимого.
 
 Source hashes/manifest фиксируют bytes, не runtime behavior. Local-inputs.json
-содержит4 initial snapshots; onboarding.go — supplemental capture после чтения
+содержит 4 initial snapshots; onboarding.go — supplemental capture после чтения
 type seam. No claim целостного atomic checkout пяти файлов. Final relevant drift/
-preservation и самостоятельный opposing review в artifacts/handoff. Все13 cases
+preservation и самостоятельный opposing review в artifacts/handoff. Все 13 cases
 NOT_RUN, новые тесты/fixtures не созданы.
 
 <a id="sources-r05-008"></a>
@@ -321,10 +322,10 @@ NOT_RUN, новые тесты/fixtures не созданы.
 |---|---|
 | [ms-PKI-DPAPIMasterKeys — схема AD (ru-RU)](https://learn.microsoft.com/ru-ru/windows/win32/adschema/a-mspkidpapimasterkeys) | Доменное хранение DPAPI master keys — официальный русскоязычный документ Microsoft |
 | [MS-BKRP — Backup Key Restoration Protocol](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-bkrp/7cbbd712-dcf9-49ce-a9a4-611a62bfba7e) | Протокол восстановления DPAPI-секретов через домен; применим только при домене |
-| [MS Support: DPAPI недоступен после admin password reset](https://support.microsoft.com/sl-si/help/3038562/cannot-access-dpapi-data-after-an-administrator-resets-your-password-o) | Подтверждение границы: сброс пароля администратором делает blob невосстановимым |
+| [MS Support: DPAPI недоступен после admin password reset](https://support.microsoft.com/sl-si/help/3038562/cannot-access-dpapi-data-after-an-administrator-resets-your-password-o) | Ранний реестр сформулирован слишком сильно: административный сброс может сделать данные недоступными; сохранённый пример Microsoft различает смену пароля и допускает recovery-agent/backup-key |
 | [CryptProtectData (Win32 API)](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata) | Базовый контракт DPAPI (en-US canonical; ru-RU перевод страницы API не пинован) |
 | [Android Keystore / KeyMint](https://developer.android.com/privacy-and-security/security-crypto), [NIST SP 800-63B-style user-presence идеи через setUserPresenceRequired](https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder) | Неэкспортируемость hardware-ключей, invalidation, presence/authentication флаги (canonical en-US) |
-| [Auto Backup / резервное копирование данных](https://developer.android.com/identity/data/backup) | Правила переноса app-data; ключи keystore бэкапом не переносятся |
+| [Auto Backup / резервное копирование данных](https://developer.android.com/identity/data/backup) | Правила переноса app-data. Сохранённая Auto Backup-страница прямо отмечает OEM D2D-исключение для allowBackup=false на target31+; это не native-проверка итогового приложения |
 | Snowden source (dated, read-only) | windows/app.go + delivery_state.go (DPAPI vault), sysutil_windows.go:80-84 vaultDir; android AndroidManifest.xml:4 allowBackup=false; ProfileStoreCrypto.kt:24-31 KeyGenParameterSpec, setUserAuthenticationRequired(false) |
 
 Remote byte equality не заявляется; SDK/runtime не читались и не исполнялись.

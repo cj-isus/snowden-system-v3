@@ -1,7 +1,6 @@
-# R28-C04 — finite handoff
+# Ресурсы QUIC/HY2: учёт, владение и отмена
 
-**READY_FOR_REVIEW**, 2026-10-28. Author: Теория4/C04.
-Source evidence cut09:25:57Z.
+**Срез 28 октября 2026, 09:25:57Z. Статус автора — READY_FOR_REVIEW.**
 Пакет: [REPORT](REPORT.md), [SOURCES](SOURCES.md).
 
 ## Что нового и какой verdict предлагается
@@ -16,7 +15,7 @@ return/reap receipts позволяют ограничить *охваченны
 Новая полезная дельта: единицы allocations/aliases и схема custodian между
 caller→pack→DATAGRAM queue→history→serialized write→retirement; отдельный
 metadata high water. Фрагменты ссылаются на original, serialized output —
-другая allocation. Ручной valid cut U4096/H22/F4 удерживает не менее9735 bytes
+другая allocation. Ручной valid cut U4096/H22/F4 удерживает не менее 9735 bytes
 названных backings до окончания операции; ни simulation, ни wire/RSS measurement.
 Sampler present/span/backing различаются; doubling/Clear не даёт shrink.
 
@@ -82,6 +81,8 @@ Z04/Z05 TASK прочитаны; готовых paired HANDOFF в review09:14:48
 61 local input hashes.59 input hashes stable после snapshot;2 Android metadata
 files moved, declared pin/unknown artifact/required cache+history flavor перечитаны.
 
-**Открытое:** scientific verdict; численные whole-process/native/resource ceilings;
-artifact identity; actual bounded elapsed I/O/reap и memory/energy/throughput
-measurements. N1–N12 все NOT_RUN.
+Открыты научное решение в названной области, численные пределы всего
+процесса/native/ресурсов, идентичность артефакта, фактическое ограниченное
+время I/O/reap и измерения памяти/энергии/скорости. N1–N12 — NOT_RUN.
+
+<a id="r28-c04--finite-handoff"></a>

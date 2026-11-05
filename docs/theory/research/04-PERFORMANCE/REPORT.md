@@ -266,7 +266,7 @@ Reuse: существующий Go channel или nonblocking `semaphore.Weighte
 в текущем eviction callback release не синхронизирован через item.access.
 Новый janitor/size cap/Delete требует явной lifetime/lock-order проверки, нельзя
 просто вставить Delete под item mutex или освобождать буфер по timeout вызывающего.
-[Weighted semaphore][semaphore], [LRU][lru].
+[Weighted semaphore][semaphore], [LRU] [lru].
 
 Цена/контрпример: serial handler может задержать остальные flows на одном медленном
 сообщении; малый cap роняет корректные bursts, большой сохраняет RSS/GC pressure.
@@ -390,7 +390,7 @@ peak combined RSS, Android energy/wakeups. Единый byte budget не при�
 
 ## 10. R04-002 — обслуживание общего HY2 carrier при конкуренции TCP/UDP
 
-2026-10-25. **READY_FOR_REVIEW**, автор «Теория 4».
+2026-10-25. **READY_FOR_REVIEW**.
 Первый пакет R04-001 выше сохранён; его научный ACCEPTED ещё не получен.
 Этот цикл выполняет DEPTH-CYCLE-002. Ниже — новый самостоятельный срез.
 
@@ -403,7 +403,7 @@ carrier и какие ограничения переживают передач
 
 | Вывод | Новое относительно R04-001 | Тип основания |
 |---|---|---|
-| R04-04 | Порядок DATAGRAM → residual STREAM и порог128 позволяют условное исключение TCP из обычных packet opportunities | Exact caller/branch + ручной допустимый trace; runtime не воспроизводился |
+| R04-04 | Порядок DATAGRAM → residual STREAM и порог 128 позволяют условное исключение TCP из обычных packet opportunities | Exact caller/branch + ручной допустимый trace; runtime не воспроизводился |
 | R04-05 | Count/byte credits должны передаваться между обработчиком, reassembly, ready и retiring; завершение handler не замыкает memory bound | State conservation model, server/client source asymmetry и allocation-before-drop |
 | R04-06 | Текущий expiry/eviction callback не участвует в item.access; concurrent client feed допускает trace освобождения ещё используемого message | Анализ существующих двух call paths; не подтверждённый race/crash/эксплойт |
 
@@ -416,7 +416,7 @@ Baseline проекта уже другой: захвачены **Windows V2-162
 
 Capture root: `.artifacts/research/theory-04/2026-10-25-hy2-scheduler-v2/`.
 В manifest 31 module source/license, 11 project inputs и три сохранённых документа
-первого пакета: всего45. Четыре Origin records получены заново;17 выбранных
+первого пакета: всего 45. Четыре Origin records получены заново;17 выбранных
 raw/cache comparisons совпали, включая четыре LICENSE. Полная область сверки
 и финальные изменения входов — `source-drift.json`; предыдущий пакет не переснят.
 
@@ -599,7 +599,7 @@ reservation/commit всех F fragments. Внешний semaphore сам не р
 `LoadOrStore` освобождает cache mutex до захвата item.access. Операции feed
 держат item.access, но onEvict вызывает releaseMessages(value.messages)
 без этого mutex. maybeDeleteOldest вызывает callback при insertion/expiry
-под cache mutex. [HY2 feed/onEvict][d2-packet], [LRU][d2-lru].
+под cache mutex. [HY2 feed/onEvict][d2-packet], [LRU] [d2-lru].
 
 Допустимый по прочитанным guards trace:
 
@@ -681,7 +681,7 @@ opportunities перевод этой границы в секунды нево�
 
 Эта модель **не установлена** для открытого Интернета: CC/speedtest дают не
 постоянный lower R, а текущий режим/наблюдение. В trace R04-04 гарантированная
-доля STREAM может быть0. Без положительного R, bounded burst/active set и
+доля STREAM может быть 0. Без положительного R, bounded burst/active set и
 bounded CPU/scheduler pause конечный delay bound не выведен. Конечный queue cap
 даёт конечную occupancy/drop, а не finite time-to-success. RFC2212 также требует
 service/admission предпосылок; его более общий IntServ bound здесь не подменяется
@@ -801,8 +801,8 @@ RQ-02/03, AND-01/02/11/15 — адреса предложений, их стат
 
 ### 10.12. Актуальность и сохранность пакетов
 
-Сверены42 выбранных source inputs:31 module source/license и11 project files.
-Все45 captured files остались неизменными; оригинальные префиксы REPORT/SOURCES
+Сверены 42 выбранных source inputs:31 module source/license и11 project files.
+Все 45 captured files остались неизменными; оригинальные префиксы REPORT/SOURCES
 и весь handoff R04-001 сохранены byte-for-byte.17 raw/cache comparisons совпали.
 Один current input изменился во время работы: Android STATE S2→S3
 (OS-observation admission). У прочитанных transport modules, NativeCallbackGate,
@@ -861,7 +861,7 @@ THEORY §12.6/13.8–9/14.5 уже различает elapsedRealtime, моно�
 
 Прочитаны закреплённые quic-go0.59.0-sing-box-mod.4, sing-quic d83826c306d7,
 sing-tun7c73233bd0fb, sing-box1.13.19 и gvisor20b7e9b2d7e2; pins/лицензии —
-[SOURCES §8](SOURCES.md#r04-003-sources). Захвачены30 входов:19 module source/license,
+[SOURCES §8](SOURCES.md#r04-003-sources). Захвачены 30 входов:19 module source/license,
 7 project inputs и4 прежних own documents. Восемь файлов Go reference отдельно.
 
 Reference Go **1.26.0**, commit `d90b98e65320778f3b1f99a6951ab20f04d218b3`, выбран
@@ -898,9 +898,9 @@ sleep/hibernation, от interrupt time. Linux man-pages различает CLOCK
 [Linux semantics][d3-clock], [Android SystemClock][d3-systemclock].
 
 Ручной контрпример переносимости, **не исполненный опыт**: в Linux reference
-после последнего packet receive прошло1s активного времени и120s suspend.
-Transport elapsed увеличивается примерно на1s, elapsedRealtime — на121s.
-Для authority с остатком30s срок уже истёк; QUIC idle30s из одного только этого
+после последнего packet receive прошло 1s активного времени и120s suspend.
+Transport elapsed увеличивается примерно на 1s, elapsedRealtime — на 121s.
+Для authority с остатком 30s срок уже истёк; QUIC idle30s из одного только этого
 таймера ещё не обязан истечь. На Windows reference nominal elapsed может уже
 включать suspend; это не гарантирует немедленный callback, PING или закрытие.
 Точность/коррекции и реальные scheduling delays в числовом примере идеализированы.
@@ -964,7 +964,7 @@ TCP keepalive настроенным UDP heartbeat. [HY2 client][d3-hy2],
 не N физических радиопередач: пустые ACK не application payload. Число просыпаний
 CPU также не равно числу callback: runtime/OS могут группировать ready timers.
 Закрытие peer, data in flight, ACK timing и suspend меняют число probes.
-Из этого не следует, что15s следует немедленно увеличить: преждевременный cleanup
+Из этого не следует, что 15s следует немедленно увеличить: преждевременный cleanup
 и local liveness имеют свой контракт; сначала атрибуция counters/причин.
 
 ### 11.5. Due → queue → wire → refresh — разные события
@@ -1120,8 +1120,8 @@ R05 — authority/boot/retirement при resume; R06 — честные local/ca
 
 ### 11.11. Финальная source-сверка и новый внешний review
 
-2026-10-26 около06:14Z:26 выбранных current inputs,30 preserved captures и8 Go
-reference files сверены по SHA256.25 current inputs совпали, включая все19
+2026-10-26 около 06:14Z:26 выбранных current inputs,30 preserved captures и8 Go
+reference files сверены по SHA256.25 current inputs совпали, включая все 19
 module sources/licenses, renderer и NativeCallbackGate. Изменился только общий
 CENSORSHIP-THEORY.md: добавлен §18 по R04-06. Добавление прочитано;
 оно не меняет анализ clock/keepalive. REPORT/SOURCES прежнего пакета сохранены
@@ -1151,7 +1151,7 @@ CongestionControlEx с monotime.Time; dynamic adapter выбирает базо�
 | ID | Вывод | Уровень / предел |
 |---|---|---|
 | R04-09 | Возвращаемое NTP Clock.Now время в выбранном BBR вызывается один раз при construction, передаётся в unused parameter enterStartupMode; рабочие timestamps приходят из QUIC monotime callbacks | Bounded negative result для exact meta2/HY2 path. Не «NTP нигде не нужен», не attestation artifact |
-| R04-10 | В declared closure BrutalSender не удовлетворяет extended interface, поэтому его ACK/loss batch handler не вызывается через normal QUIC adapter; ackRate остаётся1 на этом пути | Source call graph + Go method sets. Не запуск, не измеренный loss/скорость, не отказ любого HY2 |
+| R04-10 | В declared closure BrutalSender не удовлетворяет extended interface, поэтому его ACK/loss batch handler не вызывается через normal QUIC adapter; ackRate остаётся 1 на этом пути | Source call graph + Go method sets. Не запуск, не измеренный loss/скорость, не отказ любого HY2 |
 
 Windows go.mod и sing-box1.13.19 go.mod оба закрепляют quic-go
 v0.59.0-sing-box-mod.4 (`ccd46abedd39c6f8384b1df8daf42008724958f5`) и sing-quic
@@ -1243,7 +1243,7 @@ handler вызывают batched feedback только через этот exten
 [Public interface][d4-interface], [Brutal][d4-brutal], [Go1.26 spec][d4-spec].
 
 У Brutal normal base OnPacketAcked/OnCongestionEvent — stubs. ackRate создаётся
-как1; все последующие присваивания находятся в updateAckRate, который вызывается
+как 1; все последующие присваивания находятся в updateAckRate, который вызывается
 только старым OnCongestionEventEx(time.Time). Нормальный QUIC dispatch до него
 не доходит. В этой цепочке действуют nominal pacer rate=bps и cwnd≈2×bps×SRTT,
 а не loss-adjusted деление на меняющийся ackRate. SRTT provider всё ещё обновляется;
@@ -1251,9 +1251,9 @@ loss recovery/retransmission в QUIC этим не отключены. Это **
 что Brutal не передаёт данные или что весь VPN не работает.
 
 Ручной trace, не fixture: selected Brutal с positive bps → SetCongestionControl
-выбирает base → engine обрабатывает80 ACK/20 loss в пределах предполагаемого
+выбирает base → engine обрабатывает 80 ACK/20 loss в пределах предполагаемого
 sample window → individual base callbacks ничего не меняют → batch не вызывается
-→ ackRate=1. Старый reachable batch algorithm при таких входах получил бы0.8
+→ ackRate=1. Старый reachable batch algorithm при таких входах получил бы 0.8
 (minSample50, clamp0.8) и target pacing bps/0.8=1.25bps. Числа иллюстрируют
 различие source ветвей; не измерены реальная loss rate, congestion или wire rate.
 
@@ -1266,7 +1266,7 @@ sample window → individual base callbacks ничего не меняют → b
 **Оппонент:** восстановленная компенсация всегда быстрее. Неверно: bps/ackRate
 повышает offered load на общем link/CPU. Даже корректная реализация может ухудшить
 соседний interactive flow, loss и radio tail при завышенной rate. Не менять
-default/auto mode и не обещать20% улучшение на основании этого ручного примера.
+default/auto mode и не обещать 20% улучшение на основании этого ручного примера.
 
 ### 12.5. Единицы, отрицательные интервалы и overflow
 
@@ -1280,10 +1280,10 @@ default/auto mode и не обещать20% улучшение на основа
 | timeDeltaFromBytesAndBandwidth | Helper сам существует; в прочитанном meta2 caller search вызов не найден. Нельзя объявить дефектом runtime division в невызванном helper |
 
 Здесь wrap — математическое нарушение общего arithmetic contract, не доказанный
-частый bottleneck. Int64 process clock horizon порядка292лет не означает, что
-произведение B×Δ безопасно292года. Для положительных B, Δ unwrapped произведение
-требует B×Δ_ns≤2^63−1. При B=2^30 bytes/s и Δ=2^34ns (~17.18s) произведение2^64
-wrap в0; при b0=0 Budget вернёт0 вместо полного cap, отрицательная проверка не
+частый bottleneck. Int64 process clock horizon порядка 292 лет не означает, что
+произведение B×Δ безопасно 292 года. Для положительных B, Δ unwrapped произведение
+требует B×Δ_ns≤2^63−1. При B=2^30 bytes/s и Δ=2^34ns (~17.18s) произведение 2^64
+wrap в0; при b0=0 Budget вернёт 0 вместо полного cap, отрицательная проверка не
 сработает. Это точная ручная integer модель. Не доказано, что данный B/b0/Δ
 встречается в реальном запуске или даёт длительный stall; carrier keepalive,
 idle timeout, CPU scheduling и clock domain ограничивают достижимость trace.
@@ -1369,9 +1369,9 @@ pacer/GSO/send queue/PMTU и CPU pause меняют BBR observation и поле�
 
 ### 12.9. Сохранность, оппонирование и текущий срез
 
-Сверка09:01:54Z:40 из41 выбранных current inputs совпали; изменился только
+Сверка 09:01:54Z:40 из 41 выбранных current inputs совпали; изменился только
 Android STATE после S11. Это движущийся платформенный контекст, не drift
-прочитанных33 module sources/licenses, Windows renderer/config/manifest или
+прочитанных 33 module sources/licenses, Windows renderer/config/manifest или
 Android source-lock.45 captures и3 прежних document prefixes сохранены.3 Go
 reference files отдельно совпали с manifest. Изменившийся STATE прочитан как
 dated context; новый платформенный source вне manifest не reviewed.
@@ -1426,9 +1426,9 @@ files +5 project +4 prior own docs; [SOURCES10](SOURCES.md#r04-005-sources).
    из kernel arrival timestamp. Для standard Salamander ReadFrom обработка
    wrapper также предшествует возвращению и timestamp basicConn.
 5. receivedPackets FIFO хранит уже stamped packet. handlePackets обрабатывает
-   до32 queue entries за проход; callback использует сохранённый rcvTime.
+   до 32 queue entries за проход; callback использует сохранённый rcvTime.
    Задержка **после** stamp меняет reaction time, не обязана увеличивать тот RTT
-   sample.32 queue entries не универсальный32-packet CPU time budget: внутри
+   sample.32 queue entries не универсальный 32-packet CPU time budget: внутри
    UDP datagram может быть несколько coalesced QUIC packets.
 
 [Connection][d5-conn], [send queue][d5-queue], [sendConn][d5-send],
@@ -1461,7 +1461,7 @@ Batching/scheduler могут как уменьшать syscall cost, так и 
 
 ### 13.3. Два ограничителя: queue capacity и pacing service
 
-sendQueue хранит8 entries, не8 обязательных UDP packets. Без GSO entry несёт
+sendQueue хранит 8 entries, не 8 обязательных UDP packets. Без GSO entry несёт
 один ordinary buffer; с GSO — несколько QUIC packets в large buffer20KiB.
 Run освобождает backing после Write, Available — сигнал свободного entry,
 не wire delivery. In-progress writer и builder не входят в channel occupancy.
@@ -1471,7 +1471,7 @@ R04-002 уже различает эти units; здесь следствие д
 ожидание не больше T+Q/R при оговорённых условиях. Но R на CPU/socket/network
 здесь неизвестен, поэтому count8 не доказывает ms SLO. Переход к GSO при прежнем
 count cap увеличивает допустимый byte backlog: channel backing ceiling8×20KiB
-вместо8×1452B для ordinary buffers; ни одно число не total RSS.
+вместо 8×1452B для ordinary buffers; ни одно число не total RSS.
 
 Только иллюстрация serialization model: при Q=100000B и R=10000000B/s Q/R=10ms.
 Это не наш throughput, не observed queue delay и не гарантия under shared load.
@@ -1503,7 +1503,7 @@ Windows renderer задаёт Salamander для HY2, но real selected profile 
 Не обещать GSO benefit только по Linux capability или compiled feature flag.
 
 Безопасная поддержка потребовала бы сохранить transform каждого datagram:
-Salamander добавляет8B salt на **каждый** packet. Прямое раскрытие underlying
+Salamander добавляет 8B salt на **каждый** packet. Прямое раскрытие underlying
 WriteMsgUDP может обойти obfuscation; один salt на aggregate и последующее
 kernel segmentation не дают исходный protocol framing. Нельзя удалять
 obfs/protect/bind wrapper ради syscall benchmark. Existing vectorised WriteTo
@@ -1550,11 +1550,11 @@ reaction, при этом probe потребляет congestion window. Это �
 Условный ручной counterexample:
 
 - BBR в full-bandwidth, не recovery; cwnd=C=12800B, min=5120B при D=1280B.
-  Ordinary payload path допускает1280B QUIC datagram, oversized probe P=1366B
+  Ordinary payload path допускает 1280B QUIC datagram, oversized probe P=1366B
   потерян по размеру; later normal packet ACK позволяет объявить probe lost.
   Числа — model state, не observed MTU/внешний wire budget Salamander.
 - В одном Ex event priorFlight=12800B, A=1280B ordinary ACK и P=1366B probe loss.
-  b.bytesInFlight становится10154B. hasLosses=true переводит BBR в CONSERVATION
+  b.bytesInFlight становится 10154B. hasLosses=true переводит BBR в CONSERVATION
   и обнуляет recoveryWindow. При target cwnd≥C calculateRecoveryWindow задаёт
   max(min,10154+1280)=11434B; GetCongestionWindow ограничивается этим значением.
 - При том же событии legacy callback не получил бы PMTU congestion event.
@@ -1650,7 +1650,7 @@ adapters. Сначала existing API conformance, затем обоснован
 
 ### 13.10. Финальная source-сверка
 
-09:45:38Z: все31 selected current inputs совпали с capture hashes, включая26
+09:45:38Z: все 31 selected current inputs совпали с capture hashes, включая 26
 module source/licenses.35 captures и3 prior document prefixes сохранены.3 fresh
 raw comparisons совпали,1 request unavailable;5 previously verified exact hashes
 reused. Это preservation/source review, не tests/native/runtime/latency PASS.
@@ -1693,7 +1693,7 @@ last-ACK/send anchors. exitingQuiescence участвует в maybeEnterOrExitP
 
 ### 14.2. Ограничения и оппонирование
 
-- Это не double count в **engine** bytes-in-flight или буквальная передача2L
+- Это не double count в **engine** bytes-in-flight или буквальная передача 2L
   по сети: расхождение в sampler snapshot. BBR current post-send field верен.
 - ACK-only packet не увеличивает engine flight; sampler рано возвращается при
   !isRetransmittable. BBR flag мог остаться true от предыдущего события, поэтому
@@ -1743,7 +1743,7 @@ Source pin/manual derivation не являются подтверждением 
 <a id="145-закрытие-окна-и-provenance"></a>
 ### 14.5. Границы source-среза и provenance
 
-Сохранены13 captures и3 прежних document prefixes;4 prior raw-confirmed hashes
+Сохранены 13 captures и3 прежних document prefixes;4 prior raw-confirmed hashes
 совпали. Новый sampler raw fetch timeout не выдан за equality. Current source drift
 после среза не перечитывался. R04-004/005/006 готовы для независимой рецензии,
 не научно ACCEPTED и не runtime PASS.
@@ -1757,7 +1757,7 @@ Source pin/manual derivation не являются подтверждением 
 2026-10-26. **R04-14 READY_FOR_REVIEW**; полный паспорт,
 matrix/reuse/cost/opponent и C1–C6 находятся в
 [handoff007](handoffs/R04-007.md), exact provenance — [SOURCES12](SOURCES.md#r04-007-sources).
-Handoff — основной новый текст среза; прежние15–200KB отчёта повторно не копируются.
+Handoff — основной новый текст среза; прежние 15–200KB отчёта повторно не копируются.
 
 Найдено готовое upstream исправление accepted R04-10: sing-quic v0.7.0,
 4ab2eceaac81e073f53b22ec72ff56aaea89a3d1. Оно требует coupled quic-go
@@ -1769,7 +1769,7 @@ packet IDs/install boundary и нейтрализацией отдельных r
 Original Hysteria core/v2.13.0 MIT изучен как reference для монотонного estimator,
 опции отключения loss compensation и floor cwnd; его Apernet Ex API отличается.
 Ни full-interface gate, ни новый version не закрывают сами по себе PMTU loss
-classification и arithmetic guards. Общий rate getter может увеличиться до1.25B
+classification и arithmetic guards. Общий rate getter может увеличиться до 1.25B
 при α≥0.8, без гарантии useful completion/fairness на общем bottleneck.
 
 Научный руководитель принял только R04-10 source/method-set normal dispatch в
@@ -1778,7 +1778,20 @@ classification и arithmetic guards. Общий rate getter может увел�
 
 ## 16. R04-008 — retention sent-history при плохой связи: фактическая граница и её предпосылки
 
-26 октября2026. Вопрос: PTO/history→sampler retention, hard bound
+> **Ограничение старого расчёта.** Формулу «20MB∧30s», отсутствие удаления
+> по PTO и вывод «singleflight ⇒ одно удерживаемое поколение» ниже нельзя
+> использовать как установленный общий предел памяти. В сохранённом исходнике
+> ветка отправки PTO вызывает `QueueProbePacket`, а тот — `DeclareLost`;
+> тайм-аут также имеет нижнюю границу через 3PTO. Копии до очереди, обработчики,
+> история контроллера и завершаемые владельцы имеют отдельную стоимость.
+> [Позднее возражение с условиями](handoffs/R04-010.md) не принято автоматически целиком;
+> [основной разбор ресурсов](../../performance/QUIC-ACCOUNTING-AND-LIMITS.md#4-receive-ready-queue-и-sent-history-имеют-разных-владельцев-bytes)
+> сохраняет точную область. Ранний текст оставлен для истории аргумента,
+> а не как численный норматив или доказанный предел RSS.
+
+
+
+26 октября 2026. Вопрос: PTO/history→sampler retention, hard bound
 контейнера, actual reclaim, per-connection формула и missing global-generation
 предпосылки. Source-only, никакого исполнения.
 
@@ -1847,7 +1860,19 @@ RAM/pps замеры, race/vacuum тесты cleanupStart, блэкаут-trace 
 
 ## 17. R04-009 — fairness Brutal/BBR в adversarial-сети и отсутствие admission на сервере
 
-Продолжение26октября2026, вечер, той же продолжающей сессией по прямому
+> **Необоснованные расширения.** «Выбираются два из трёх» ниже не является
+> доказанной теоремой о любом CCA: для неё не заданы полная модель и условия,
+> а указанная работа не прочитана полностью. Отсутствие лимита в одном service
+> не доказывает отсутствие допуска во всём стеке. Расчёт памяти наследует
+> неподтверждённую общую границу R04-008и не используется как норматив.
+> [Поздние адресные возражения](handoffs/R04-010.md#2-что-руководителю-следует-пересмотреть-в-r04-008009)
+> и [основной ресурсный контракт](../../performance/QUIC-ACCOUNTING-AND-LIMITS.md)
+> задают границы применения. Сравнительный ранг BBR/Brutal и алгоритм ТСПУ
+> этим старым синтезом не установлены; пакет целиком не принят и не отвергнут.
+
+
+
+Продолжение 26 октября 2026, вечер, той же продолжающей сессией по прямому
 поручению владельца. Вопрос DEPTH-CYCLE-002 «HY2 TCP/UDP fairness, overload
 admission и ресурсные bounds», своим срезом не закрытый. Baseline §15/§16 и
 принятый R04-10 не пересматриваются.

@@ -1,73 +1,81 @@
-# R28-Z09 — fixed cohort, horizon и maturity для protected task completion
+# R28-Z09 — фиксированная когорта и зрелость исходов восстановления
 
-28 октября 2026.
-Статус: **READY_FOR_REVIEW**. Это исправленная specification для
-R06-013-A после `NEEDS_REVISION`, а не изменение старого пакета, не production
-DTO и не измеренный recovery rate.
+**Срез 28 октября 2026 года. Статус автора — READY_FOR_REVIEW.**
+Это предложение исправить R06-013-A после NEEDS_REVISION,
+а не новое ACCEPTED, производственный DTO или измеренная доля восстановлений.
+[Источники](SOURCES.md) · [Краткая сводка](HANDOFF.md).
 
-## 1. Ограниченный вопрос и verdict
+## Краткий вывод
 
-**Вопрос:** как заранее задать единицу, horizon и maturity, чтобы ранние successes,
-`not complete`, partial и pending не меняли знаменатель protected task completion?
+Для заданной группы попыток знаменатель фиксируется отдельно от успехов.
+Ранний успех можно сохранить, но он не делает весь эпизод аналитически зрелым
+и не позволяет исключить ожидающие, пропавшие или несопоставимые по часам попытки.
+Без полного учёта и пригодного подтверждения защиты получается диапазон
+возможных долей, а не точная вероятность успеха VPN.
 
-**R28-Z09-A — предлагаемый verdict: ACCEPT исправленную specification A для
-независимой рецензии, scoped к fixed registered cohort и endpoint-protected
-outcome; не принимать её как оценку всех пользователей или всей операции.**
+**Применимость:** локальная описательная оценка заранее зарегистрированной
+когорты и конечного события задачи. **Предел:** это не статистическая оценка
+всех пользователей, причинный эффект политики или доказательство защиты
+всей операции. Нужные производители фактов и реализация хранения не установлены.
+
+## 1. Вопрос и предлагаемое решение
+
+Как выбрать единицу, горизонт и аналитическую зрелость, чтобы ранние success,
+«пока не завершено», partial и pending не меняли знаменатель?
+
+**Предложение автора R28-Z09-A:** рассмотреть исправленную спецификацию
+независимо, только для фиксированной зарегистрированной когорты и
+endpoint-protected исхода. Формулировка ACCEPT_CORRECTED_FOR_INDEPENDENT_REVIEW не является
+решением о научном принятии или приёмке продукта.
 
 Основное правило:
 
-> Outcome может стать известным раньше deadline, но episode становится
-> **аналитически зрелым** только по условию, не зависящему от outcome:
-> `deadline_i=t0_i+D(class_i)` и `deadline_i≤cut_time` в сравнимом clock scope.
-> До закрытия enrollment финальный rate не публикуется. После закрытия roster
-> interim summary использует весь фиксированный `N`, считая not-yet-due episodes
-> unknown, а не исключая их из знаменателя.
+> Исход может стать известен до deadline. Аналитическая зрелость определяется
+> независимо от него: `deadline_i=t0_i+D(class_i)` и `deadline_i≤cut_time`
+> в сопоставимом домене часов. До закрытия набора итоговую долю не публикуют.
+> После фиксации состава промежуточная сводка использует весь N;
+> ещё не наступившие сроки остаются неизвестной массой.
 
-Этим устраняется контрпример рецензии: ранний success не получает меньший
-outcome-selected denominator. Старый R06-013-B/OSS/pilot не получает verdict
-автоматически; его privacy/export части ниже пересмотрены отдельно.
+Это устраняет конкретную ошибку меньшего знаменателя у ранних успехов,
+но не все возможные смещения регистрации, выбора пользователей или наблюдений.
+R06-013-B/OSS/pilot не принимаются по аналогии.
 
-## 2. Исправленный estimand: единица, roster, часы и cut
+## 2. Целевая величина: единица, состав и часы
 
-### 2.1 Единица
+### 2.1. Единица
 
-Одна единица — **один заранее зарегистрированный task-recovery episode**:
+Одна единица — заранее зарегистрированный **эпизод восстановления задачи**:
 
-- один versioned `task_class` и один конечный task endpoint;
-- регистрация получает `episode_id` и `t0` **до** task outcome;
-- recovery stages, channel switches, waits и retries внутри него не создают новые
-  единицы;
-- новое событие считается новой единицей только после terminal closure прежней
-  задачи и новой pre-outcome регистрации другой task attempt;
-- duplicate admission отклоняется до наблюдения outcome по локальному owner/ID,
-  а не удаляется post hoc.
+- одна версионированная `task_class` и одно определённое конечное событие;
+- `episode_id` и `t0` выдаются до наблюдения исхода;
+- stages, channel switches, waits и retries внутри эпизода не создают единиц;
+- новая попытка другой задачи получает отдельную регистрацию после
+  терминального закрытия прежней;
+- повторный admission отклоняется по локальному owner/ID до просмотра исхода,
+  а не удаляется задним числом.
 
-Это ITT-подобная операционная единица: system wait, user action, admission failure,
-manual protection-off и cancellation остаются её событиями, а не основаниями
-выкинуть episode из roster.
+Единица аналогична операционной ITT-постановке: ожидание системы, действие
+пользователя, отказ допуска, ручное снятие защиты и отмена — события эпизода,
+а не основания исключить его из состава. Это методическая аналогия,
+не перенос клинических или регуляторных утверждений.
 
-### 2.2 Fixed roster
+### 2.2. Фиксируемый состав
 
-До outcomes задаются:
+Заранее задаются окно набора `[E0,E1)`, классы и `D(class)`, владелец регистрации,
+схема и часы, endpoint и область защиты, плановый аналитический срез `C*`.
+Он не раньше максимального известного deadline принятого состава;
+выражение `E1 + max D` допустимо лишь при действительно заданной связи
+календаря и используемых часов.
 
-- enrollment window `[E0,E1)`;
-- admissible task classes и mapping `D(class)`;
-- registration owner/schema/clock rules;
-- endpoint и правила protection scope;
-- planned analytic cut `C*`, заданный до outcomes и не раньше максимального
-  известного deadline принятого roster (`E1 + max D` только когда clock/calendar
-  bridge действительно определён).
+`N` — число принятых registration receipts после закрытия набора `E1`.
+Затем N не меняют по исходам. Это не доказывает, что все фактические попытки
+получили receipts. При неизвестной полноте вывод относится к зарегистрированным.
+Если цель — все фактические попытки, а число пропусков ничем не ограничено,
+универсальная граница может быть только `[0,1]`.
 
-`N` — число **принятых registration receipts** в roster при закрытии `E1`.
-С этого момента `N` не зависит от outcomes. Отсутствие доказанной completeness
-registry означает, что вывод относится только к выданным receipts; он не
-доказывает отсутствие скрытых/потерянных фактических попыток. Если intended
-estimand требует все фактические attempts, но число неучтённых ничем не
-ограничено, универсальная оболочка — `[0,1]`.
+### 2.3. Горизонт и аналитическая зрелость
 
-### 2.3 Часы, horizon и maturity
-
-Для episode `i`:
+Исходная схема часов сохранена дословно:
 
 ```text
 t0_i       = accepted registration time in named monotonic/boot scope
@@ -76,194 +84,177 @@ cut_time   = named analytic snapshot in the same comparable scope
 mature_i   = comparable(t0_i, cut_time) AND d_i <= cut_time
 ```
 
-- `D` фиксируется до outcome; разные классы могут иметь разные versioned `D`.
-- Wall clock используется для enrollment/report labels, но не подменяет elapsed
-  interval после clock reset/reboot.
-- При неизвестном clock bridge episode **остаётся в roster**, но не называется
-  analytically mature; timely task/protection component относится к `M_timing`
-  в final fixed-roster summary. Его нельзя исключить, назвать success или считать
-  доказанно достигшим D.
-- `C*` не обязан физически ждать неизвестный bridge: final report может
-  закрыться с `M_timing`, показывая широкую identification bound.
-- Ранний absorbing completion можно сохранить сразу, но в final-cohort rate он
-  входит лишь вместе со всем fixed `N` после outcome-independent cut.
+- D задаётся до исхода; разные классы могут иметь разные версии D.
+- Wall clock служит подписи окна/отчёта, не подменяет elapsed после reboot/reset.
+- Без связи доменов часов эпизод остаётся в N; его зрелость не установлена,
+  своевременность относится к `M_timing`. Исключать его или считать успешным
+  по догадке нельзя.
+- Срез `C*` не обязан ждать неизвестную связь часов бесконечно: отчёт может
+  закрыться с `M_timing` и широким диапазоном возможных значений.
+- Раннее поглощающее завершение сохраняется сразу. Оно может уточнить
+  промежуточную сводку по **всему** N, но не меняет правило зрелости,
+  состав и заранее выбранный итоговый срез.
 
-### 2.4 Interim и final reports
+### 2.4. Промежуточная и итоговая сводки
 
-1. **До `E1`:** только flow counts (`registered_so_far`, outcomes seen), без
-   «rate fixed cohort». Любой prefix — иной estimand.
-2. **После `E1`, до всех известных deadlines:** provisional bound по всему fixed
-   `N`. `R` = not-yet-due/pending; они unknown mass.
-3. **Final cut `C*`:** для comparable clocks `R=0`; timing/follow-up unknown
-   остаются `M`, не исчезают. Поздние receipts хранятся как late descriptors и
-   не переписывают timely endpoint.
+1. До `E1` — только counts (`registered_so_far`, наблюдённые исходы),
+   без итоговой доли фиксированной когорты. Префикс — другая целевая группа.
+2. После `E1`, пока известные deadlines не наступили, — предварительный
+   диапазон по N. Ещё не наступившие сроки входят как `R`, неизвестная масса.
+3. На `C*` у сопоставимых часов R=0; неизвестные timing/follow-up остаются M.
+   Поздние receipts сохраняются отдельно и не переписывают своевременный исход.
 
-Rolling-window rate допустим лишь как отдельно названный estimand, где eligibility
-`d_i≤cut_time` задана независимо от outcome. Он не заменяет primary fixed cohort.
+Скользящая доля допустима как отдельно определённая величина с критерием
+`d_i≤cut_time`, не зависящим от исхода. Она не заменяет основную фиксированную когорту.
 
-## 3. Outcomes на horizon: provisional observation ≠ terminal endpoint
+## 3. Исход к горизонту и предварительное наблюдение
 
-### 3.1 Факторизованные оси
+### 3.1. Раздельные оси
 
-Плоский enum недостаточен для off→on overlap. Источник хранит три независимые
-оси, а итоговая категория выводится на `D`:
+Один плоский enum не описывает off→on и пересечение интервалов. Сохраняются:
 
-1. **Task endpoint:** complete / partial-at-D / noncomplete-at-D / unknown.
-2. **Protection scope:** endpoint-applied / explicit-unprotected / unknown.
-3. **System/action:** action applied/failed/unknown; user stop; retries/resources.
+1. Задача: complete / partial-at-D / noncomplete-at-D / unknown.
+2. Защита: endpoint-applied / explicit-unprotected / unknown.
+3. Система/действие: applied/failed/unknown, user stop, retries и ресурсы.
 
-`switch succeeded`, `tunnel up`, declaration UI и egress probe — action/path
-receipts, не task endpoint. Task receipt остаётся отдельным минимальным input.
+`switch succeeded`, `tunnel up`, UI и egress probe подтверждают другие события,
+а не конечный результат задачи. Для него нужен отдельный минимальный источник.
 
-### 3.2 Категории mature episode
+### 3.2. Категории итогового учёта
 
-| Код | Определение к `D` | Terminal guard |
+| Код | Что известно к D | Что запрещено подменять |
 |---|---|---|
-| `P` | task complete by D + protection producer receipt, чей **заявленный scope/interval покрывает именованный endpoint event**; нет explicit unprotected completion | Mere current snapshot/UI/tunnel/port не создаёт P; whole-operation protection всё ещё не следует |
-| `U` | task complete by D после явно подтверждённого manual unprotected route | Никогда не прибавлять к protected success |
-| `X` | task complete by D, protection at completion/overlap не идентифицирован | Task success известен, protected success unknown |
-| `Q` | на horizon D подтверждён partial endpoint и full completion до D не установлен | Ранний partial до D — лишь observation/pending |
-| `F` | на D подтверждено noncompletion либо до D получен contract-defined absorbing terminal failure | Раннее «пока нет» не F |
-| `C` | user stop/cancel до D | Для system ITT — non-success; для latent any-route task — censored/unknown |
-| `M` | task follow-up missing **или** timing maturity не установима | Причины `followup_missing`/`timing_unknown` публикуются отдельно |
-| `R` | not yet due на interim cut | Только provisional; на final comparable cut R=0 |
+| `P` | Задача завершена до D; подтверждение защиты с заявленной областью покрывает именованное конечное событие/интервал; нет подтверждённого unprotected completion | Текущий UI/tunnel/port или точечная проба не создают P. Защита всей операции не следует |
+| `U` | Задача до D явно завершена через ручной незащищённый маршрут | Не добавлять к защищённому успеху |
+| `X` | Завершение до D известно, защита этого события/пересечения не установлена | Успех задачи не становится защищённым успехом |
+| `Q` | На D подтверждён именно частичный итог, исключающий полное завершение до D по контракту endpoint | Ранний partial или отсутствие записи full completion сами по себе недостаточны |
+| `F` | На D подтверждено незавершение либо до D — определённый контрактом поглощающий отказ | Раннее «пока нет» не F |
+| `C` | Отмена/Stop прервали ещё не завершённый эпизод до D | Stop после уже подтверждённого поглощающего завершения не должен задним числом превращать его в отмену |
+| `M` | Нет follow-up задачи или нельзя установить своевременность/зрелость по часам | `followup_missing` и `timing_unknown` показываются отдельно |
+| `R` | Срок ещё не наступил на промежуточном срезе | Только предварительный учёт; на итоговом сопоставимом срезе R=0 |
 
-`P` здесь намеренно узок: protection producer должен объявить и доказать scope,
-который покрывает **именованный endpoint event/interval**, а не просто вернуть
-fresh sample около ручной отметки. Current controller receipt в одной временной
-точке не доказывает coverage фактического egress/business endpoint; при таком
-разрыве completion относится к X. Для строгого operation-protected estimand нужны
-task active interval и coverage receipt по нему; такого producer/caller сейчас
-не установлено, поэтому этот показатель — `SOURCE_NOT_AVAILABLE`, а отсутствие
-off-event не заменяет coverage.
+Формулы предполагают взаимоисключающее разнесение каждого эпизода в одну
+категорию. Порядок поглощающих событий и отмены определяется заранее.
+Если доказательств для такого разнесения недостаточно, сохраняется неизвестность,
+а не удобный терминальный класс. Это необходимое уточнение учёта,
+не уже реализованная state machine.
 
-### 3.3 Off→on overlap
+P намеренно узок: producer должен покрывать **именованный endpoint event/interval**.
+Свежая точечная запись около ручной отметки complete не подтверждает это покрытие.
+При разрыве completion относится к X. Для operation-protected величины нужны
+активный интервал задачи и подтверждение защиты всего интервала;
+такой готовый producer/caller в исходном срезе не установлен
+(`SOURCE_NOT_AVAILABLE`). Отсутствие off-event его не заменяет.
 
-Если пользователь выключил защиту, task отправил данные, затем защита снова
-`applied` перед отметкой complete, endpoint snapshot может удовлетворить узкому
-P, но операция не была доказанно protected. Поэтому:
+### 3.3. Off→on и граница endpoint
 
-- primary label обязан называться `endpoint-protected`;
-- при известном overlap, влияющем на task, рекомендуется U; при неизвестной
-  связи task interval с off/on — X;
-- P нельзя повышать до operation-protected без отдельного bridge.
+Если данные ушли при выключенной защите, а защита включена к ручной отметке
+complete, один snapshot не создаёт P. При неизвестной связи между отметкой
+и endpoint interval — X; при явно установленном незащищённом завершении — U.
+Только отдельное подтверждение, покрывающее endpoint event/interval, позволяет
+узкий endpoint-protected P. Он всё равно не означает защиту всей операции.
+Так устраняется противоречие раннего описания snapshot с поздним T3.
 
-## 4. Формулы: fixed N, pending и unknown
+## 4. Формулы при фиксированном N
 
-Пусть после enrollment close roster фиксирован:
-
+После закрытия набора:
 `N=P+U+X+Q+F+C+M+R`, `N>0`.
+Для пустого состава доля не определена; ноль попыток не означает 0% или 100% успеха.
 
-### 4.1 System ITT: endpoint-protected completion by D
+### 4.1. Системная величина: endpoint-protected завершение до D
 
-System success = P. `U,Q,F,C` — известные non-success для вопроса «доставила ли
-система endpoint-protected completion до D без abandon/manual-unprotected
-resolution». `X,M,R` могут скрывать protected success.
+Успех — P. U/Q/F/C не являются успехом системы для поставленного вопроса
+без abandon/manual-unprotected resolution. X/M/R могут скрывать защищённый успех.
 
 ```text
 I_sys(cut) = [ P/N , (P+X+M+R)/N ]
 ```
 
-На final cut с comparable clocks `R=0`:
+На итоговом срезе при сопоставимых часах R=0:
 
 ```text
 I_sys(final) = [ P/N , (P+X+M)/N ]
 ```
 
-Это sharp worst/best-case hull при единственном допущении, что неизвестный
-binary endpoint каждого X/M/R находится в `{0,1}` и категории/roster полны.
-Это не confidence interval и не sampling inference.
+Это детерминированная граница идентификации. Она точна для модели, в которой
+крайние 0/1 назначения неизвестных бинарных исходов совместно допустимы
+и нет дополнительных ограничений между ними. Состав и классификация должны
+быть корректны. Дополнительная связь исходов способна сузить диапазон;
+сама формула её не устанавливает. Это не confidence interval и не выборочный вывод.
 
-### 4.2 Task resolved by any route by D
+### 4.2. Завершение задачи любым маршрутом до D
 
-Known task completions = `P+U+X`; `Q,F` — known noncompletion к D; `C,M,R` —
-unknown task completion для этого estimand.
+Известные завершения — `P+U+X`; Q/F — известное незавершение к D;
+C/M/R для этой величины неизвестны.
 
 ```text
 I_task(cut) = [ (P+U+X)/N , (P+U+X+C+M+R)/N ]
 ```
 
-Final: убрать R. P/U/X всегда показываются отдельно, чтобы any-route summary не
-скрывал manual unprotected outcomes.
+На итоговом срезе R убирается. P/U/X показываются отдельно,
+чтобы сводка any-route не скрывала ручное незащищённое завершение.
 
-### 4.3 Когда bounds тривиальны
+### 4.3. Когда диапазон малоинформативен
 
-- Если enrollment ещё открыт и future roster size ничем не ограничен — final
-  cohort rate не определён; не публиковать число.
-- Если registry receipts существуют, но пропущенное число units того же intended
-  cohort не ограничено — для intended factual cohort `[0,1]`; можно честно
-  сообщить только registered-receipt cohort.
-- Если protection bridge отсутствует для всех completed episodes, system bound
-  может стать `[0, completion-or-unknown mass/N]`, вплоть до `[0,1]`.
-- Если `M+R` велико, wide bound — результат, а не повод imputing zero или удалять
-  строки.
+- Пока набор открыт и будущий размер ничем не ограничен, итоговая когорта
+  ещё не определена: итоговую долю не публикуют.
+- Неограниченное число незарегистрированных единиц предполагаемой полной
+  когорты оставляет для неё `[0,1]`; отдельно можно описать receipt-когорту.
+- Без подтверждения защиты завершённых эпизодов системная граница может быть
+  `[0, completion-or-unknown mass/N]`, вплоть до `[0,1]`.
+- Большая масса M+R — результат анализа, не повод удалить строки или подставить нули.
 
-Jiang–Ding v6 §2.1 подтверждает общий worst-case принцип для binary missing
-outcome: без assumption о missing mechanism неизвестный член допускает крайние
-0/1; bounds не требуют MAR, но часто слишком широки. Их paper не доказывает
-нашу registration completeness или protection bridge.
+Jiang–Ding v6 §2.1 поддерживает общий принцип крайних 0/1 для неизвестного
+бинарного исхода без MAR. Здесь он перенесён как арифметический приём;
+статья не доказывает полноту нашего реестра, часы или связь с защитой VPN.
 
-## 5. Ручные opposing traces
+## 5. Ручные контрпримеры
 
-### T1 — early-success denominator trap
+### T1 — ловушка раннего знаменателя
 
-Fixed roster N=2, одинаковые `t0`, D=60. На cut=10 один P в t=5, второй R.
+N=2, одинаковые t0, D=60. На cut=10 первый завершился как P в t=5, второй — R.
+Неверно выдавать P/1=1 за долю всей когорты. По N=2 промежуточный диапазон
+`I_sys=[1/2,1]`; если второй к D стал F — итог `[1/2,1/2]`.
+Известный исход первого не делает его аналитически зрелым раньше срока
+и не разрешает убрать второго из знаменателя.
 
-- неверно: mature-only `P/1=1`, выдаваемое за cohort rate;
-- корректно: `I_sys=[1/2,1]` по N=2;
-- если второй к D становится F: final `[1/2,1/2]`.
+### T2 — раннее «пока нет» или partial
 
-Outcome finality первого не даёт analytic maturity для полного roster.
+N=1, D=60; ответ partial/«пока нет» в t=10, защищённое завершение в t=40.
+Ранний ответ — наблюдение, срок ещё не наступил; итог — P.
+Прежнее RP04 `not complete до D → F` теряло своевременный успех.
+До D F допустим лишь для заранее определённого поглощающего отказа.
 
-### T2 — early `not complete` / partial
+### T3 — off→on→complete и точечная проба
 
-N=1, D=60. На t=10 пользователь отвечает «пока нет» или partial, на t=40 task
-завершается с endpoint-protection receipt.
+N=1: protection-off в t=20, applied в t=40; endpoint мог быть в `[39,42]`,
+ручная отметка пришла в 45. Receipt в 41 без покрытия endpoint interval
+не создаёт P: это X. Явно незащищённое завершение — U.
+Whole-operation protection тем более не установлена.
 
-- ранний ответ хранится как observation; episode остаётся R;
-- итог на D — P;
-- прежний RP04 (`not complete до D → F`) терял timely success и отвергается.
+### T4 — сброс часов и reboot
 
-F до D допустим только для contract-defined absorbing failure, а не временного
-состояния.
+t0 относится к прежнему elapsed scope, cut — к новому, связи нет.
+Эпизод остаётся в N как `M_timing`; его нельзя исключить, объявить зрелым
+по wall clock или считать успешным. Верхние границы включают M.
 
-### T3 — off→on→complete и точечный sample
+### T5 — отмена пользователя
 
-N=1. На t=20 explicit protection-off; task мог отправить данные; на t=40
-protection applied; фактический endpoint event может лежать в `[t=39,t=42]`, а
-ручная отметка complete приходит t=45.
+Stop до завершения в t<D: для системной величины C — известный non-success,
+для скрытого результата задачи любым последующим маршрутом C неизвестен.
+Поэтому он не входит в upper I_sys, но входит в upper I_task.
+Stop после подтверждённого поглощающего успеха — другое событие;
+протокол категорий должен различать порядок.
 
-- sample/receipt в t=41 без coverage contract для endpoint interval не создаёт P;
-  completion относится к X;
-- whole-operation protected тем более неизвестен;
-- если completion явно достигнут через unprotected route — U;
-- только producer receipt с заявленным scope, покрывающим endpoint event/interval,
-  разрешает узкий endpoint-protected P.
+### T6 — повторы и поздний успех
 
-### T4 — clock reset/reboot
+Три retries одной задачи сохраняют один эпизод и один знаменатель.
+Завершение после D сохраняется как `late_complete`, не переписывая
+своевременный итог. Три единицы вместо одной изменили бы целевую величину.
 
-`t0` записан в старом elapsed scope; после reboot cut_time нового scope, bridge
-отсутствует. Episode остаётся в fixed N как `M_timing`; не исключается и не
-становится mature по wall-clock догадке. System/task upper bounds включают M.
+## 6. Минимальная запись и приватность
 
-### T5 — user cancel
-
-User stop на t<D.
-
-- system ITT: C — известный non-success (`C` не в upper `I_sys`);
-- any-route latent task resolution: outcome после stop неизвестен (`C` входит в
-  upper `I_task`);
-- одна строка имеет разные роли, потому что estimands разные, не из-за ошибки.
-
-### T6 — retries и late success
-
-Три channel retries внутри одной task goal сохраняют один episode/N. Success
-после D хранится `late_complete`, но своевременный endpoint к D не переписывается.
-Создание трёх denominator units завысило бы exposure к retry-heavy failures.
-
-## 6. Privacy-preserving record appendix
-
-Минимальный future producer (не production DTO):
+Исходное предложение будущего producer сохранено дословно; это не production DTO:
 
 ```text
 registered_episode_v2 {
@@ -280,118 +271,128 @@ registered_episode_v2 {
 }
 ```
 
-Не записывать domains/raw URLs/IP/SNI/SSID/package/account/workplace inventory,
-content, credentials, stable device identifiers или raw exceptions. `clock_scope`
-должен быть локальным случайным boot/process scope, не глобальным fingerprint.
+Не сохраняются domains/raw URLs/IP/SNI/SSID, package/account/workplace inventory,
+content, credentials, устойчивый device ID и raw exceptions.
+`clock_scope` — локальный случайный boot/process scope, не глобальный fingerprint.
 
-Enrollment требует локального явного consent. Withdrawal/deletion нельзя
-переопределять в success/failure: если разрешён минимальный tombstone receipt,
-он остаётся C/M; если consent требует удаления и даже completeness receipt нельзя
-удержать, report обязан объявить roster incomplete и bound для intended cohort
-может стать `[0,1]`.
+Набор требует явного локального согласия. Withdrawal/deletion нельзя
+переименовывать в success/failure. Если допустим минимальный tombstone receipt,
+неизвестный исход остаётся C/M. Если нельзя сохранять даже receipt полноты,
+реестр объявляется неполным; диапазон для предполагаемой полной когорты
+может стать `[0,1]`. Конкретная политика удаления и её правомерность не установлены.
 
-Default report — локальные counts/bounds/reasons. Ручной export использует
-существующий pattern: frozen immutable preview → exact displayed bytes → system
-chooser. Никакой auto upload. Episode rows — отдельный opt-in, aggregate default.
+По умолчанию — локальные counts, диапазоны и причины. Ручной экспорт использует
+замороженный preview → точные показанные байты → system chooser.
+Автоматическая отправка не нужна; строки эпизодов — отдельное добровольное действие.
 
-## 7. Current source/caller и reuse
+## 7. Исходники проекта и готовое переиспользование
 
-### 7.1 Snowden Android source
+### 7.1. Android в исходном срезе
 
-Reviewed exact working bytes (SHA-256 в artifacts) при repository anchor
-`413621d…`; файлы были untracked, поэтому commit не аттестует их содержимое.
-App manifest: `0.1.0-dev`, compile/target36, min29.
+Рассмотрены точные рабочие байты при repository anchor `413621d…`.
+Файлы были untracked; их идентичность задают SHA-256, не этот commit.
+Контекст: `0.1.0-dev`, compile/target36, min29. Это датированное основание,
+не сегодняшняя готовность клиента.
 
-- `SessionJournal.kt:46–112`, SPDX GPL-3.0-or-later: process-local ring128,
-  `SystemClock.elapsedRealtime`, sequence, evicted/recordingLimited; комментарий
-  прямо запрещает считать его signed audit/VPN proof. **Adapt** typed bounded
-  facts/clock vocabulary. **Reject as cohort registry:** no disk/background/task
-  outcome; Clear/process death and semantic dedup break completeness.
-- `ControllerReport.kt:25–82`: typed allowlist, frozen source fields, counts,
-  unknown ages and explicit “not ... VPN proof”. **Reuse** aggregate/export format.
-- `ControllerReportStore.kt:13–95`: one memory-only frozen frame, exact displayed
-  share revision, 10-minute access expiry (not physical wipe). **Reuse/adapt**
-  immutable manual export, not durable cohort storage.
-- `MainActivity.kt:110–121`: foreground/focus guard, `textForShare(preview)`,
-  `ACTION_SEND`, dispatch ≠ delivery proof. **Reuse** explicit manual boundary.
+- `SessionJournal.kt:46–112`, GPL-3.0-or-later: process-local ring128,
+  `SystemClock.elapsedRealtime`, sequence, evicted/recordingLimited.
+  Сам комментарий запрещает считать его signed audit/VPN proof.
+  Переиспользуется словарь ограниченных типизированных фактов и часов.
+  Как полный реестр/producer задач не подходит: нет disk/background/task
+  outcome, Clear/process death и semantic dedup нарушают полноту.
+- `ControllerReport.kt:25–82`: allowlist, замороженные поля, counts,
+  unknown ages и явное ограничение доказательства VPN. Ориентир aggregate/export.
+- `ControllerReportStore.kt:13–95`: одна memory-only frame, точная показанная
+  share revision, срок доступа 10min; это не физическое стирание и не durable store.
+- `MainActivity.kt:110–121`: foreground/focus guard,
+  `textForShare(preview)`, `ACTION_SEND`. Dispatch не подтверждает доставку.
 
-Цена нового fixed registry: durable accepted IDs until `C*`, migration/clock scope,
-eviction/tombstone accounting and privacy review. Это больше текущего ring и не
-следует из него бесплатно.
+Реестр эпизодов добавляет цену хранения принятых IDs до C*, миграции,
+домены часов, учёт удаления/вытеснения и приватность. Это не бесплатное
+расширение ring; необходимость отдельной БД из арифметики не следует.
 
-### 7.2 OONI Probe CLI reference
+### 7.2. OONI Probe CLI как ориентир
 
-Exact tag `v3.31.0`, commit `1605e004…`, GPL-3.0, current captures/hashes saved.
+Tag `v3.31.0`, commit `1605e004…`, GPL-3.0; сохранены выбранные исходники/хеши.
+`oonirun/experiment.go:192–216` раздельно управляет local saver и submitter;
+`submitter.go:21–64` при запрете возвращает stub;
+`nettests.go:160–167` включает отправку только при `Sharing.UploadResults`;
+CLI `upload.go:9–16` не реализует названную команду.
 
-- `oonirun/experiment.go:192–216`: local saver and submitter controlled separately;
-- `oonirun/submitter.go:21–64`: disabled submitter is no-op stub;
-- `nettests.go:160–167`: network submitter only under `Sharing.UploadResults`;
-- CLI `upload.go:9–16`: named upload command is not implemented.
+Брать только разделение локального сохранения и явного сетевого эффекта.
+Готового task schema, maturity когорты или ручного экспорта это не предоставляет.
+Код не копировался; GPL-3.0 и более широкий чувствительный payload требуют
+отдельной оценки совместимости и приватности.
 
-Decision: **REFERENCE/ADAPT only**, no code copy. Useful boundary is local save
-versus explicit network side effect. It does not provide our task schema,
-fixed-cohort maturity or ready manual export; GPL-3.0 and broader sensitive
-measurement payload raise integration/privacy cost.
+## 8. Применение и открытые ограничения
 
-## 8. Scope verdicts и unknown
+**Предложение A:** `ACCEPT_CORRECTED_FOR_INDEPENDENT_REVIEW` для фиксированной
+receipt-когорты, endpoint-protected ITT и перечисленных producer-предпосылок.
+Правило зрелости, Q/F только на D либо по поглощающему контракту, timing unknown
+в N и раздельные P/U/X исправляют названные проблемы старого предложения.
+Это не научное ACCEPTED и не измеренный SLO.
 
-### A — cohort/maturity specification
+**B/OSS/pilot:** DEFER/ADAPT, отдельно от A. Схема приватности — предложение;
+журнал не полный реестр, OONI — ориентир. Пользовательский/device-пилот — NOT_RUN.
 
-**Recommendation to lead: ACCEPT_CORRECTED_FOR_INDEPENDENT_REVIEW** for
-`R28-Z09-A`, scoped to registered fixed cohort, endpoint-protected ITT and the
-explicit producer assumptions above. It resolves the exact NEEDS_REVISION:
+Практический маршрут: PC-07/09 [плана ПК](../../../../../planning/knowledge-application/PC-PLAN.md)
+и ANDR-08/09 [плана Android](../../../../../planning/knowledge-application/ANDROID-PLAN.md).
+Сначала согласовать одного владельца регистрации и минимальные receipts;
+статистика не блокирует Stop, отзыв и восстановление защиты.
+Основной разбор — [неполные наблюдения и оценка политик](../../../../adaptation/INTERVALS-AND-POLICY-EVALUATION.md).
 
-- outcome-independent maturity;
-- Q/F only at D or absorbing by contract;
-- timing unknown remains denominator;
-- P is endpoint-protected, not whole-operation protected;
-- C differs across system/task estimands;
-- formulas include pending/unknown correctly.
+Открыты: значения D/R классов; владелец хранения через reboot и удаление;
+фактический task producer и строгая связь с защитой всей операции;
+отбор участников за пределами receipt-когорты; выборочная неопределённость,
+множественные сравнения и причинный эффект; нагрузка на пользователя,
+полезность и правовая применимость. Всё это не установлено арифметикой.
 
-Not product ACCEPTED and not a measured SLO.
+## 9. Сопоставление с C03/C06
 
-### B / OSS / pilot
+В ранних проверках HANDOFF ещё не было; при финальном review они появились,
+и прочитаны только наиболее сильные относящиеся к вопросу положения.
 
-**DEFER/ADAPT**, not accepted by analogy. Privacy schema is a bounded proposal;
-current journal cannot serve as registry/task producer. OONI is reference-only.
-Any user/device pilot remains NOT_RUN and requires owner/privacy/resource/consent
-review plus synthetic schema checks.
+- C03 различает полный состав, текущий допуск, историческую величину и связь
+  с будущей целью. Без последней целевой диапазон может остаться `[0,1]`.
+  Его статистические kernel-утверждения здесь не приняты.
+- C06 различает fixed N и независимую от исхода зрелость; его возражение
+  о точечной пробе уточняет P: без покрытия endpoint interval — X.
+  Его более крупные категории `P/A/X/F/Z` и здешние `P/U/X/Q/F/C/M/R`
+  служат разным уровням детализации, а не обязаны быть одним enum продукта.
 
-### Remaining unknown
+Совпадение авторов не является первичным доказательством.
+Основание — ручной аргумент, названные исходники и явные ограничения.
+Тесты, сборка, симуляции, native/device/live и пользовательские эксперименты
+в этом срезе не выполнялись.
 
-- Meaningful numerical D/R per task class;
-- durable registry owner across reboot and lawful deletion/tombstone rules;
-- actual task-level producer and strict operation-protection bridge;
-- eligibility/participation selection beyond registered cohort;
-- sampling uncertainty, comparisons/multiplicity and causal policy effect;
-- user burden/effect and legal compliance.
-
-## 9. Paired review reconciliation
-
-At the final review stage, paired HANDOFFs became available; only strongest
-relevant claims were read.
-
-- **C03:** independently distinguishes complete roster, current gates, historical
-  loss claim and future bridge; absence of prospective bridge can leave target
-  `[0,1]`. This agrees with Z09's registry/bridge separation. C03's statistical
-  kernel claims are outside Z09's verdict and were not adopted.
-- **C06:** independently proposes fixed N and outcome-independent maturity and
-  gives the stronger protection counterexample: a sample at one time does not
-  cover an endpoint interval. Z09 incorporated this as a guard: point snapshot
-  → X unless producer declares coverage. C06 uses a coarser `P/A/X/F/Z` accounting;
-  Z09 retains `P/U/X/Q/F/C/M/R` because it separately exposes partial, cancel,
-  missing and interim pending for the assigned question.
-
-Agreement between authors is not primary evidence; manual argument/source guards
-above remain the basis. No paired files were modified or messages sent.
-
-## 10. Пройденные stages
-
-- source/pin/caller: current project bytes + OONI exact tag/licence/callers;
-- main argument: fixed unit/roster/horizon/maturity and two estimands;
-- opposing review: T1–T6, including early success/failure, overlap, clock, cancel;
-- reuse/licence/cost: Snowden GPL source and OONI GPL reference decisions;
-- continuation: partial-identification bounds and triviality conditions;
-- handoff: scoped verdict A separate from B/OSS/pilot.
-
-Никакие tests/build/simulation/native/device/live/user experiments не запускались.
+<a id="r28-z09--fixed-cohort-horizon-и-maturity-для-protected-task-completion"></a>
+<a id="1-ограниченный-вопрос-и-verdict"></a>
+<a id="2-исправленный-estimand-единица-roster-часы-и-cut"></a>
+<a id="22-fixed-roster"></a>
+<a id="23-часы-horizon-и-maturity"></a>
+<a id="24-interim-и-final-reports"></a>
+<a id="3-outcomes-на-horizon-provisional-observation--terminal-endpoint"></a>
+<a id="31-факторизованные-оси"></a>
+<a id="32-категории-mature-episode"></a>
+<a id="33-offon-overlap"></a>
+<a id="4-формулы-fixed-n-pending-и-unknown"></a>
+<a id="41-system-itt-endpoint-protected-completion-by-d"></a>
+<a id="42-task-resolved-by-any-route-by-d"></a>
+<a id="43-когда-bounds-тривиальны"></a>
+<a id="5-ручные-opposing-traces"></a>
+<a id="t1--early-success-denominator-trap"></a>
+<a id="t2--early-not-complete--partial"></a>
+<a id="t3--offoncomplete-и-точечный-sample"></a>
+<a id="t4--clock-resetreboot"></a>
+<a id="t5--user-cancel"></a>
+<a id="t6--retries-и-late-success"></a>
+<a id="6-privacy-preserving-record-appendix"></a>
+<a id="7-current-sourcecaller-и-reuse"></a>
+<a id="71-snowden-android-source"></a>
+<a id="72-ooni-probe-cli-reference"></a>
+<a id="8-scope-verdicts-и-unknown"></a>
+<a id="a--cohortmaturity-specification"></a>
+<a id="b--oss--pilot"></a>
+<a id="remaining-unknown"></a>
+<a id="9-paired-review-reconciliation"></a>
+<a id="10-пройденные-stages"></a>

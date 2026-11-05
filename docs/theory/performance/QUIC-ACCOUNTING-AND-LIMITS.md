@@ -1,70 +1,88 @@
 <a id="quic-accounting-limits-2026-10-28"></a>
 # QUIC/HY2: семантика счётчиков, пределы памяти и сроки peer
 
-[Оглавление](../README.md) · [Основная глава](TRANSPORT-AND-RESOURCES.md) · [Решения review](../research/reviews/2026-10-28-DEEP-REVIEW.md)
+[Оглавление](../README.md) · [Термины](../GLOSSARY.md) · [Скорость и ресурсы](TRANSPORT-AND-RESOURCES.md) · [Решения рецензирования](../research/reviews/2026-10-28-DEEP-REVIEW.md)
 
-**2026-10-28, DR27-05/06/07.** Публичная связка: sing-quic
-`d83826c306d7c008cafb3fd6d8ee07cbcfd656ed` и quic-go
-`ccd46abedd39c6f8384b1df8daf42008724958f5`. Версии/стороны приложения и реальный
-peer не проверены. Арифметика ниже — ручная модель source, не замер ресурса
-или воспроизведение дефекта.
+## Краткий вывод
+
+Одинаковый тип счётчика не гарантирует одинакового смысла. При соединении
+QUIC-движка с контроллером нужно согласовать момент учёта байтов, а при
+ограничении памяти — проследить всех владельцев данных до освобождения.
+Объявленный сетевой тайм-аут, локальное ожидание и срок хранения состояния
+у другой стороны также могут различаться.
+
+**Когда применять.** При выборе совместимой пары QUIC/контроллер, расчёте
+лимитов HY2, разборе остановки отправки и восстановления после сна.
+
+**Граница знания.** Разбор DR27-05/06/07 от 28 октября 2026 года относится к
+sing-quic `d83826c306d7c008cafb3fd6d8ee07cbcfd656ed` и quic-go
+`ccd46abedd39c6f8384b1df8daf42008724958f5`, с отдельным сравнением новой пары
+ниже. Это анализ закреплённых исходников и ручные примеры. Он не устанавливает
+версию поставленного Snowden, поведение нынешнего сервера, величину потери
+скорости или удалённо достижимую атаку.
 
 ## 1. Один ByteCount может означать разные моменты времени
 
-Пусть F — bytes-in-flight до регистрации очередного учитываемого QUIC packet,
-L — его сериализованный размер. В normal ack-eliciting path:
+Пусть F — число учитываемых байтов в полёте до регистрации очередного пакета,
+L — его сериализованный размер. В обычной ветке пакета, требующего ACK:
 
-| Точка | Требуемый/наблюдаемый смысл |
+| Точка | Смысл или наблюдаемое значение |
 |---|---|
-| Engine после регистрации | F+L |
-| `sentPacketHandler.SentPacket` callback в mod.4 | Уже F+L |
+| Движок после регистрации | F+L |
+| Callback из `sentPacketHandler.SentPacket` в mod.4 | Уже F+L |
 | `ccAdapterEx` → meta2 `bbrSender.OnPacketSent` | Значение передаётся без коррекции |
-| `bandwidthSampler.OnPacketSent` | Сам добавляет L перед созданием post-send snapshot |
-| Полученный snapshot | F+2L вместо F+L |
+| `bandwidthSampler.OnPacketSent` | Сам добавляет L перед сохранением состояния после отправки |
+| Сохранённое состояние | F+2L вместо F+L |
 
-При F=0 и L=1200 snapshot равен2400, хотя engine flight1200 и sampler
-`totalBytesSent` увеличен только на1200. Проверка sampler `bytesInFlight==0`
-тоже не видит начало пустого flight. **Не следует**, что удвоены отправленные
-bytes, bandwidth или задержка: это разные поля и guarded consumers.
+При F=0 и L=1200 сохранённое значение равно 2400, хотя у движка в полёте
+1200 байт. При этом `totalBytesSent` увеличивается только на 1200. Проверка
+`bytesInFlight==0` внутри sampler также не видит начало пустой серии отправки.
+Из этого **не следует удвоение** переданных байтов, оценки полосы или задержки:
+это другие поля и потребители с дополнительными условиями.
 
-Цепочка: [handler](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/ackhandler/sent_packet_handler.go),
+Цепочка вызовов: [handler](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/ackhandler/sent_packet_handler.go),
 [adapter](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/ackhandler/cc_adapter_ex.go),
 [BBR](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/congestion_meta2/bbr_sender.go),
 [sampler](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/congestion_meta2/bandwidth_sampler.go).
 
-L включает QUIC framing/AEAD overhead, но не UDP/IP/внешнюю обёртку. DATAGRAM
-учитывается этим normal path; имя callback-аргумента `isRetransmittable` не
-означает retransmission его payload. ACK-only, ACK+PING, PMTU и PATH probe
-имеют различные inclusion predicates. Регистрация предшествует socket write:
-before/after здесь — позиции accounting, не timestamps выхода на провод.
+L включает служебные поля QUIC и AEAD, но не UDP/IP и внешнюю обёртку.
+DATAGRAM учитывается этой обычной веткой; имя аргумента `isRetransmittable`
+не означает повторную передачу полезной нагрузки DATAGRAM. Для ACK-only,
+ACK+PING, PMTU и проверки нового пути действуют разные условия включения в учёт.
+Регистрация предшествует записи в сокет: «до/после» здесь относится к учёту,
+а не к фактическому выходу пакета в сеть.
 
-`OnCongestionEventEx` использует **pre-event flight** до обработки ACK/loss,
-хотя вызывается после обработки. Поэтому нельзя механически исправить все
-callbacks одним `±L`. [RFC9002](https://www.rfc-editor.org/rfc/rfc9002.html)
-определяет QUIC accounting, но не полный контракт этого Go BBR adapter.
+У `OnCongestionEventEx` другая граница: он получает число байтов **до события**
+ACK/потери, хотя вызывается после обработки. Поэтому одна механическая поправка
+`±L` для всех callbacks неверна. [RFC9002](https://www.rfc-editor.org/rfc/rfc9002.html)
+описывает учёт QUIC, но не заменяет контракт конкретного Go-адаптера BBR.
 
 ## 2. Готовый upstream fix требует совместимой пары
 
-Исследованный sing-quic v0.7.0
-`4ab2eceaac81e073f53b22ec72ff56aaea89a3d1` использует quic-go mod.6
-`f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80`.
-В новой паре injected controller получает сохранённый **prior** flight;
-Brutal реализует Ex/monotime contract. Это source-fix, не измеренный выигрыш.
+В исследованном sing-quic v0.7.0
+`4ab2eceaac81e073f53b22ec72ff56aaea89a3d1` используется quic-go mod.6
+`f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80`. В этой паре подключённый контроллер
+получает сохранённое значение **до** отправки; Brutal реализует изменённый
+контракт Ex/monotime. Это исправление в исходниках, не измеренный выигрыш.
 
-| Перенос | Граница совместимости |
+| Вариант переноса | Что требует согласования |
 |---|---|
-| Новый Brutal к старому Ex | Дополнительные методы допустимы, но constructor/pacer/callers изменены |
-| Старый BBR к новому Ex | Не хватает `OnPacketNeutered`; прежний compile-time assertion не соответствует новому method set |
-| Новый BBR к старому sender | Совместимый тип не устраняет post→before semantic mismatch |
-| Новая пара целиком | Меняются dependency graph, packet lifecycle и installation boundary; не drop-in upgrade |
+| Новый Brutal со старым Ex | Дополнительные методы допустимы, но изменились конструктор, pacer и вызывающий код |
+| Старый BBR с новым Ex | Нет `OnPacketNeutered`; прежняя проверка соответствия интерфейсу не покрывает новый набор методов |
+| Новый BBR со старым отправителем | Совместимость типов не устраняет различие значений после и до отправки |
+| Новая пара целиком | Меняются граф зависимостей, жизненный цикл пакетов и место подключения контроллера; замена не является автоматической |
 
-Primary: [fix](https://github.com/SagerNet/sing-quic/commit/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1),
-[new manifest](https://github.com/SagerNet/sing-quic/blob/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1/go.mod),
-[new handler](https://github.com/SagerNet/quic-go/blob/f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80/internal/ackhandler/sent_packet_handler.go),
-[new Brutal](https://github.com/SagerNet/sing-quic/blob/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1/hysteria/congestion/brutal.go).
-Новый controller может временно хранить prior после send и пересчитывать
-текущее значение при batch. Oracle «каждое внутреннее поле всегда равно
-engine post» поэтому неверен. R04-14 требует такой уточнённой матрицы.
+Источники: [исправление](https://github.com/SagerNet/sing-quic/commit/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1),
+[новый манифест](https://github.com/SagerNet/sing-quic/blob/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1/go.mod),
+[новый handler](https://github.com/SagerNet/quic-go/blob/f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80/internal/ackhandler/sent_packet_handler.go),
+[новый Brutal](https://github.com/SagerNet/sing-quic/blob/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1/hysteria/congestion/brutal.go).
+
+В новой реализации внутреннее поле контроллера может временно хранить значение
+до отправки и пересчитываться при пакетной обработке. Требовать равенства
+каждого такого поля текущему значению движка нельзя. Поэтому R04-13 сохраняет
+принятую область — несовпадение контрактов старой пары, — а R04-14 остаётся
+на уточнении критериев совместимости. Это разные решения, а не противоречие
+«исправление одновременно принято и отвергнуто».
 
 ## 3. Payload cap не проверяет арифметику fragmentation
 
@@ -72,112 +90,167 @@ engine post» поэтому неверен. R04-14 требует такой у
 
 `H = 8 + varint_length(address_length) + address_length`, `C = B − H`.
 
-Для U>0 перед созданием списка нужны как минимум C>0 и
-`F=ceil(U/C)≤255`, поскольку wire `fragmentTotal`/`fragmentID` — uint8.
-Pinned функция этих gates не имеет: сначала выделяет весь список, затем
-сужает counts/IDs. При положительном C список конечен, F≤4096, но может
-превысить255; при C=0 цикл не продвигается, при C<0 возникает недопустимый slice.
-Это условные следствия выражений, не отправленные тестовые пакеты.
+Здесь U — размер исходной полезной нагрузки, B — допустимый размер сообщения,
+H — заголовок, C — место для одной части. Для U>0 до выделения списка нужны
+как минимум C>0 и `F=ceil(U/C)≤255`: поля `fragmentTotal`/`fragmentID` имеют
+тип uint8. Закреплённая функция сначала создаёт весь список, затем сужает
+счётчики и номера до этого типа.
 
-`DatagramTooLargeError` возвращает sender в fragmenter с новым B.
-Minimum1200 для `max_udp_payload_size` нельзя применять к отдельному
-`max_datagram_frame_size`, которому RFC9221 не задаёт такого minimum.
-[HY2 function/callers](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/packet.go),
-[QUIC parameter parser](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/wire/transport_parameters.go),
+При целочисленном C>0 и U≤4096 список конечен и F≤4096, но F может превышать
+255. При C=0 цикл не продвигается; при C<0 получается недопустимый срез.
+Это условные следствия выражений, а не результаты отправки пакетов.
+
+`DatagramTooLargeError` возвращает отправителя к разбиению с новым B.
+Минимум 1200 для `max_udp_payload_size` не переносится на отдельный параметр
+`max_datagram_frame_size`: RFC9221 такого минимума для него не устанавливает.
+[Функция HY2 и вызовы](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/packet.go),
+[разбор параметров QUIC](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/wire/transport_parameters.go),
 [RFC9221 §3](https://www.rfc-editor.org/rfc/rfc9221.html#section-3).
 
-Противовес: обычные pinned HY2 peers объявляют большой DATAGRAM limit;
-при B=1197, H=22, U=4096 нужны лишь4 fragments. Достижимость необычного
-малого B, actual peer policy и последствия на поставленном artifact требуют
-отдельной проверки. Установленный remote DoS этим не объявляется.
+**Условие достижимости открыто.** Обычная исследованная сторона HY2 объявляет
+большой предел DATAGRAM. При B=1197, H=22 и U=4096 нужны всего четыре части.
+Чтобы заявить дефект конкретного поставленного продукта, ещё нужны путь
+получения необычного B, политика другой стороны и точная пара артефактов.
+Удалённый отказ в обслуживании этим разбором не установлен.
 
 ## 4. Receive, ready queue и sent history имеют разных владельцев bytes
 
-**Receiver не симметричен sender.** В `udpDefragger.feed` lengths складываются
-и `buf.NewSize(finalLength)` вызывается без повторного gate4096. Пять допустимых
-частей по1000 дают5000 на assembly path. Count64 ready queue проверяется уже
-после allocation/copy. При сборке одновременно удерживаются fragments и output.
-`ReaderMTU()==4096` сам не является enforcement, а позднее усечение copy не
-отменяет уже понесённую стоимость. [HY2 receiver](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/packet.go),
-[allocator](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/common/buf/buffer.go).
+### Приём и сборка
 
-Сильное ограничение: штатный sender сам не создаёт исходный U>4096.
-Нужны отдельно условия на отправителя, groups/IDs и lifetime; общий RSS-bound
-нельзя вывести из одной возможной группы. Предыдущий R04-06 о borrower lifetime
-сохраняется и не считается новой находкой.
+В `udpDefragger.feed` длины складываются, а `buf.NewSize(finalLength)` вызывается
+без повторной проверки 4096. Например, пять частей по 1000 дают 5000 байт
+на пути сборки, если они приняты в одну группу. Ограничение готовой очереди
+в 64 элемента проверяется после выделения и копирования; в момент сборки
+удерживаются и части, и итоговый буфер. `ReaderMTU()==4096` само по себе
+не проверяет размер, а последующее усечение не отменяет уже понесённые затраты.
+[Приёмник HY2](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/packet.go),
+[выделение буфера](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/common/buf/buffer.go).
 
-**TX byte-credit не возвращается весь при dequeue.** `SendDatagram` создаёт
-копию frame.Data. Packet packing удаляет её из DATAGRAM queue, но frame остаётся
-в `p.Frames` sent history. Socket write освобождает serialized packet buffer,
-а не эту ссылку; нормальные ACK/loss paths освобождают её отдельно. Поэтому
-`queue empty` и `Write returned` не означают отсутствие TX-retained bytes.
-[Queue](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/datagram_queue.go),
-[packing](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/packet_packer.go),
-[history/release](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/ackhandler/sent_packet_handler.go).
+Штатный отправитель не создаёт исходную нагрузку U>4096. Поэтому нужны отдельные
+условия на отправителя, идентификаторы групп и срок удержания частей. Из одного
+примера сборки нельзя вывести общий предел RSS. Ранее разобранное время жизни
+заимствованного сообщения R04-06 остаётся самостоятельным вопросом.
 
-Практический contract: отдельно Utx/Urx/Fmax, число sessions/groups/writers,
-assembly overlap, ready/borrowed/retiring и sent-history bytes. Shared slices
-считать по backing allocation. Bounds живых payload не становятся измеренными
-RSS/CPU/kernel/timer bounds. Обычный overload drop должен освобождать именно
-своих owners; ошибка одного UDP сообщения не обязана разрушать весь carrier.
+### Отправка и история пакетов
+
+`SendDatagram` создаёт копию `frame.Data`. Упаковка удаляет её из очереди DATAGRAM,
+но кадр остаётся в `p.Frames` истории отправки. Запись в сокет освобождает
+сериализованный пакет, а не эту ссылку; обычные ветки ACK/потери освобождают
+её отдельно. Пустая очередь и возврат `Write` не означают освобождения всех
+удерживаемых отправкой байтов.
+[Очередь](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/datagram_queue.go),
+[упаковка](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/packet_packer.go),
+[история и освобождение](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/ackhandler/sent_packet_handler.go).
+
+Для расчёта нужны отдельные пределы Utx/Urx/Fmax, числа сессий, групп и
+писателей; перекрытие сборки; готовые, заимствованные, завершаемые сообщения;
+байты истории отправки. Общие срезы считают по выделению, на которое они
+ссылаются. Предел живой полезной нагрузки не становится пределом RSS, CPU,
+памяти ядра или таймеров. При обычной перегрузке освобождаются ресурсы именно
+отброшенной операции; ошибка одного UDP-сообщения не обязана закрывать весь
+несущий канал.
+
+<a id="как-читать-раннюю-оценку20mb30s"></a>
+### Как читать раннюю оценку 20MB∧30s
+
+В R04-008 общая оценка объединила окно, тайм-аут и singleflight так,
+как будто они ограничивают всю удерживаемую память. Это не следует из
+названных свойств: окна имеют направление и владельца, тайм-аут зависит
+от PTO/начала отсчёта, а завершаемые ресурсы могут пережить pending-слот.
+Поздний [R04-010](../research/04-PERFORMANCE/handoffs/R04-010.md) содержит
+адресные возражения, сохраняя собственную непринятую область.
+
+Отдельно проверена слишком сильная фраза «PTO ничего не удаляет»:
+в сохранённом `connection.go` ветки SendPTOInitial/Handshake/AppData вызывают
+`QueueProbePacket`; в `sent_packet_handler.go` эта функция вызывает
+`DeclareLost`, уменьшает учёт полёта и передаёт кадры обработчикам потерь.
+[Ветка отправки](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/connection.go),
+[обработчик](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/ackhandler/sent_packet_handler.go).
+Это опровергает абсолютную фразу, но не доказывает освобождение всех других
+держателей, ограничение ёмкости массива, отсутствие зависания или предел RSS.
+Сравнение относится к сохранённым исходникам; бинарник и поведение не проверены.
 
 ## 5. Объявленный peer timeout и локальный effective timeout различаются
 
-Pinned parser делает `MaxIdleTimeout=max(5s, received_ms)`, в том числе для
-явного0; отсутствие параметра оставляет0 в свежей структуре.
-При HY2 local idle30s/keepalive10s и достаточно малом PTO:
+Закреплённый parser задаёт `MaxIdleTimeout=max(5s, received_ms)`, в том числе
+для явно переданного нуля. Отсутствующий параметр оставляет ноль в новой
+структуре. При локальных idle 30 с, keepalive 10 с и достаточно малом PTO:
 
-| Peer wire value | Parsed value | Локальный idle / keepalive до PTO-floor |
+| Значение другой стороны в протоколе | После разбора | Локальные idle / keepalive до поправки на PTO |
 |---|---|---|
-| Отсутствует | 0 | 30s / 10s |
-| Явный0 | 5s | 5s / 2.5s |
-| 1000ms | 5s | 5s / 2.5s |
-| 30000ms | 30s | 30s / 10s |
+| Параметр отсутствует | 0 | 30 с / 10 с |
+| Явный 0 | 5 с | 5 с / 2,5 с |
+| 1000 мс | 5 с | 5 с / 2,5 с |
+| 30000 мс | 30 с | 30 с / 10 с |
 
 [Parser](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/wire/transport_parameters.go),
-[constant](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/protocol/params.go),
-[effective timers](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/connection.go).
+[константа](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/protocol/params.go),
+[расчёт таймеров](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/connection.go).
 [RFC9000 §18.2](https://www.rfc-editor.org/rfc/rfc9000.html#section-18.2)
-задаёт default0, а [§10.1](https://www.rfc-editor.org/rfc/rfc9000.html#section-10.1)
-— выбор ненулевого idle timeout и PTO floor.
+задаёт значение по умолчанию 0, а
+[§10.1](https://www.rfc-editor.org/rfc/rfc9000.html#section-10.1) — выбор
+ненулевого тайм-аута и нижнюю границу через PTO.
 
-Контрпример: peer действительно использует1s, PTO0.2s, keepalive выключен,
-промежуток idle начинается после последних служебных пакетов. Его допустимое
-удаление state может опередить локальный PING2.5s даже без сна и batching.
-Это source/interoperability вопрос, не замер нынешнего сервера.
+Контрпример: другая сторона действительно использует 1 с, PTO равен 0,2 с,
+keepalive выключен, период бездействия начался после последних служебных пакетов.
+Она может допустимо удалить состояние раньше локального PING через 2,5 с,
+даже без сна или пакетной обработки. Это вопрос совместимости реализации,
+не измерение нынешнего сервера и не универсальная рекомендация держать PING
+чаще одной секунды.
 
 ## 6. Часы, пробуждение и энергия — отдельные контракты
 
-Время может включать suspend, а механизм ожидания не обязан будить систему.
-Windows Go-reference transport clock и relative netpoll wait имеют разные
-low-power semantics. Android `elapsedRealtime` включает deep sleep, Handler
-использует uptime; non-wakeup alarm не делает `_WAKEUP` только из-за выбранных
-часов. После resume peer мог уже удалить state, независимо от локального
-`active()` или возраста таймера.
+Часы могут учитывать сон, а механизм ожидания — не будить систему. У рассмотренных
+часов транспорта Go на Windows и относительного ожидания netpoll различается
+поведение при низком энергопотреблении. Android `elapsedRealtime` включает
+глубокий сон, Handler использует uptime. Обычный alarm не становится
+`_WAKEUP` из-за выбора часов. После пробуждения другая сторона уже могла
+удалить состояние, независимо от локального `active()` или возраста таймера.
 [Windows SetWaitableTimer](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-setwaitabletimer),
-[Go reference netpoll](https://github.com/golang/go/blob/d90b98e65320778f3b1f99a6951ab20f04d218b3/src/runtime/netpoll_windows.go),
+[исследованный Go netpoll](https://github.com/golang/go/blob/d90b98e65320778f3b1f99a6951ab20f04d218b3/src/runtime/netpoll_windows.go),
 [Android SystemClock](https://developer.android.com/reference/android/os/SystemClock).
 
-Android NAT-T keepalive offload не generic QUIC service. RFC3948 прямо запрещает
-использовать получение NAT keepalive как доказательство liveness; поддержание
-mapping совместимо с потерей QUIC state.
+Android NAT-T keepalive offload не является общей службой QUIC. RFC3948
+запрещает считать получение NAT keepalive доказательством работоспособности
+другой стороны: сохранение NAT mapping совместимо с потерей состояния QUIC.
 [RFC3948 §4](https://www.rfc-editor.org/rfc/rfc3948.html#section-4),
 [SocketKeepalive API](https://developer.android.com/reference/android/net/SocketKeepalive).
-Quiet сокращает необязательную работу; ACK/PTO/expiry/revoke не становятся
-необязательными. Бюджет scheduling оценивает feasibility, а энергию измеряют
-вместе с useful work и recovery cost, не по числу настроенных таймеров.
 
-## 7. Конечная будущая проверка — NOT_RUN
+Режим пониженной активности сокращает необязательную работу; обработка
+ACK/PTO, истечения полномочий и отзыва не становится необязательной.
+Расчёт расписания проверяет выполнимость сроков. Энергию оценивают вместе
+с полезной работой и ценой восстановления, не по числу настроенных таймеров.
 
-1. Exact sender/controller pair: F=0/F>0, STREAM/DATAGRAM, ACK-only/ACK+PING,
-   PMTU/PATH, batch ACK+loss; разные before/after oracle.
-2. Fragmentation: U4095/4096/4097, C positive/zero/negative, F255/256;
-   reject до списка allocations. Receive4096/4097 и full-ready queue отдельно.
-3. TX: Add→Pop→Write→ACK/loss, credits каждого владельца, Close и partial errors.
-4. Peer timeout absent/0/1/5/30s, разные PTO; raw→parsed→effective→peer receipt.
-5. Suspend/awake-pause, clock jump, network change, authority expiry; native
-   callback delivery отдельно от локального времени.
+<a id="7-конечная-будущая-проверка--not_run"></a>
+## 7. Применение в разработке и незакрытые проверки
 
-Это адресаты TH-02/04/06, не готовые тесты и не изменение ядра. Reuse transport
-scheduler/готового fix рассматривается после source compatibility и owned
-resource contract; фактический performance effect остаётся неизвестным.
+Для [ПК](../../planning/knowledge-application/PC-PLAN.md) это входы в PC-06
+(ресурсы и совместимость) и PC-07 (измерения); для
+[Android](../../planning/knowledge-application/ANDROID-PLAN.md) — ANDR-07
+(ресурсы и энергия) и ANDR-08 (измерения). Платформы исполняют жизненный цикл;
+общая адаптивная policy не получает управление сокетами и таймерами ОС.
+
+Переиспользовать следует транспортный scheduler и согласованную исправленную
+пару после проверки точного вызывающего кода. Цена переноса включает методы
+контроллера, зависимости, сборку поставляемого артефакта и лицензионный состав.
+Исходники исправления не доказывают совместимость версии приложения; лицензии
+конкретного итогового состава должны быть сверены до заимствования. Собственный
+контроллер ради обхода несогласованного адаптера здесь не обоснован.
+
+Будущие проверки, **NOT_RUN**:
+
+1. Для точной пары отправителя и контроллера: F=0/F>0, STREAM/DATAGRAM,
+   ACK-only/ACK+PING, PMTU/PATH, совместные ACK и потери; разные критерии
+   значений до и после события.
+2. Разбиение: U4095/4096/4097, C положительный/нулевой/отрицательный, F255/256;
+   отказ до выделения списка. Приём 4096/4097 и заполненная готовая очередь
+   проверяются отдельно.
+3. Отправка: Add→Pop→Write→ACK/loss, лимит каждого владельца, Close и частичные
+   ошибки; возврат вызова не принимается за полное освобождение.
+4. Тайм-аут другой стороны: отсутствие/0/1/5/30 с, разные PTO; цепочка
+   значение в протоколе → разобранное → эффективное → фактическое поведение.
+5. Сон и пауза без сна, скачок часов, смена сети, истечение полномочий;
+   доставка native callback отдельно от показаний локальных часов.
+
+Матрица задаёт условия будущей приёмки, а не результат запуска или готовый
+набор тестов. Численный эффект для скорости, памяти и батареи неизвестен.

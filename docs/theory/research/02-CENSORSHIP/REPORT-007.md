@@ -105,7 +105,7 @@ Pinned MetaCubeX/uTLS1.8.4 `cf49b0864331e156689feec6363ef9bf518a5ac7`:
 
 Следовательно, в этом **не-ECH Chrome133 branch** исходное `min_version=1.3` нельзя
 считать enforced floor лишь по тому, что оно распарсилось в NewUTLSClient. Preset
-путь может вернуть1.2 в effective config/offered versions. Это source trace,
+путь может вернуть 1.2 в effective config/offered versions. Это source trace,
 **не выполненный TLS1.2 handshake и не утверждение о downgrade текущего трафика**.
 Для других presets/ECH/STD TLS вывод не переносится без анализа их веток.
 

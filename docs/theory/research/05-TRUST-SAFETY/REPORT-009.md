@@ -464,7 +464,7 @@ Candidate commit **34652d3df68b8d6887a6670b00eb0856090dae6d**.
 | SUSPENDED | Строка распарсена, затем исключена filter | Для membership checker не отличается от отсутствующего serial; generic Success возможен при прочих выполненных constraints |
 | Иное строковое значение status | Если Gson прочитал его как String, точное сравнение с REVOKED ложно | Не сохраняется как отдельное UnknownStatus; не объявляется автоматически валидным значением схемы Google |
 | Serial отсутствует в успешно полученном snapshot | Нет membership | Лишь NotListed в данном snapshot. При правильных scope/completeness/freshness предпосылках это полезное отрицательное evidence; не globally-latest статус |
-| HTTP не200 / ошибка загрузки | Helper бросает исключение, не возвращает emptySet | Этот путь не превращает сбой в Success автоматически; caller должен корректно сохранить failure |
+| HTTP не 200 / ошибка загрузки | Helper бросает исключение, не возвращает emptySet | Этот путь не превращает сбой в Success автоматически; caller должен корректно сохранить failure |
 | Ошибка разбора, реально выброшенная парсером | До возврата set выполнение прекращается исключением | Не штатный emptySet fallback. Поведение всех malformed/null/schema случаев не проверено исполнением |
 | Устаревший, но корректно десериализованный snapshot | Возвращается обычный Set<String>, без timestamp/age | От свежего snapshot с тем же set не отличается; certificate evaluation date не исправляет потерю давности |
 | Caller сам передал emptySet, как VerifierCli:65 | Checker не находит ни один serial | Нельзя отличить «проверенный список пуст» от «статус не проверялся». CLI — подтверждённый narrower caller, не доказанная ошибка продукта |
@@ -533,8 +533,8 @@ Gson/schema semantics **не завершены** и не объявляются
 - Шесть source files совпали с сохранённым exact-pin archive до срока;
   remote refresh/whole-library audit не выполнялись. SHA-256 — identity source,
   не доказательство правильности криптографического результата.
-- Receipt FUP-6-01 сохранён только в назначенном STATUS. Общие документы,
-  индексы, старые claims и чужие слоты не изменены.
+- Это исторический остаток 27 октября; его ограниченное продолжение
+  от 28 октября приведено в §10.
 
 <a id="10-новая-задача-28-октября--завершение-source-model-остатка-fup-6-01"></a>
 ## 10. Уточнение source-model контракта FUP-6-01 от 28 октября
@@ -678,8 +678,8 @@ snapshot. Если age/provenance не вход функции, freshness policy
 
 ### 10.4 Давность: HTTP freshness, observation time и время статуса — разные оси
 
-Новые primary references: **RFC9111 HTTP Caching** (июнь2022),
-**RFC8259 JSON** (декабрь2017); точные секции/чтение SOURCES §8.
+Новые primary references: **RFC9111 HTTP Caching** (июнь 2022),
+**RFC8259 JSON** (декабрь 2017); точные секции/чтение SOURCES §8.
 Официальная D1 говорит применять HTTP Cache-Control к обновлению status list;
 она не задаёт instant global revocation или signed per-record status time.
 
@@ -696,8 +696,8 @@ snapshot. Если age/provenance не вход функции, freshness policy
    `current_age = corrected_initial_age + (now − response_time)`.
 
    Это RFC cache estimate при указанной clock/header модели, **не наша
-   криптографическая upper-bound гарантия**. RFC при отсутствии Age использует0
-   в вычислении; это не разрешение подставлять0 для неизвестной as-of policy
+   криптографическая upper-bound гарантия**. RFC при отсутствии Age использует 0
+   в вычислении; это не разрешение подставлять 0 для неизвестной as-of policy
    или забыть остальные terms/clock trust.
 3. `max-age`/HTTP Expires задают freshness lifetime; срок уже расходуется в
    transit/cache. «Дать max-age заново от момента чтения» ошибочно. Unqualified
@@ -757,8 +757,8 @@ RFC current_age не объявляется C(t) без дополнительн
 
 Готово на уровне **source/spec/model contract**, а не реализации/выполнения D01–D12.
 Не создавались fixtures, JSON parser execution, certificates, HAT, device/network
-probes. Existing receipt27октября и PARTIAL_AT_CUTOFF не переписаны. Общие
-PLAN/STATE/главы/индексы/пакеты соседей не изменены.
+probes. Исторический PARTIAL_AT_CUTOFF от 27 октября сохраняется отдельно
+от результата дополнения 28 октября.
 
 ### 10.6 Итог и остаток
 

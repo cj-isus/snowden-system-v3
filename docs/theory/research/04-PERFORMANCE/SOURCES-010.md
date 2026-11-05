@@ -1,8 +1,8 @@
 # SOURCES R04-010 — Windows UDP, resource holders и retirement
 
 Пакет [REPORT-010](REPORT-010.md),
-[краткий разбор](handoffs/R04-010.md). Чтение: 27 октября2026, с13:36:03Z; первичный
-source capture около14:20Z, дополнительные sampler/timer captures около14:30Z.
+[краткий разбор](handoffs/R04-010.md). Чтение: 27 октября 2026, с 13:36:03Z; первичный
+source capture около 14:20Z, дополнительные sampler/timer captures около 14:30Z.
 Точные времена и hashes — собственные manifests в
 `.artifacts/research/theory-04/2026-10-27-win-udp-gso-res4/`.
 
@@ -17,7 +17,7 @@ native или benchmark evidence.
 
 | ID | Организация / документ / версия | Реальное основание и предел |
 |---|---|---|
-| P1 | Snowden, `windows/go.mod`, go.sum, packaging source; чтение27.10 | go.mod:8 sing-box1.13.19; :139 quic-go0.59.0-sing-box-mod.4; :140 sing0.8.13; :142 sing-quic0.6.4-0.20260803041914-d83826c306d7; :17 x/sys0.44.0. Packaging: windows/amd64 + with_quic/utls/gvisor/clash_api. Version selection source, не execution |
+| P1 | Snowden, `windows/go.mod`, go.sum, packaging source; чтение 27.10 | go.mod:8 sing-box1.13.19; :139 quic-go0.59.0-sing-box-mod.4; :140 sing0.8.13; :142 sing-quic0.6.4-0.20260803041914-d83826c306d7; :17 x/sys0.44.0. Packaging: windows/amd64 + with_quic/utls/gvisor/clash_api. Version selection source, не execution |
 | P2 | SagerNet sing-quic, pseudo-version `v0.6.4-0.20260803041914-d83826c306d7` | Prefix commit d83826c306d7 дан самим manifest; upstream full commit из прежнего baseline не используется как новая независимая equality. Local module bytes сняты/hash; root LICENSE1–14 GPL-3.0-or-later |
 | P3 | SagerNet quic-go, tag `v0.59.0-sing-box-mod.4`, local .info Time2026-02-16T03:31:27Z | Tag/version доступны; local .info **не содержит Origin Hash**. Не придуман exact commit. LICENSE FULL_TEXT_READ: MIT, copyright quic-go authors/Google2016 |
 | P4 | SagerNet sing-box, tag1.13.19 | Module-cache version + manifest; LICENSE FULL_TEXT_READ GPL-3.0-or-later, дополнительное требование naming/association consent. Не whole dependency license closure |
@@ -85,14 +85,17 @@ Base: [SagerNet/sing-quic d83826c306d7](https://github.com/SagerNet/sing-quic/tr
 [sing-box tag](https://github.com/SagerNet/sing-box/tree/v1.13.19).
 
 - S `common/bufio/bind.go:58–112`, `conn.go:188–239`,
-  `network/conn.go:68–72`: exact UnbindPacketConn/ExtendedConn method set.
-- S `bufio/vectorised.go:65–77`, `vectorised_windows.go:45–98`: factory not
-  recursive; Windows WSABUF scatter/gather sender uses WSASendTo NULL-overlapped.
-- S `buf/buffer.go:15–62`, `alloc.go:18–86`, `pool.go`: requested logical size
-  vs physical power-of-two allocation (1452+8 → backing2048), sync.Pool ownership.
+  `network/conn.go:68–72`: точный набор методов UnbindPacketConn/ExtendedConn.
+- S `bufio/vectorised.go:65–77`, `vectorised_windows.go:45–98`:
+  factory не рекурсивна; Windows WSABUF scatter/gather использует
+  WSASendTo с NULL-overlapped.
+- S `buf/buffer.go:15–62`, `alloc.go:18–86`, `pool.go`:
+  запрошенный логический размер и фактическое power-of-two выделение
+  различаются (1452+8 → backing2048); важно владение sync.Pool.
 - B `protocol/hysteria2/outbound.go:42–120`, `common/dialer/dialer.go:39–56`,
-  `default.go:246–318,388–399`, `route/conn.go:72–92,383–427`: actual UDP dialer,
-  trackedConn, InterfaceUpdated/Close and absence of extra method promotion.
+  `default.go:246–318,388–399`, `route/conn.go:72–92,383–427`:
+  фактические UDP dialer/trackedConn, InterfaceUpdated/Close и отсутствие
+  дополнительного продвижения методов обёрткой.
 
 ### W — исходники Windows приложения (не изменены)
 
@@ -109,26 +112,26 @@ Base: [SagerNet/sing-quic d83826c306d7](https://github.com/SagerNet/sing-quic/tr
 
 ### G — Go1.26.7 local source reference
 
-- `src/net/net.go:192–224`: inherited connected Read/Write/Close.
+- `src/net/net.go:192–224`: унаследованные connected Read/Write/Close.
 - `src/net/udpsock.go:154–160,232–244`, `udpsock_posix.go:5,46–69,113–176`:
-  windows included in posix-named file; ordinary ReadFrom/WriteTo alternatives.
+  Windows включён в файл с posix в названии; обычные альтернативы ReadFrom/WriteTo.
 - `src/internal/poll/fd_windows.go:239–346,558–612,830–879,983–1108`:
-  WSARecv/WSASend and WSARecvFrom/WSASendto; OVERLAPPED execIO;
-  CancelIoEx+waitCanceled; allocation lifetime until completion/cancellation.
-- `src/net/rawconn.go:52–61`: RawWrite delegate used by alternative
-  SyscallVectorisedPacketWriter; not actual scalar path.
+  WSARecv/WSASend, WSARecvFrom/WSASendto, OVERLAPPED execIO,
+  CancelIoEx+waitCanceled; выделение живёт до завершения/отмены.
+- `src/net/rawconn.go:52–61`: делегат RawWrite альтернативного
+  SyscallVectorisedPacketWriter; это не рассмотренный скалярный путь.
 
 ## 3. Внешние официальные документы, реально прочитанные разделы
 
 | ID | Организация, название, дата | URL / section / чтение и статус |
 |---|---|---|
-| M1 | Microsoft, «Функция WSASendTo (winsock2.h)»; ms.date2018-12-05, updated2025-03-01 | [ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/winsock2/nf-winsock2-wsasendto); Parameters/Remarks/Overlapped I/O/FUNCTION requirements; FULL_TEXT_READ27.10 около13:48–13:51Z |
-| M2 | Microsoft, «IPPROTO_UDP socket options»; ms.date2019-10-02, updated2025-03-11 | [en-US](https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-udp-socket-options); вся таблица UDP_SEND_MSG_SIZE/UDP_RECV_MAX_COALESCED_SIZE, defaults0 и UDP_COALESCED_INFO; FULL_TEXT_READ27.10 около13:48–13:51Z |
-| M3 | Microsoft, «Функция WSASend (winsock2.h)»; ms.date2018-12-05, updated2025-03-01 | [ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/winsock2/nf-winsock2-wsasend); Parameters/Remarks/Overlapped I/O; FULL_TEXT_READ27.10 около14:28Z |
-| M4 | Microsoft Windows SDK, «WSASetUdpSendMessageSize»; ms.date2019-10-01, updated2026-10-04 | [ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/ws2tcpip/nf-ws2tcpip-wsasetudpsendmessagesize); весь текст, Requirements build19041; FULL_TEXT_READ27.10 около14:30Z |
-| M5 | Microsoft Windows SDK, «WSASetUdpRecvMaxCoalescedSize»; ms.date2019-10-01, updated2025-03-01 | [ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/ws2tcpip/nf-ws2tcpip-wsasetudprecvmaxcoalescedsize); весь текст, Requirements build19041; FULL_TEXT_READ27.10 около14:30Z |
-| R1 | IETF; T. Pauly, E. Kinnear, D. Schinazi, «An Unreliable Datagram Extension to QUIC», RFC9221, March2022, Standards Track | [official text](https://www.rfc-editor.org/rfc/rfc9221.txt); §5 behavior, §5.2 acknowledgements, §5.3 flow control, §5.4 congestion control, §6 security; FULL_TEXT_READ этих разделов27.10 около14:22Z; bytes сохранены |
-| R2 | IETF; J. Iyengar, M. Thomson (eds.), «QUIC: A UDP-Based Multiplexed and Secure Transport», RFC9000, May2021, Standards Track | [official text](https://www.rfc-editor.org/rfc/rfc9000.txt); §10.1/§10.1.2/§10.2–10.2.2; FULL_TEXT_READ этих разделов27.10 около14:23Z; bytes сохранены |
+| M1 | Microsoft, «Функция WSASendTo (winsock2.h)»; ms.date2018-12-05, updated2025-03-01 | [ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/winsock2/nf-winsock2-wsasendto); Parameters/Remarks/Overlapped I/O/FUNCTION requirements; FULL_TEXT_READ27.10 около 13:48–13:51Z |
+| M2 | Microsoft, «IPPROTO_UDP socket options»; ms.date2019-10-02, updated2025-03-11 | [en-US](https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-udp-socket-options); вся таблица UDP_SEND_MSG_SIZE/UDP_RECV_MAX_COALESCED_SIZE, defaults0 и UDP_COALESCED_INFO; FULL_TEXT_READ27.10 около 13:48–13:51Z |
+| M3 | Microsoft, «Функция WSASend (winsock2.h)»; ms.date2018-12-05, updated2025-03-01 | [ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/winsock2/nf-winsock2-wsasend); Parameters/Remarks/Overlapped I/O; FULL_TEXT_READ27.10 около 14:28Z |
+| M4 | Microsoft Windows SDK, «WSASetUdpSendMessageSize»; ms.date2019-10-01, updated2026-10-04 | [ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/ws2tcpip/nf-ws2tcpip-wsasetudpsendmessagesize); весь текст, Requirements build19041; FULL_TEXT_READ27.10 около 14:30Z |
+| M5 | Microsoft Windows SDK, «WSASetUdpRecvMaxCoalescedSize»; ms.date2019-10-01, updated2025-03-01 | [ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/ws2tcpip/nf-ws2tcpip-wsasetudprecvmaxcoalescedsize); весь текст, Requirements build19041; FULL_TEXT_READ27.10 около 14:30Z |
+| R1 | IETF; T. Pauly, E. Kinnear, D. Schinazi, «An Unreliable Datagram Extension to QUIC», RFC9221, March2022, Standards Track | [official text](https://www.rfc-editor.org/rfc/rfc9221.txt); §5 behavior, §5.2 acknowledgements, §5.3 flow control, §5.4 congestion control, §6 security; FULL_TEXT_READ этих разделов 27.10 около 14:22Z; bytes сохранены |
+| R2 | IETF; J. Iyengar, M. Thomson (eds.), «QUIC: A UDP-Based Multiplexed and Secure Transport», RFC9000, May2021, Standards Track | [official text](https://www.rfc-editor.org/rfc/rfc9000.txt); §10.1/§10.1.2/§10.2–10.2.2; FULL_TEXT_READ этих разделов 27.10 около 14:23Z; bytes сохранены |
 
 ru-RU pages Microsoft реально вернули русский текст с locale/contentlocale
 ru-ru, но translationtype MT: машинный перевод, не самостоятельное российское

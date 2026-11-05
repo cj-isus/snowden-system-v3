@@ -22,7 +22,7 @@ historical→target bridge. API1 подходит для первой и час�
 
 ## 2. Один actual seam: network-change optional preference
 
-Source snapshot28октября:23project inputs before/copy/after согласованы; pin/SHA
+Source snapshot28 октября:23project inputs before/copy/after согласованы; pin/SHA
 и read depth — [SOURCES](SOURCES.md). Код ничего не запускал.
 
 | Этап / actual caller | Что source действительно даёт | Что ещё не получено |
@@ -313,9 +313,9 @@ envelope сама по себе не даёт.
 **Ручной контрпример K1.** В двух позициях с весами u>v>0 истинные losses(1,0),
 reported point labels(0,1). Обычные totals совпадают: final Γ2=0 допустима;
 для первого prefix Γ1=1. Weighted totals равны u и v, ошибка u−v>0.
-Если это не первые позиции, все предыдущие true/reported losses равны0.
+Если это не первые позиции, все предыдущие true/reported losses равны 0.
 Реальный default λ source после участка truncation имеет строго убывающие пары;
-мы не утверждаем, что его первые два веса при alpha.05 равны1и.5.
+мы не утверждаем, что его первые два веса при alpha.05 равны 1 и.5.
 Γ1=1,Γ2=0 — допустимый **aggregate** профиль, не nondecreasing count corruptions.
 
 **Достаточный вариант A: prefix envelope + nonincreasing kernel.** Пусть
@@ -367,7 +367,7 @@ Upstream принимает обычный числовой x; отсутств�
 нужно применить **до** optional running intersection. Если сначала взять maximum
 неисправленных lower bounds, затем вычесть только current Γ_n/n, ранняя ошибка
 может остаться даже при постоянном kernel. Ручной пример: α=2e^(-2), Nopt=64,
-w=1/2; все истинные Y_i=0, первые64 reported labels равны1, следующие64 равны0.
+w=1/2; все истинные Y_i=0, первые 64 reported labels равны 1, следующие 64 равны 0.
 Совместная envelope Γ_k=min(k,64) верна детерминированно. При k64 raw radius=1/8,
 raw lower=7/8. На n128 raw running lower≥7/8; вычитание current Γ128/128=1/2
 оставляет lower≥3/8, ошибочно исключая µ=0. Это counterexample неправильного
@@ -395,7 +395,7 @@ Storage/expiry semantics относятся к полученному joint clai
 | O4 concurrent stale budget | Два planners читают remaining.05 и каждый резервирует.04; Update callbacks пишут вычисленный снаружи остаток.01 | Single writer сериализует transactions, но не исправляет stale arithmetic. Reread/check/debit+unique ClaimID должны быть внутри одного owned admission commit; это proposed ledger counterexample, не current code bug |
 | O5 Batch side effect | CallbackA запускает probe и пишет roster; callbackB возвращает error. Batch rollback затем повторяет A: side effect дважды, committed запись одна | exact bbolt batch.run повторяет оставшиеся callbacks после failIdx. Actual cache caller делает DB cleanup, не наш probe. Новый probe нельзя помещать в Batch/Update callback |
 | O6 reset/restore | После возврата старой DB/current owner sequence снова выдаёт прежний ID, spent α неизвестен, controller считает budget свежим | Durable ordinal без continuity/rollback contract не lifetime accountant. CacheFile.resetDB вообще удаляет storage. Новый family label не возвращает δ |
-| O7 future risk | В двух мирах все historical probes/accepted receipts одинаковы; следующий useful task loss0 либо1 | Protected probe подтверждает свой workload/путь; actual code не обещает все user tasks. Without bridge current target остаётся[0,1]/unknown |
+| O7 future risk | В двух мирах все historical probes/accepted receipts одинаковы; следующий useful task loss0 либо 1 | Protected probe подтверждает свой workload/путь; actual code не обещает все user tasks. Without bridge current target остаётся[0,1]/unknown |
 | O8 label versus custody | Parent-acceptance-by-D failure уже определён, но underlying owner ещё не вернулся/ресурсы не retired | API1 separately tracks custody. Такой label не освобождает reservation и не открывает новый physical slot |
 | O9 duplicate/late callback | Завершение attempt17 пришло дважды либо после attempt18 | SettleFailover проверяет Attempting/generation/scope, mismatch не меняет successor. Proposed cohort тоже не увеличивает n за повтор delivery и не переписывает origin |
 | O10 kernel mismatch | Aggregate Γ_n=0 при взаимно компенсированных label errors, но weighted total имеет ненулевую ошибку; raw running intersection удерживает раннюю ошибку после current correction | K1/κ и K2§6.3; fixed kernel либо stronger envelope, correction before intersection для одного target. Это adapter mismatch, не runtime finding confseq |
@@ -463,9 +463,9 @@ caller review. Сам proposed input contract переносим только п
 
 ### 8.2. confseq0.0.11 — OFFLINE_REFERENCE / scoped mathematical ADAPT
 
-Exact MIT commit **5ffe733ca2447a2e28c2c91f3b00086173f2ab2c**, fresh source и
-LICENSE/setup прочитаны [C2]. Actual path: two-sided Hoeffding→две lower calls
-с alpha/2→weighted sum/margin; CI-wrapper устанавливает fixed_n=len(x).
+MIT commit `5ffe733ca2447a2e28c2c91f3b00086173f2ab2c`; выбранные исходники,
+LICENSE/setup прочитаны [C2]. Цепочка: two-sided Hoeffding → две lower calls
+с alpha/2 → взвешенные sum/margin; CI-wrapper задаёт fixed_n=len(x).
 
 Для future offline wrapper выбирать frozen CS path, bounded honest/interval
 support, правильный outcome order/filtration и KernelRef. Constant-mean theorem
@@ -546,7 +546,7 @@ Z03/Z09 HANDOFF отсутствовали на срезах 08:56:41Z и 09:23:
 **NOT_AVAILABLE_AT_CHECK**; независимая producer/cohort сверка с ними
 остаётся открытой.
 
-Финальная source/provenance сверка09:29:35Z: все23repo inputs и8module inputs
+Финальная source/provenance сверка 09:29:35Z: все 23repo inputs и 8module inputs
 совпали с исходными captures; `final-input-drift.json`. Это не атомарный snapshot
 всего дерева и не runtime proof. Claim A/B — **PROPOSED / READY_FOR_REVIEW**;
 решение о научном принятии и интеграции остаётся руководителю.

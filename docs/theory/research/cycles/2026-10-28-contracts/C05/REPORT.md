@@ -92,7 +92,7 @@
    фактический runtime provider не установлен. JCA допускает выбор по provider
    preference. [JDK21 API](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/security/cert/CertPathValidator.html#getInstance(java.lang.String)).
 
-Пункты1–4 развивают уже сформулированные D ограничения; новый provider qualifier
+Пункты 1–4 развивают уже сформулированные D ограничения; новый provider qualifier
 не означает, что на устройстве обнаружен подменённый provider.
 
 ### 2.3 Отрицательное знание и давность
@@ -106,16 +106,16 @@ Authorized supersession и scope должны быть названы явно. 
 самостоятельным историческим свидетельством unrevocation.
 
 Давность HTTP response, возраст status knowledge и policy deadline различны.
-Локальное чтение cache не обновляет age. Подходящий304 может обновить metadata
+Локальное чтение cache не обновляет age. Подходящий 304 может обновить metadata
 сохранённого representation; для этого нужны правила выбора response и
-валидации, а не произвольный304 или совпадение hash. `Age`/`Date` и residence
+валидации, а не произвольный 304 или совпадение hash. `Age`/`Date` и residence
 time входят в HTTP age; они не дают границу мирового времени публикации отзыва.
 Числовой допустимый offline interval и доверенный UTC здесь не установлены.
 [RFC9111 §§4.2.3,4.3.4](https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2.3).
 
 Текущий Google fetch helper принимает только видимый `HTTP_OK`; отдельно
-полученный304 он сам не оформляет как revalidation success. HTTP cache может
-обработать304 ниже этого уровня, но фактическая реализация/headers неизвестны.
+полученный 304 он сам не оформляет как revalidation success. HTTP cache может
+обработать 304 ниже этого уровня, но фактическая реализация/headers неизвестны.
 Кроме того, helper возвращает set без response age/validator evidence. Нельзя
 дописать достоверный provenance только обёрткой над уже потерявшим сведения set.
 
@@ -247,7 +247,7 @@ T/S cache. Его release/reuse policy требует своей authority. Эт
 
 ## 5. Один current consumer path: retention попытка и отдельный отказ операции
 
-Срез привязан к source hashes `local-preimage.json` от09:01:58Z, а не к живым
+Срез привязан к source hashes `local-preimage.json` от 09:01:58Z, а не к живым
 state/vault. Current manifest `windows/go.mod` содержит go-tuf **v2.4.2**;
 исследованный upstream commit `f5edbde31e5507f46db2069402dc38903fe6d9d4`.
 
@@ -438,8 +438,7 @@ retention — узкий source finding; правка принадлежит Win
 сохранять prior accepted history и уже существующие operation gates.
 
 Ни scientific ACCEPTED, ни implemented/local/native/live PASS не выставляются.
-Старые авторские reports, общие главы и product files не редактировались.
-Статическая упаковка09:30:20–22Z: все8 локальных Markdown links существуют,
-все26 записанных source capture hashes совпали;15 baseline/current inputs
+Статическая упаковка 09:30:20–22Z: все 8 локальных Markdown links существуют,
+все 26 записанных source capture hashes совпали;15 baseline/current inputs
 сохранили исходные hashes. Receipts: `doc-review.json`, `preservation-review.json`
 в private C05 captures. Эти результаты относятся к документации и source identity.

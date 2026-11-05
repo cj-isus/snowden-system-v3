@@ -1,117 +1,155 @@
 <a id="proxy-dns-nat64-2026-10-28"></a>
-# Корпоративный proxy и NAT64: следовать фактическим socket-hop
+<a id="корпоративный-proxy-и-nat64-следовать-фактическим-socket-hop"></a>
+# Корпоративный прокси и NAT64: фактический путь соединения
 
-[Оглавление](../README.md) · [DNS/ECH](../transports/ECH-DNS-BOOTSTRAP.md) · [Решения review](../research/reviews/2026-10-28-DEEP-REVIEW.md)
+[Оглавление](../README.md) · [Термины](../GLOSSARY.md) · [DNS](DNS-AND-DIAGNOSTICS.md) · [ECH](../transports/ECH-DNS-BOOTSTRAP.md)
 
-**2026-10-28, DR27-13.** Public source: sing-box1.13.19
-`b5ebaa1fc0f2b94256180b95468e73ef53caa27d`, sing0.8.13
-`7c349dacf402256d3a7029746073b05d2ead584a`. Это описание capabilities/callers,
-не подтверждение corporate access, пользовательских credentials или actual
-Windows/Android wiring. Новая SVCB-процедура разобрана отдельно по ссылке выше.
+## Краткий вывод
 
-## 1. Proxy address и tunnel target обслуживают разные участки
+Соединение через прокси состоит из нескольких участков. Адрес прокси разрешает
+и открывает один участник, адрес конечного сервера — возможно другой. NAT64,
+правила DNS, привязка сокета и учётные данные относятся к своему участку пути.
+Поэтому исправность соединения до прокси ещё не подтверждает конечный туннель,
+а смена внутреннего транспорта не устраняет общий отказ прокси или авторизации.
 
-N — сеть клиента, P — explicit proxy, E — tunnel endpoint, I — inner TLS
-identity, R — resolver. Для одного proxy:
+**Когда применять.** При работе в корпоративной сети, в IPv6-only-среде,
+при настройке HTTP CONNECT/SOCKS, DNS64/NAT64 и привязки сокетов к физической сети.
+Нужно знать, кто разрешает каждое имя и кто действительно открывает каждый сокет.
 
-| Объект | Где нужен подходящий путь | Кто делает адресный lookup |
+**Граница знания.** Разбор DR27-13 от 28 октября 2026 года относится
+к исходникам sing-box 1.13.19 `b5ebaa1fc0f2b94256180b95468e73ef53caa27d`
+и sing 0.8.13 `7c349dacf402256d3a7029746073b05d2ead584a`.
+Наличие ветви в этих исходниках не доказывает её подключение в текущем Snowden,
+успех корпоративного входа или фактический маршрут устройства.
+[Сохранённая рецензия](../research/reviews/2026-10-28-DEEP-REVIEW.md).
+
+<a id="1-proxy-address-и-tunnel-target-обслуживают-разные-участки"></a>
+## 1. Разделить адрес прокси, назначение туннеля и TLS-имя
+
+Обозначения: N — сеть клиента, P — явный прокси, E — конечный сервер туннеля,
+I — проверяемая идентичность внутреннего TLS, R — DNS-резолвер.
+
+| Объект | Какой путь нужен | Где происходит разрешение имени |
 |---|---|---|
-| R | Клиент к фактическому DNS transport | Собственная bootstrap-процедура R |
-| P | N→P | При имени обычно клиентская resolver-цепочка |
-| Named E внутри CONNECT/SOCKS | Proxy side→E | Proxy side, если имя сохранено |
-| Numeric E внутри CONNECT | Proxy side→этот address | Адресный lookup E не требуется |
-| I | TLS внутри полученного tunnel | Reference identity сама не требует DNS lookup |
-| SOCKS UDP relay B | Отдельный N→B UDP socket | Клиентская нижняя цепочка, если B именованный |
+| R | Клиент → фактический DNS-транспорт | Зависит от начального подключения самого резолвера |
+| P | N → P | При имени прокси — обычно в клиентской цепочке DNS |
+| Имя E в CONNECT/SOCKS | Прокси → E | На стороне прокси, если клиент сохранил имя в запросе |
+| Числовой E в CONNECT | Прокси → указанный адрес | Разрешение имени E не требуется |
+| I | TLS внутри полученного туннеля | Само имя проверки сертификата не требует отдельного DNS-запроса |
+| SOCKS UDP relay B | Отдельный UDP-сокет N → B | В нижней клиентской цепочке, если B задан именем |
 
-Клиент IPv6-only может открыть socket к P6, передать `CONNECT E4:port`, а P
-открыть IPv4 socket к E4. Это не требует клиентского IPv4 socket к E.
-Обратный случай: недостижимый P4 literal остановит путь, даже если E имеет IPv6.
+Клиент с одним IPv6 может соединиться с P6 и отправить `CONNECT E4:port`.
+Прокси откроет IPv4-сокет к E4; клиентскому сокету до E поддержка IPv4 не нужна.
+Но недостижимый IPv4-литерал самого P остановит путь, даже если у E есть IPv6.
 
-В pinned HTTP `Client.DialContext` сначала dial к `serverAddr=P`, затем E
-записывается в authority CONNECT. SOCKS5 кодирует address type E в request.
-[HTTP](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/protocol/http/client.go),
-[SOCKS](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/protocol/socks/client.go),
+В закреплённом HTTP-клиенте `Client.DialContext` сначала соединяется
+с `serverAddr=P`, затем записывает E в запрос CONNECT. SOCKS5 передаёт тип
+адреса E в своём запросе. [HTTP-клиент](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/protocol/http/client.go),
+[SOCKS-клиент](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/protocol/socks/client.go),
 [RFC1928 §§3–6](https://www.rfc-editor.org/rfc/rfc1928.html#section-3).
 
-## 2. Placement resolver может изменить сам CONNECT request
+<a id="2-placement-resolver-может-изменить-сам-connect-request"></a>
+## 2. Расположение резолвера меняет запрос к прокси
 
-Обычный `dialer.New` с Detour без explicit DomainResolver сохраняет named E.
-Если указать `DomainResolver.Server` над detour, `NewWithOptions` добавляет
-resolve wrapper: `router.Lookup(E)→DialSerial(addresses)` передаёт дальше
-numeric destination. Клиентский lookup добавляет зависимость и может изменить
-применимость proxy ACL. Это не обязательно direct DNS: resolver transport
-может иметь собственный detour.
-[Constructor](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2b94256180b95468e73ef53caa27d/common/dialer/dialer.go),
-[resolver](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2b94256180b95468e73ef53caa27d/common/dialer/resolve.go),
-[numeric dial](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/common/network/multi.go).
+В рассмотренной версии обычный `dialer.New` с `Detour`, без явно заданного
+`DomainResolver`, сохраняет имя E. Если над этим маршрутом указать
+`DomainResolver.Server`, `NewWithOptions` добавляет обёртку разрешения имени:
+`router.Lookup(E)→DialSerial(addresses)` передаёт далее числовое назначение.
 
-NewDetour и NewDefault — разные ветки. Socket controls верхнего endpoint
-не копируются автоматически в leaf dialer другого outbound. Protect/bind
-принадлежат реальному нижнему socket; DNS transport имеет свои options.
-Поэтому bind N→P сам по себе не задаёт DNS realm для разрешения P.
+Такой запрос создаёт дополнительную зависимость DNS и может изменить применение
+списков разрешённых адресов прокси. Но он не обязательно является прямым DNS:
+транспорт резолвера может иметь собственный `detour`.
+[Создание dialer](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2b94256180b95468e73ef53caa27d/common/dialer/dialer.go),
+[разрешение имени](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2b94256180b95468e73ef53caa27d/common/dialer/resolve.go),
+[соединение с числовым адресом](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/common/network/multi.go).
+
+`NewDetour` и `NewDefault` создают разные цепочки. Управление сокетом верхнего
+узла не переносится автоматически в нижний dialer другого outbound.
+Операции `protect` и `bind` относятся к реально открываемому сокету;
+DNS-транспорт имеет собственные параметры. Привязка N → P не задаёт сама
+по себе сетевую область для разрешения имени P.
 [Detour](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2b94256180b95468e73ef53caa27d/common/dialer/detour.go),
-[leaf controls](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2b94256180b95468e73ef53caa27d/common/dialer/default.go),
+[нижний dialer](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2b94256180b95468e73ef53caa27d/common/dialer/default.go),
 [DNS dialer](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2b94256180b95468e73ef53caa27d/dns/transport_dialer.go).
 
-## 3. Translation относится к тому socket, который проходит через переводчик
+<a id="3-translation-относится-к-тому-socket-который-проходит-через-переводчик"></a>
+## 3. Трансляция адресов относится к конкретному сокету
 
-NAT64 переводит IP/transport tuple, а не CONNECT authority, SOCKS DST.ADDR,
-SNI или WS Host. Client Pref64 не обязан быть маршрутизируемым для P→E.
-Глобальная замена E4 на client-side synthesized E6 способна сломать исправный
-proxy path. [RFC6146](https://www.rfc-editor.org/rfc/rfc6146.html#section-3.6.1).
+NAT64 преобразует сетевой и транспортный адреса, но не переписывает назначение
+в CONNECT, `SOCKS DST.ADDR`, SNI или WS Host. Префикс NAT64, доступный клиенту,
+не обязан подходить для пути P → E. Поэтому глобальная замена E4 синтезированным
+на клиенте E6 способна сломать исправный маршрут через прокси.
+[RFC6146](https://www.rfc-editor.org/rfc/rfc6146.html#section-3.6.1).
 
-DNS64 обслуживает AAAA resolution; numeric literal не проходит такую процедуру.
-CLAT может обслужить IPv4 sockets отдельно. Это разные механизмы.
+DNS64 работает при разрешении AAAA, а числовой литерал такую процедуру не проходит.
+CLAT может отдельно обслуживать IPv4-сокеты. Эти механизмы не взаимозаменяемы.
 [RFC6147 §§5.1/5.3.3](https://www.rfc-editor.org/rfc/rfc6147.html#section-5.1),
 [RFC6877 §5.2](https://www.rfc-editor.org/rfc/rfc6877.html#section-5.2).
 
-**Дополнительный SOCKS-hop:** после успешных TCP/auth/UDP ASSOCIATE клиент
-открывает UDP socket к `response.Bind`. P6 может вернуть B4, недоступный N
-без IPv4/CLAT/synthesis. TCP proof до P6 не доказывает этот UDP путь.
-BND.ADDR ответа CONNECT не требует такого второго socket, а BND.ADDR ответа
-UDP ASSOCIATE его задаёт; association также зависит от управляющего TCP.
+У SOCKS есть дополнительная граница: после TCP-соединения, авторизации
+и `UDP ASSOCIATE` клиент открывает UDP-сокет к `response.Bind`.
+Прокси P6 может вернуть IPv4-адрес B4, недоступный клиенту без IPv4, CLAT
+или подходящего синтеза. Исправный TCP до P6 ещё не подтверждает этот UDP-путь.
+`BND.ADDR` ответа CONNECT не требует такого второго сокета; для `UDP ASSOCIATE`
+он задаёт его назначение. Ассоциация зависит также от управляющего TCP-соединения.
 [RFC1928 §§6–7](https://www.rfc-editor.org/rfc/rfc1928.html#section-6),
-[actual client](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/protocol/socks/client.go).
+[рассмотренный клиент](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/protocol/socks/client.go).
 
-Pref64 discovery не является reachability proof. RFC7050 запрещает использовать
-адреса самого `ipv4only.arpa` для connectivity checks. Неудача DNS discovery
-не исключает prefix, полученный через RA; RFC8781 задаёт scope/lifetime и
-рекомендации выбора источника. Private corporate P требует подходящего
-translation realm: well-known `64:ff9b::/96` не предназначен для non-global IPv4.
-[RFC7050 §§3.2.1/5.1](https://www.rfc-editor.org/rfc/rfc7050.html#section-3.2.1),
+Обнаружение префикса NAT64 не доказывает достижимость. RFC7050 запрещает
+использовать адреса самого `ipv4only.arpa` для проверки соединения. Неудачный
+поиск префикса через DNS не исключает получение его через RA; RFC8781 задаёт
+область, срок жизни и рекомендации выбора источника. Для частного корпоративного
+P нужен подходящий контекст трансляции: `64:ff9b::/96` не предназначен
+для неглобальных IPv4-адресов. [RFC7050 §§3.2.1/5.1](https://www.rfc-editor.org/rfc/rfc7050.html#section-3.2.1),
 [RFC8781 §5.1](https://www.rfc-editor.org/rfc/rfc8781.html#section-5.1),
 [RFC6052 §3.1](https://www.rfc-editor.org/rfc/rfc6052.html#section-3.1).
 
-## 4. Общий auth/interop cut не исправляется сменой внутреннего транспорта
+<a id="4-общий-authinterop-cut-не-исправляется-сменой-внутреннего-транспорта"></a>
+## 4. Авторизация и совместимость прокси — отдельные условия
 
-Pinned HTTP connector имеет preemptive Basic и произвольные headers, но
-не полноценный NTLM/Negotiate challenge loop. При407 caller получает
-обобщённое `authentication required`. По RFC407 возможны отсутствующие,
-неполные или неверные credentials; из этой строки нельзя определить причину.
+В рассмотренном HTTP-клиенте поддержаны заранее отправляемый Basic
+и произвольные заголовки, но не полный обмен NTLM/Negotiate с ответами сервера.
+При HTTP 407 вызывающий код получает общую ошибку `authentication required`.
+Такой ответ возможен при отсутствующих, неполных или неверных учётных данных;
+одной строки недостаточно для диагноза «неверный пароль».
 [RFC9110 §11.7](https://www.rfc-editor.org/rfc/rfc9110.html#section-11.7).
 
-**Конкретное source-расхождение:** HTTP client допускает только status200,
-тогда как [RFC9110 §9.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3.6)
-переводит любой успешный2xx CONNECT в tunnel mode. Иной допустимый2xx будет
-отвергнут этим pin до inner handshake. Частота таких ответов и применимость
-к текущей поставке неизвестны.
+Есть точное расхождение нормы и реализации: HTTP-клиент принимает только 200,
+а [RFC9110 §9.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3.6)
+переводит любой успешный 2xx CONNECT в режим туннеля. Другой допустимый 2xx
+будет отвергнут этой версией до внутреннего рукопожатия. Частота таких ответов
+и применимость к действующему артефакту не установлены.
 
-Порядок HTTP-цепочки: `socket P→optional TLS(P)→proxy auth/CONNECT→TLS(I)→inner`.
-Inner TLS не защищает уже состоявшийся proxy-auth exchange. Ordinary CONNECT
-не реализует CONNECT-UDP; HY2 открывает outer UDP даже для прикладного TCP,
-а VLESS может нести свой inner UDP поверх TCP. Совместимость резервов нужно
-проверять на carrier и каждом socket-hop, не только на типе задачи пользователя.
+Порядок цепочки: `socket P→optional TLS(P)→proxy auth/CONNECT→TLS(I)→inner`.
+Внутренний TLS не защищает обмен с прокси, который произошёл до него.
+Обычный CONNECT не реализует CONNECT-UDP. HY2 использует внешний UDP даже
+для прикладного TCP; VLESS может переносить внутренний UDP поверх TCP.
+Поэтому запасные пути сравниваются по внешнему транспорту и каждому сокету,
+а не только по протоколу пользовательской задачи.
 
-## 5. Handoff и finite cases
+<a id="5-handoff-и-finite-cases"></a>
+## 5. Применение, переиспользование и непроверенные сценарии
 
-Адресаты TH-02/03/07/08, COM и platform owners. Reuse существующих dialers,
-resolver realms, auth-capability reporting и owner cancellation. Согласование
-corporate policy/identity остаётся условием сценария; новый auth stack или
-изменение маршрутов в этом исследовании не реализованы.
+**Что сохранить.** Существующие dialer, разделение DNS по сетевым областям,
+сообщение о поддерживаемой авторизации и отмену операций владельцем.
+Корпоративная политика и идентичность прокси остаются отдельными условиями.
+Новый стек авторизации или автоматическая смена маршрутов из анализа не следуют.
 
-Cases **NOT_RUN**: P-name/P-literal при v6-only с/без CLAT; E-name/E4 внутри
-CONNECT; explicit resolver над detour; stale Pref64 другого realm; P6/B4 UDP
-relay; unsupported/incomplete auth;200/иной2xx; TLS(P)/TLS(I) раздельные отказы;
-Stop во время handshake; общий P/NAT64 outage у двух E; successful small
-handshake при failed useful task. При неизвестной причине сохраняется unknown,
-а не «неверный пароль», DPI или независимость двух внешних адресов.
+**Цена решения.** Дополнительное разрешение имени и авторизация добавляют
+зависимости и запросы; UDP relay требует отдельного сокета и проверки доступности.
+Нужно сопровождать совместимость закреплённых библиотек и платформенных API.
+Численные затраты задержки, памяти и энергии этим разбором не измерены.
+
+**Связь с разработкой.** [План ПК](../../planning/knowledge-application/PC-PLAN.md):
+PC-03/05 — сетевой путь, рабочая сеть и DNS, PC-06 — совместимость транспорта.
+[План Android](../../planning/knowledge-application/ANDROID-PLAN.md): ANDR-03/05 —
+защищённый путь, физическая сеть и правила DNS. Сохраняются прежние адресаты
+TH-02/03/07/08 и COM. Реализованность каждого условия проверяется у владельца платформы.
+
+**Будущая приёмка (`NOT_RUN`).** Имя или литерал P в IPv6-only-сети с CLAT
+и без него; имя или E4 внутри CONNECT; явный resolver над detour; старый префикс
+другой сети; P6/B4 UDP relay; неполная или неподдержанная авторизация; 200
+и другой успешный 2xx; отдельные отказы TLS(P) и TLS(I); Stop во время
+рукопожатия; общий отказ P/NAT64 у двух E; успешное короткое рукопожатие
+при невыполнимой пользовательской задаче. Причина остаётся неизвестной,
+пока имеющиеся данные не различают пароль, сетевой отказ и вмешательство.

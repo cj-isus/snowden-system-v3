@@ -37,7 +37,7 @@ predecessor и различие mutation/acceptance/durable cut. Новая де
 
 Эта стадия находится **после**5.3.10 final-root expiry check. Intermediate
 roots, прошедшие old+new root quorum и N+1, принимаются/сохраняются раньше,
-на5.3.7–8. Timestamp после reset проверяется по5.4: подпись новой authority,
+на 5.3.7–8. Timestamp после reset проверяется по 5.4: подпись новой authority,
 версии относительно действующей trusted history, expiry, затем persistence.
 
 **Норма не даёт исчерпывающей boolean-функции** для key addition/overlap/
@@ -61,12 +61,12 @@ Threshold-only не назван здесь отдельным разрешен�
 3. Дополнительный opposing reference — **legacy go-tuf0.7.0**,
    commit `6ad7fe593e4042db3544c4b0fedbe66bac371c42`.
    Его reset predicate явно привязан к старой v1.0.19 и ongoing draft PR;
-   не копируется как реализация современной1.0.37.
+   не копируется как реализация современной 1.0.37.
 
 Два современных references имеют одинаково важный scope: root updates перед
 local timestamp load; lower-set комментарий «timestamp/snapshot cannot yet be
 loaded» **не** означает отсутствия прежнего cache на диске. В прочитанных full
-Go/Python workflow нет отдельного cache-deletion шага5.3.11. Повторная подпись
+Go/Python workflow нет отдельного cache-deletion шага 5.3.11. Повторная подпись
 старого cache может быть отвергнута **или** остаться достаточной — это решает
 конкретный envelope/новые authority, а не название функции `rotate_keys`.
 
@@ -108,13 +108,13 @@ freshness и отсутствие иных schema/budget отказов. Клю�
 
 | Переход role authority | Нормативный reset / выбранный scope | Допустимость exact old record и counterexample |
 |---|---|---|
-| S-only disjoint full replacement, T неизменён | Baseline принятого5.3.11: удалить оба T/S caches | Old timestamp signed T всё ещё Q=true; S-replacement не отзывает T. После completed reset timestamp может вернуться; old snapshot S может не пройти новую S′ подпись |
+| S-only disjoint full replacement, T неизменён | Baseline принятого 5.3.11: удалить оба T/S caches | Old timestamp signed T всё ещё Q=true; S-replacement не отзывает T. После completed reset timestamp может вернуться; old snapshot S может не пройти новую S′ подпись |
 | T и S disjoint replacement, old envelope содержит только old signatures | Разрешённая полноценная key rotation; оба caches reset | Old timestamp Q=false. Это конкретная гарантия paired recipe, не всех paired list diffs |
 | `2-of-{a,b,c}→2-of-{b,c,d}` | Spec не определяет detail reset predicate; current material-diff policy рассматривает как reset | Old M signed a,b →1/2, rejected; M signed b,c →2/2, acceptable. Одинаковый diff — противоположные Q |
-| Add d: `2-of-{a,b,c}→2-of-{a,b,c,d}` | Не приписывать норме auto-reset по addition. Current wrapper material-diff=true | Old M signed a,b проходит2/2; изменение множества не убирает старый quorum |
+| Add d: `2-of-{a,b,c}→2-of-{a,b,c,d}` | Не приписывать норме auto-reset по addition. Current wrapper material-diff=true | Old M signed a,b проходит 2/2; изменение множества не убирает старый quorum |
 | Remove a: `2-of-{a,b,c}→2-of-{b,c}` | Уменьшение набора требует explicit rotation policy, не inference по integer diff | M signed a,b отвергнут; b,c проходит. «Отозвано меньше threshold» не отвечает за every-record Q |
 | Threshold ↑: `2-of-{a,b,c}→3-of-{a,b,c}` | Ключи не изменены; отдельного reset-права в5.3.11 не установлено; current wrapper reset=false | M signed a,b отвергнут; a,b,c проходит. Даже если old cache не загрузится, forgetting version требует отдельного contract |
-| Threshold ↓: `3-of-{a,b,c}→2-of-{a,b,c}` | Threshold-only не самостоятельный reset; current wrapper reset=false | Каждое old envelope, удовлетворявшее3 distinct keys, проходит2. Меняется assurance, не выпускается право rollback |
+| Threshold ↓: `3-of-{a,b,c}→2-of-{a,b,c}` | Threshold-only не самостоятельный reset; current wrapper reset=false | Каждое old envelope, удовлетворявшее 3 distinct keys, проходит 2. Меняется assurance, не выпускается право rollback |
 | Новый root version/expiry/root-role keys, T/S authority неизменна | Нет online-role reset только от роста root version/root-only change | Старые T/S по-прежнему сравниваются с прежними floors; final root freshness отдельно |
 | KeyID relabel с тем же key material/scheme | Произвольный alias не считать spec-valid rotation: §4.3 требует correct computed ID; current policy дополнительно ограничивает Ed25519/fields | Same material не новая независимая authority. Old envelope без нового matching signature keyID может не пройти; с supported matching contributions может пройти. Alias acceptance не доказана для проекта |
 | Material reuse после удаления/re-add | Named keyID/name diff не доказывает новую secret custody; нужен valid canonical ID/scheme | Подпись старым материалом остаётся математически проверяемой при возврате той же authority; compromise не исцеляется переименованием |
@@ -182,12 +182,12 @@ timestamp envelope сохранил достаточный quorum. Это adopte
 - Old `2-of-{a,b,c,d}` → new `2-of-{c,d,e,f}`: revoked a,b=2, predicate true,
   но old M signed c,d всё ещё valid2/2.
 - Old `3-of-{a,b,c}` → new `3-of-{b,c,d}`: revoked a=1<3, predicate false;
-  любое envelope, подписанное **только old set**, имеет максимум2 new
+  любое envelope, подписанное **только old set**, имеет максимум 2 new
   contributions и rejected3/3. Additional future-key signatures меняют вывод.
 
 Поэтому legacy threshold-revocation code не готовая замена current policy;
 его cache-deletion table (T-only удаляет только timestamp) также не буквальная
-современная5.3.11 (оба caches). Source прямо ссылается на ongoing draft.
+современная 5.3.11 (оба caches). Source прямо ссылается на ongoing draft.
 
 ### 3.4. Сохранившийся compromised quorum — третья независимая проверка
 
@@ -243,11 +243,11 @@ T5 signatures достаточны под обоими root. Ни одного r
    cache, full `updater.New`/Refresh. `loadRoot` в pinned Go:487–521 проверяет
    R8 old+new quorum/N+1 и делает persistence до timestamp загрузки.
 2. В bare updater old T5 загружается через loadTimestamp:307–328; Q под R8=true.
-   Intended new T6 с snapshot reference1 отвергается относительно100 на
+   Intended new T6 с snapshot reference1 отвергается относительно 100 на
    UpdateTimestamp:141–145. Это cache pre-reset source trace.
 3. Current `retainedRoot` видит T/S material change. `retainedState:30–35` строит
    next(R8, empty T/S), затем exact-bound pointer T5 сравнивается с old bytes.
-   Guard `reset && bytes.Equal(stamp,previous.Cache[T])` на43–44 возвращает
+   Guard `reset && bytes.Equal(stamp,previous.Cache[T])` на 43–44 возвращает
    **rotation continuation**, не artifact proof. Это существенный существующий
    guard; bare updater observation не blanket product defect.
 4. `prepareVerifiedUpdate/update_delivery.go:87–103` может вызвать
@@ -269,7 +269,7 @@ T5 signatures достаточны под обоими root. Ни одного r
    Timestamp T5 становится допустимым **post-reset predecessor**, а не hidden
    resurrection pre-reset bytes.
 7. Предполагая подтверждённую platform запись этого predecessor, next pass
-   T6→snapshot1 получает1<100 и rejected. Восстановление не гарантировано одной
+   T6→snapshot1 получает 1<100 и rejected. Восстановление не гарантировано одной
    очисткой cache; создана другая допустимая история h_post.
 
 Это не новый target/EXE acceptance. При tail failure proofs не публикуются;
@@ -338,7 +338,7 @@ equivocation/immutable-signed-content rule и workflow acceptance требуют
 Обоснование necessity: один serialized `(R8,T5,empty snapshot)` совместим с
 h_pre «root сохранён, old T5 carried до completed reset» и h_post «reset completed,
 тот же T5 уже accepted снова». На T6→ref1 h_pre надо сначала выполнить pending
-reset, h_post должен соблюдать заново принятый100 floor. Одинаковый representation
+reset, h_post должен соблюдать заново принятый 100 floor. Одинаковый representation
 и разный обязательный ответ означают: сохранить различие, исключить одну историю
 protocol'ом либо честно не обещать автоматическую recovery-ветку.
 Не требуется новая signature/floor-server protocol.
@@ -369,7 +369,7 @@ image, не математический proof hardware antirollback или OS p
 - **Существующий противовес current adapter:** first retainedState может
   committed root+empty-cache образ даже при tail error, тем самым исключив
   carried-cache ambiguity. Это ограничительная policy до normative reset
-  completion, а не автоматический proof всей5.3.11. Она сохраняет root lineage,
+  completion, а не автоматический proof всей 5.3.11. Она сохраняет root lineage,
   не выдаёт new artifact; OS receipt/semantics требуют own acceptance.
 
 Поэтому «нужен новый pending field» не unconditional theorem. Если existing
@@ -387,14 +387,14 @@ transition obligation, обеспеченное existing journal или явны
 | T5 post-reset accepted/persisted, snapshot отказал | T5 floor остаётся; tail error не разрешает ещё раз очистить history без новой authorized transition | Nil artifact proof не означает отсутствие разрешённого predecessor |
 | Uncertain journal move/write retirement | Existing barrier/fault и source-CAS запрещают second owner/admission до reconcile | Не assume успешный/неуспешный native write по одному error |
 
-Current `filetxn.Store.Commit` изменён относительно27октября: journal-domain/
+Current `filetxn.Store.Commit` изменён относительно 27 октября: journal-domain/
 native writer/target pinning, BeforeCommit after staged records, checkTargets,
 commit point на удалении recovery barrier, retirement/fault semantics.
 `retainDeliveryProgress` использует **WithPreparedTransaction**, не прежний
 same-Manager-only snapshot callback. Были прочитаны эти exact current portions;
 полный kernel/FS/concurrent writer audit здесь **не выполнен**.
 
-На09:37:40Z обнаружен собственный input drift filetxn.go. Targeted diff09:38
+На 09:37:40Z обнаружен собственный input drift filetxn.go. Targeted diff09:38
 показал **только вводный комментарий**: explicit coherent readers WithRead и
 отсутствие locking у bare loaders. Commit/Recover body не изменён относительно
 нашего capture. Новый raw capture/version hash сохранён отдельно, прежний не
@@ -412,7 +412,7 @@ OS/VPN acceptance. Current trust boundary не объявляется слома
 
 | Ready component | Решение | Причина / цена / предел |
 |---|---|---|
-| Existing Go2.4.2 `Root.VerifyDelegate`, `TrustedMetadata.UpdateRoot/UpdateTimestamp`, full Updater | **REUSE** crypto и explicit workflow | Old/new root quorum и exact metadata checks уже готовы; не собственный verifier. Apache-2.0, Go≥1.25.0 (manifest проекта1.26); stage receipt/custody/platform checks отдельны |
+| Existing Go2.4.2 `Root.VerifyDelegate`, `TrustedMetadata.UpdateRoot/UpdateTimestamp`, full Updater | **REUSE** crypto и explicit workflow | Old/new root quorum и exact metadata checks уже готовы; не собственный verifier. Apache-2.0, Go≥1.25.0 (manifest проекта 1.26); stage receipt/custody/platform checks отдельны |
 | Current `retainedRoot/roleKeys` + retainedState continuation | **ADAPT contract**, без patch | Path-aware material diff полезен; threshold-only semantics и distinction A/Q/P explicit. OR path не equivalent old-record rejection; byte equality только narrow guard |
 | Existing four-target journal/WithPreparedTransaction | **CONDITIONAL REUSE** | Coherent root+cache image/CAS/retirement уже отдельный seam; для bounded fresh-root reset может исключить h_pre без fifth file/DB. Kernel/native durability и malformed-state coverage NOT_RUN |
 | Python7.0.1 verification result API + paired test recipe | **REFERENCE** | `Root.get_verification_result/verify_delegate` и `VerificationResult` показывают конкретные verified contributions. Apache-2.0 OR MIT, Python≥3.10; не добавлять Python runtime/second crypto stack ради reference |
@@ -428,7 +428,7 @@ atomic cut/journal или отдельным field **только если вы�
 Стоимость: bounded root-path/original-byte/provenance review, quarantine при
 uncertainty, более узкий supported recovery recipe, quorum/signature validation
 при chosen migration. Фактические CPU/RAM/IO/delay/billing не измерены и не
-поставлены0. Для packet preparation применимы существующие bounds. Root catch-up
+поставлены 0. Для packet preparation применимы существующие bounds. Root catch-up
 limit не доказательство latest. Old valid metadata и независимые часы не
 обеспечивают offline knowledge последнего revoke — прежний предел R05-010-B
 не переоткрыт и не отменён.

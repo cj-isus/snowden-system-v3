@@ -78,9 +78,9 @@ Robust interval расширяет `[Σa/n,Σb/n]` на `Γ_n/n+r_n`. Цена: 
 заранее выбранная CS. Другая историческая модель требует отдельного proof binding.
 
 **K2:** correction должна предшествовать running intersection и относиться к
-одному target. При α=2e^(-2), Nopt64, w1/2, истинных losses0, первых64 reported1
-и следующих64 reported0, Γ_k=min(k,64). Raw lower на64=7/8; raw running lower
-на128 минус current Γ128/128 остаётся≥3/8 и ложно исключает µ0. Corrected prefix
+одному target. При α=2e^(-2), Nopt64, w1/2, истинных losses0, первых 64 reported1
+и следующих 64 reported0, Γ_k=min(k,64). Raw lower на 64=7/8; raw running lower
+на 128 минус current Γ128/128 остаётся≥3/8 и ложно исключает µ0. Corrected prefix
 bounds перед пересечением не делают этой ошибки. Для меняющихся θ_k простое
 пересечение разных targets вообще не обосновано.
 

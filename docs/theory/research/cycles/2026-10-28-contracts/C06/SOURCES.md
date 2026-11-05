@@ -9,7 +9,7 @@ Root: `D:/SNOWDEN-SYSTEM-V3/`. Начальный manifest создан **09:11:
 `.artifacts/research/r28-contracts/C06/inputs-start.json`
 содержит SHA256/bytes/LastWriteTime32 адресных inputs;
 добавочные inputs — `.artifacts/research/r28-contracts/C06/inputs-additional.json`
-содержат ещё4. Сверка09:42:19Z — `.artifacts/research/r28-contracts/C06/freshness-review.json`:
+содержат ещё 4. Сверка 09:42:19Z — `.artifacts/research/r28-contracts/C06/freshness-review.json`:
 36/36 inputs неизменны,8 проверенных на том шаге local links существуют.
 Финальная сверка ссылок/четырёх выходных документов — `document-review-final.json`
 в том же C06 artifact namespace. HEAD не выдаётся за идентичность untracked tree.
@@ -94,7 +94,7 @@ toSdkSandboxUid не становятся public app APIs. Числовая фо
 
 ## 3. Public API/spec/method — SECTIONS_READ
 
-Web pages прочитаны28октября; точный first-read UTC для каждого web запроса не
+Web pages прочитаны 28 октября; точный first-read UTC для каждого web запроса не
 сохранялся. Dynamic references не имеют immutable SHA в этом пакете; publication/
 page-update date unknown, если ниже не указано иное. Fetch не является VPN probe.
 

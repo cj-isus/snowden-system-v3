@@ -1,6 +1,6 @@
 # R02-003 — exact sources и пределы повторного использования
 
-Срез начат в дополнительном окне25 октября UTC, оформлен **26 октября2026**.
+Срез начат в дополнительном окне 25 октября UTC, оформлен **26 октября 2026**.
 Пути captures сохранены по дате старта; INDEX — `.artifacts/research/theory-02/2026-10-25-r02-003/INDEX.json`.
 
 ## Исходники
@@ -43,8 +43,8 @@ Root LICENSE/Cargo lookup не дал usable source; **лицензия artifact
 | [Witwer/Holland/Hopper, WPES2022](https://www-users.cse.umn.edu/~hoppernj/padding_delay_wpes.pdf), DOI10.1145/3559613.3563207 | Padding-only может создавать queueing delays в simulated Tor deployment; не живое измерение нашего VPN |
 
 Бумажные ручные traces/формулы REPORT — вывод автора R02, не результаты этих
-исследований. Локальные7 snapshots в INDEX привязывают выводы к сохранённой теории,
-renderer/manifest/native lock и неизменённому002; окончательная drift-сверка —
+исследований. Локальные 7 snapshots в INDEX привязывают выводы к сохранённой теории,
+renderer/manifest/native lock и неизменённому 002; окончательная drift-сверка —
 REVIEW.json рядом. Никакого сканирования, тестирования, симуляции, native/live или
 чтения профилей/ключей/логов не было. Исправленный путь theory-02 соблюдён;
 в ошибочный theory-0X этот чат не писал и чужие файлы не чистил.

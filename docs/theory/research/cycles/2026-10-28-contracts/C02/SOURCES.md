@@ -102,4 +102,4 @@ HTML прочитан через web tool; TXT тех же четырёх RFC п
 
 ## S8. Проверка в конце
 
-`REVIEW-DRAFT.json`, 09:14:21Z:28 named remote/local source records, несовпадений0;15 matrix rows; missing local links0;18 local/baseline inputs без drift. Последующий FINAL-REVIEW фиксирует конечные doc hashes и повторную статическую сверку. Числа относятся к этой области, не ко всему репозиторию/артефакту. Документ не присваивает scientific ACCEPTED или product PASS.
+`REVIEW-DRAFT.json`, 09:14:21Z:28 named remote/local source records, несовпадений 0;15 matrix rows; missing local links0;18 local/baseline inputs без drift. Последующий FINAL-REVIEW фиксирует конечные doc hashes и повторную статическую сверку. Числа относятся к этой области, не ко всему репозиторию/артефакту. Документ не присваивает scientific ACCEPTED или product PASS.

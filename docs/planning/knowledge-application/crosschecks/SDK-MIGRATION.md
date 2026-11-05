@@ -24,12 +24,13 @@ Current source даёт основу, но не runtime-приёмку:
 - Android имеет `ProfileTrustDriver.inspect/verifyForApply`, coordinator/store/
   checkpoint fences, но **production driver отсутствует**; `SnowdenApplication`
   его не создаёт (source — `android/app/src/main/kotlin/org/snowden/android/app/SnowdenApplication.kt`:76).
-- `shared/adaptive` уже существует как отдельный pure Go module/API1; trust
-  module/роль **не зарегистрированы** в `.harness/ownership.json`.
-  Proposal FIVE-STREAMS/TRUST — `docs/tasks/FIVE-STREAMS/TRUST.md` — prerequisite,
-  не разрешение создать роль или код.
+- На срезе 28 октября `shared/adaptive` существует как отдельный чистый Go module/API1.
+  Наличие этой policy не доказывает готовность переносимого trust entrypoint.
+  Извлечение и интеграция SDK требуют фактического владельца и согласованных
+  контрактов; историческое предложение — `docs/tasks/FIVE-STREAMS/TRUST.md` —
+  само по себе не разрешает создать роль или код.
 
-### Минимальный dependency graph
+### Минимальный граф зависимостей
 
 ```text
 platform capture / explicit approval / owned bytes
@@ -68,7 +69,7 @@ Manager. Adaptive не импортирует trust/verifier; платформе
 | Metadata multirepo agreement не mapping authority/custom/governance. R05-006/007, continuity§4–6 | Current ordinary delivery single-repo, retained root/caches; no production multirepo caller established | **Defer.** Не новая mandatory subsystem. Если выбран required multi-approval, отдельно explicit artifact identity/all required descriptors/whole mapping authority; plain Hashes.Equal не protocol-wide agreement |
 | Existing eligibility/evidence/budgets. adaptive API — `docs/adaptive/API.md` | shared/adaptive Eligible/Rank/Prefer/ComposeEvidence/PlanFailover/SettleFailover/retry/background; ADP-002…006 | **Reuse, do not duplicate.** Trust предоставляет authority/restriction outputs; platform передаёт existing adaptive DTO. Нет второго scorer, schedule, observer, health-history DB или общего “trust confidence” |
 
-## 3. Component-level extraction, без замены клиента
+## 3. Извлечение по компонентам с сохранением клиента
 
 ### 3.1. Что переносимо, а что смешано с platform I/O
 
@@ -365,12 +366,13 @@ Publisher CLI подписывает/выдаёт по своей authority/cust
 как администратор устройства. Миграция его pure codecs отдельна от размещения
 privileged issuer keys.
 
-**Android:** URI/Binder/provider intake, CE/noBackup/Keystore/storage CAS,
-ProfileClock wall/elapsed/boot validation, coordinator cancellation/owner lifetime,
-JNI input/output copies, whole AAR/native revision compatibility, PackageManager
-signer/current profile/DPC, approved renderer и one-shot RuntimeSourceProvider,
-worker/network/app epochs, fd/protect/bind/lockdown/protected egress. AES open/
-local constructor/consent не заменяют native trust proof.
+**Android:** приём URI/Binder/provider; CE/noBackup/Keystore и CAS хранилища;
+проверка wall/elapsed/boot в ProfileClock; отмена coordinator и время жизни владельца;
+копирование входов/выходов JNI; совместимость полного AAR и native revision;
+PackageManager, подписант, текущий профиль/DPC; одобренный renderer и однократный
+RuntimeSourceProvider; epoch worker/сети/приложения; fd/protect/bind/lockdown и
+защищённый выход. Расшифрование AES, локальный конструктор или согласие пользователя
+не заменяют native trust proof.
 
 **Adaptive:** existing candidate/rank/preference/evidence/budget operations.
 Не переносить туда reset policy, signing/current authority или storage. Platform
@@ -445,12 +447,12 @@ strict no-default driver. Не выбрасывать их ради «общег
   [PLAN](../../../PLAN.md) TH-03/TH-08/OFF-04/06,
   ANDROID-PLAN — `docs/ANDROID-PLAN.md` AND-04-S4b/AND-13/14.
 
-Применение основано на **81 реально прочитанном frozen unit** с exact IDs/body
-ranges и отдельных current source cuts; это scoped SDK crosscheck, не полный
-просмотр2698 units. Пять body identities R05-009 совпадают, но whole-source
-snapshot требует reconcile. Все16 late units перечислены как непрочитанные;
-они не объявлены отсутствующими или автоматически covered. Hashes/conflicts/
-coverage находятся в `.artifacts/planning/knowledge-application/2026-10-28/coverage/Z07.json`,
-`results/Z07.json` и `captures/Z07/` того же private каталога.
-Это crosscheck proposal; научные claims, изменение планов и право на реализацию
-утверждает соответствующий владелец отдельно.
+Это ограниченное сопоставление выбранных материалов и исходников 28 октября.
+Совпадение отдельных тел R05-009 не устанавливает идентичность полного снимка;
+поздние материалы данным разбором не прочитаны и не считаются отсутствующими
+или автоматически подтверждёнными. Общее сопоставление и актуальные этапы
+сохранены в двух планах платформ. Предложение границы SDK не меняет научный
+статус исходных утверждений и не доказывает его реализацию.
+
+<a id="минимальный-dependency-graph"></a>
+<a id="3-component-level-extraction-без-замены-клиента"></a>

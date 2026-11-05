@@ -57,11 +57,11 @@ Connectivity `627eb3c63e7c7cb3cb9f8ea319e4bb1676079c3a`. Новая загруз
 API29/API34 Process sources — release-tag references, не checked whole platform.
 
 37selected local inputs captured последовательно, не atomic tree. Первоначальные
-15source-lock comparisons совпали. При09:50:06Z обнаружены concurrent изменения
+15source-lock comparisons совпали. При 09:50:06Z обнаружены concurrent изменения
 wiring/source-lock: sourceRevision3, добавлены Box.Start error-result и
 StartedService observer-close fixes. Сохранены initial и review bytes/diff.
 Strict-owner/mapping hunks не изменены; новая ошибка/closure semantics не
-объявлены executed или build-compatible. На10:03:02Z те же3files обновились
+объявлены executed или build-compatible. На 10:03:02Z те же 3files обновились
 для constant E.Cause вместо raw error/panic output; final dated captures9812byte
 patch/source-lock/README сохранены, не являются promise неизменного checkout.
 Точная финальная сверка — STATUS.
@@ -92,7 +92,7 @@ patch/source-lock/README сохранены, не являются promise не�
 слишком сильный вывод. Неподдержан именно общий mapper нестандартных principals.
 
 Текущий reference включает более поздний `getAppUidForPrivateComputeCoreUid`
-(версия37.2); он **не** решение для min29/target36 и не переносится в матрицу
+(версия 37.2); он **не** решение для min29/target36 и не переносится в матрицу
 как готовое API. Указание метода в текущем справочнике не доказывает его
 доступность на исследуемой платформе.
 

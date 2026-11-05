@@ -87,8 +87,8 @@ Android16 source pin. Изначально guessed GitHub mirror hardware/interf
 
 AOSP headers sampled in прочитанных files specify Apache-2.0.
 References копируются только в собственные artifacts, не в продукт.
-Первый wrong-path ConfirmationPrompt `keystore/java` дал404; исправлено на
-`core/java`. Этот404 не считается source verification.
+Первый wrong-path ConfirmationPrompt `keystore/java` дал 404; исправлено на
+`core/java`. Этот 404 не считается source verification.
 
 ## 4. Exact parser/verifier candidate: Android keyattestation
 
@@ -134,7 +134,7 @@ tests/security correctness не audited. Test files/генераторы не з
 - Source consumer search — только Android `.kt/.kts`, не реальные profile/vault,
   не deployed runtime. Actual authRequired=false подтверждён файлом, hardware
   level остаётся **UNKNOWN**.
-- Initial guessed `google/android-key-attestation` API запрос дал403;
+- Initial guessed `google/android-key-attestation` API запрос дал 403;
   correct `android/keyattestation` найден по ссылке официальной D1 и pinned.
   Ошибка не названа отсутствием verifier.
 - WebFetch отказ/таймаут → официальный HTTPS curl, **не `-k`**; TLS policy не
@@ -223,7 +223,7 @@ Candidate verifier pin не меняется: **34652d3df68b8d6887a6670b00eb0856
 - annotated tag object: **3b7c2ad8ce8dd471449ccbaee6d22f64c9816a38**;
 - peeled commit: **828a97be0f8d58108b140b77df8dc76b657f4a87**;
 - resolve read-only `git ls-remote`, exact codeload source fetched
-  **28.10.2026, примерно06:44–06:45Z**;
+  **28.10.2026, примерно 06:44–06:45Z**;
 - release publication/commit calendar date: **UNKNOWN** в этом срезе;
 - [LICENSE](https://github.com/google/gson/blob/828a97be0f8d58108b140b77df8dc76b657f4a87/LICENSE)
   **FULL_TEXT_READ Apache-2.0** (2026-10-28); Gson dependency closure licences
@@ -252,8 +252,8 @@ matrix conditional на actual ordinary DTO field adapter и разрешённ�
 
 | ID | Автор/организация, название, дата и URL | Реальная область прочтения / дата | Применение и предел |
 |---|---|---|---|
-| H1 | R. Fielding, M. Nottingham, J. Reschke (eds), IETF **RFC9111: HTTP Caching**, **июнь2022**, [официальный текст](https://www.rfc-editor.org/rfc/rfc9111.txt) | **SECTIONS_READ**, 28.10.2026 примерно06:45–06:48Z: §4.2.1 freshness lifetime, §4.2.3 age calculation, §4.2.4 stale reuse, §4.3.4 matching304 validation, §5.2.2.2 must-revalidate и §5.2.2.4 unqualified/qualified no-cache | Receipt time не snapshot origin time; Age+Date+transit/residence; successful matching304 способен refresh cache metadata; cache freshness не instant global knowledge |
-| H2 | T. Bray (ed), IETF **RFC8259: The JavaScript Object Notation (JSON) Data Interchange Format**, **декабрь2017**, [официальный текст](https://www.rfc-editor.org/rfc/rfc8259.txt) | **SECTIONS_READ**, 28.10.2026 примерно06:45–06:48Z: §4 Objects/unique names, §8.1 UTF-8, §9 parser limits located | Duplicate names SHOULD unique в RFC; stricter duplicate rejection — explicit application policy, не выдуманный MUST стандарта. Parser acceptance не равен Google status JSON schema |
+| H1 | R. Fielding, M. Nottingham, J. Reschke (eds), IETF **RFC9111: HTTP Caching**, **июнь 2022**, [официальный текст](https://www.rfc-editor.org/rfc/rfc9111.txt) | **SECTIONS_READ**, 28.10.2026 примерно 06:45–06:48Z: §4.2.1 freshness lifetime, §4.2.3 age calculation, §4.2.4 stale reuse, §4.3.4 matching304 validation, §5.2.2.2 must-revalidate и §5.2.2.4 unqualified/qualified no-cache | Receipt time не snapshot origin time; Age+Date+transit/residence; successful matching304 способен refresh cache metadata; cache freshness не instant global knowledge |
+| H2 | T. Bray (ed), IETF **RFC8259: The JavaScript Object Notation (JSON) Data Interchange Format**, **декабрь 2017**, [официальный текст](https://www.rfc-editor.org/rfc/rfc8259.txt) | **SECTIONS_READ**, 28.10.2026 примерно 06:45–06:48Z: §4 Objects/unique names, §8.1 UTF-8, §9 parser limits located | Duplicate names SHOULD unique в RFC; stricter duplicate rejection — explicit application policy, не выдуманный MUST стандарта. Parser acceptance не равен Google status JSON schema |
 
 English originals прочитаны как primary; русский перевод этих RFC **не искался
 и не заявлен прочитанным**. Они дополняют ранее реально прочитанную официальную
@@ -280,9 +280,9 @@ English originals прочитаны как primary; русский перево
   Acquisition, SnapshotEvidence, StatusOf, FreshnessDisposition, Decision.
   Это не код/protocol/бенчмарк, не current native protection и не ACCEPTED.
 - Прежние A/B/C/частичный D и PARTIAL_AT_CUTOFF сохранены как текстовый префикс;
-  новый результат относится к новой задаче28октября, не задним числом старого окна.
+  новый результат относится к новой задаче 28 октября, не задним числом старого окна.
 - Итоговый cut **2026-10-28T06:56:36Z**:10/10 Gson source/manifests hashes
-  unchanged; прежние3 авторских документа prefix-exact,8 локальных relative
+  unchanged; прежние 3 авторских документа prefix-exact,8 локальных relative
   paths без отсутствующих targets. `review-ready.json` и финальный
   `output-seal.json` — own artifacts. Не full anchors/external URLs/crypto test.
 

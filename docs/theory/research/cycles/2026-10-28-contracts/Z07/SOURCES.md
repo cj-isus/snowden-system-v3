@@ -38,9 +38,9 @@ Raw HTML и преобразованный readable text S1 сохранены �
 **f5edbde31e5507f46db2069402dc38903fe6d9d4**.
 Current `windows/go.mod:13` закрепляет v2.4.2; project Go1.26.
 
-Fresh [proxy module-info](https://proxy.golang.org/github.com/theupdateframework/go-tuf/v2/@v/v2.4.2.info)
-получен28.10.2026~08:56Z: Origin.URL/ref/hash и Time
-**2026-05-19T08:44:09Z**. Это publication record, не local binary attestation.
+[Запись происхождения модуля](https://proxy.golang.org/github.com/theupdateframework/go-tuf/v2/@v/v2.4.2.info)
+получена 28.10.2026 около 08:56Z: Origin.URL/ref/hash и Time
+2026-05-19T08:44:09Z. Это запись публикации, не идентичность локального бинарного файла.
 
 Все source URLs ниже addressed immutable commit, raw bytes captured own upstream.
 
@@ -64,7 +64,7 @@ Fresh [proxy module-info](https://proxy.golang.org/github.com/theupdateframework
 **49eb1da48c58cf0cbb0f2e490f7ad39fbd8c1f15**.
 Fresh GitHub [ref](https://api.github.com/repos/theupdateframework/python-tuf/git/ref/tags/v7.0.1)
 и [tag object](https://api.github.com/repos/theupdateframework/python-tuf/git/tags/c162c6113b90e26f6bffc81c59310384d68dcdd2)
-получены28.10~09:00Z: target commit и tagger date
+получены 28.10~09:00Z: target commit и tagger date
 **2026-09-01T12:02:05Z**. GitHub metadata не собственная crypto-verification tag.
 
 | ID | Exact pinned file | Прочитанное / depth |
@@ -92,7 +92,7 @@ Version0.7.0 label из named baseline; fresh legacy tag lookup не выпол�
 SECTIONS_READ219–36528.10~09:00Z: root/cache/final expiry, predicate
 `countDeleted(oldIDs,newIDs) >= oldThreshold`; role table T-only→timestamp,
 S→timestamp+snapshot, targets→snapshot+targets. Source explicitly cites old1.0.19
-и ongoing PR e50151…; table не уравнена с современной1.0.37. FULL_TEXT_READ
+и ongoing PR e50151…; table не уравнена с современной 1.0.37. FULL_TEXT_READ
 BSD-3-Clause licence. Два counterexamples REPORT§3.3 — manual set models,
 не исполнение legacy или утверждение actual compromised keys.
 
@@ -125,13 +125,13 @@ filetxn/secretvault/metadata относятся к windows/backend/. All links/c
 Selected source/rule captures16 files: before/copy/after SHA256 agreed at each
 capture, mid16/16 unchanged09:12:47Z, pre-handoff16/16 unchanged09:19:09Z.
 Later actual comparison в final review, не atomic repository snapshot.
-На09:37:40Z filetxn.go изменился; targeted diff09:38:19Z показал только
+На 09:37:40Z filetxn.go изменился; targeted diff09:38:19Z показал только
 package comment о WithRead/bare loaders, Commit/Recover body unchanged.
 Обновлённый capture `local/windows__backend__filetxn__filetxn-review.go` и
 `drift-filetxn.json` сохраняются отдельно, старые bytes остаются baseline.
 Implementation WithRead не audited; новая фраза комментария не runtime proof.
 Особенно важное drift-baseline: current filetxn и WithPreparedTransaction
-изменены относительно27oct текста; старый native/same-Manager-only description
+изменены относительно 27oct текста; старый native/same-Manager-only description
 не использовался как current proof.
 
 ## 7. Связанные научные материалы и paired review

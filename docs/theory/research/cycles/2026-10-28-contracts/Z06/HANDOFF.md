@@ -1,116 +1,129 @@
-# HANDOFF — R28-Z06: связанный revocation witness и operation gate
+# Статус отзыва: связанные доказательства и допуск операции
 
-Дата28.10.2026. **READY_FOR_REVIEW**, не scientific ACCEPTED.
+**R28-Z06, срез 28 октября 2026 года. Авторский статус — READY_FOR_REVIEW.**
+[Полный аргумент](REPORT.md) · [Источники](SOURCES.md).
 
-[REPORT](REPORT.md) · [SOURCES](SOURCES.md).
+Сохранённая [рецензия R28](../REVIEW-01.md) позже приняла только указанные области:
+REV-03 — потерю различия SUSPENDED/отсутствующий serial при проекции;
+REV-04 — уточнение связности и проверки текущего допуска. Она не принимает
+весь пакет и не опровергает полный исходный контракт с current authority.
 
-## Главный ответ
+## Краткий вывод
 
-Five-result contract сохраняет нужные категории, **но их отдельной правильности
-недостаточно** для operation gate. Нужны identity/custody отношения:
-результаты относятся к одному owned immutable evidence bundle, связанному с
-subject/root/scope/policy/intent; gate сравнивает current accepted history и
-повторно оценивает давность непосредственно при admission.
+Пять правильно названных результатов проверки недостаточны, если они
+относятся к разным данным, запросам или моментам. Нужен связанный набор
+использованных фактов, а непосредственно при admission — проверка актуальных
+истории, политики, намерения и допустимой давности.
 
-Сильнейший counterexample — поздний **старый Success** после **нового принятого
-deny**, затем error-to-old-cache-success. Истина старой цепочки сохранена,
-но current status-dependent permit не установлен. Если baseline уже требует
-такой gate-атомарной проверки под словом «current», counterexample запрещён:
-нужна precision/operational definition, не отбрасывание всей классификации.
+**Применимость:** адаптер статуса, неизменяемость доказательств и финальный
+допуск конкретного действия. **Предел:** не универсальный обход verifier,
+не текущий статус сертификата устройства и не мгновенный глобальный отзыв.
+Готовый интегрированный consumer и выполнение на устройстве здесь не установлены.
 
-## Проверенные named subclaims и предложенные verdicts
+## 1. Результаты и область предложений
 
-| ID | Evidence / новый результат | Рекомендуемая disposition |
+| ID | Что разобрано | Ограниченное предложение |
 |---|---|---|
-| **R28-Z06-A** | Exact Gson2.11.0→DTO→projection→checker, fresh10/10 bytes: SUSPENDED/unknown/time loss; null/coercion/DTO duplicates conditional, map duplicate и Reader EOF safeguards существуют; HTTP exception не штатный empty-set success | Поддержать scoped source/model lossiness; non-null/type declarations не runtime schema proof |
-| **R28-Z06-B** | Taxonomy alone не обеспечивает related witness/current gate. T1 accepted E1 deny overtakes pending E0 verification; T2 age expires even when revisions unchanged; T3 shared mutable set loses bytes-to-proof identity | **NEEDS_REVISION sufficiency interpretation**; сохранить пять категорий, добавить join/custody/current admission requirements |
-| **R28-Z06-C** | Gson strict streaming primitives vs Jackson2.18.3+NetworkNT1.5.9. Generic schema source skip `#` unknown properties; explicit loader and parser guards нужны. Licence Apache2 проверена; whole dep/security/runtime не audited | **REUSE_GSON_PRIMITIVES** for one fixed profile; **DEFER_GENERIC_SCHEMA_GUARANTEE** without separate ingress whitelist/acceptance |
+| R28-Z06-A | Gson2.11.0→DTO→projection→checker; десять критичных файлов совпали с прежними копиями. Теряются SUSPENDED/unknown/time. Null/coercion/DTO duplicates условны; map duplicate/Reader EOF/HTTP guards существуют | Сохранить ограниченный вывод о потере информации; non-null/type declarations не доказывают runtime schema. Позднее REV-03 относится лишь к названной проекции |
+| R28-Z06-B | Отдельные корректные категории не обеспечивают связанный набор и актуальный gate: E1 deny обгоняет E0, возраст истекает без смены revision, mutable set теряет идентичность | Уточнить толкование достаточности. Сохранить категории и добавить relation/custody/current admission. REV-04 не опровергает контракт, уже включающий эти условия |
+| R28-Z06-C | Строгие Gson primitives и альтернатива Jackson2.18.3+NetworkNT1.5.9; skip свойств с `#` и явные loader/parser guards | REUSE_GSON_PRIMITIVES для одной заданной схемы; DEFER_GENERIC_SCHEMA_GUARANTEE без отдельной входной проверки. Лицензии Apache2 прочитаны, весь состав и безопасность зависимостей не проверены |
 
-Рекомендации руководителю, не присвоенные глобальные verdicts. Внутри этой
-сессии baseline D ранее авторский: это **primary повторная самопроверка**, не
-внешняя независимая рецензия. Separate C05/lead decision необходим.
+Исходная D и её повторная проверка имеют общее авторство: это самопроверка,
+а не независимая внешняя рецензия. Число совпавших файлов не повышает
+научный статус остальных выводов.
 
-## Strongest opposing trace и guard
+## 2. Контрпример позднего старого успеха
 
-1. Под request I0 принят полный допустимый E0: s NotListed, chain/policy
-   constraints проходят; проверка ещё работает.
-2. Принят E1: s REVOKED. H1 должен исключать старый status-dependent permit.
-3. Следующий refresh даёт ошибку. E1 deny от этого не исчезает, E0 можно
-   хранить как историю с его original as-of.
-4. Поздний E0 callback C0 Success или fallback-lastSuccess публикуется после
-   E1, хотя все five-result labels формально truthful в своём времени.
-5. Без relation-to-head/current-gate caller допускает действие по E0.
+1. Для I0 принят допустимый E0: serial s NotListed, chain/policy проходят;
+   проверка ещё исполняется.
+2. Затем принят E1: s REVOKED. История H1 исключает прежний status-dependent permit.
+3. Следующий refresh ошибся. Ошибка не отменяет E1 deny; E0 может храниться
+   лишь как история со своим исходным as-of.
+4. Поздний C0 Success либо fallback-lastSuccess по E0 публикуется после E1.
+   Отдельные категории при этом могут правдиво описывать своё время.
+5. Без проверки связи с текущей историей caller допускает действие по E0.
 
-**Опровергает:** достаточность labels/individually correct values без связанного
-gate. **Не опровергает:** старую chain authenticity, full logical conjunction
-с effective current authority, политику законного bounded continuation,
-existing HTTP throw/signature/duplicate/EOF guards или работающий VPN.
-Никакого actual bypass/device/status endpoint experiment.
+Контрпример опровергает достаточность одних labels и отдельных значений.
+Он **не** опровергает подлинность старой chain, полный контракт с текущими
+полномочиями, допустимое ограниченное продолжение или существующие
+HTTP/signature/duplicate/EOF guards. Если исходное слово current уже включает
+финальную проверку, такая трасса запрещена самим контрактом.
+Эксперимент с устройством или реальным status endpoint не выполнялся.
 
-## Минимальный witness contract (PROPOSED, без новой БД/криптосхемы)
+## 3. Связанный результат W — предложение контракта
 
-- W связывает exact E и subject set, accepted history incarnation H, root/action
-  policy revision Q, operation intent I, chain binding и clock/expiry premises.
-- Все five results derived от W; latestAttempt error хранится отдельно от
-  selected old cached E. Wrong join «fresh acquisition + old map» невозможен.
-- Gate требует coherent source/subjects/immutable used data, current H/Q/I,
-  freshness valid **at admission**, status policy + chain/action constraints.
-- Если новый accepted deny предшествует admission — reject старый W.
-  If admission came first — действие/отмена после него по named in-flight policy;
-  instant global revocation/OS effect не обещаются.
-- Mutating callback/CAS/retry не включает irreversible effect в retriable
-  function. AtomicReference обеспечивает atomic reference update, не deep
-  immutable contents, file durability или remote action.
-- Read-only Set/val не custody. Операция читает owned immutable data или
-  эквивалентно guarded lease; restore/reboot/ABA не повторно активирует старую
-  incarnation/time proof. Epoch counter не лечит полностью откатанный state.
+- W связывает точные использованные E, subject set, incarnation принятой
+  истории H, root/action policy Q, intent I, chain и временные предпосылки.
+- Пять результатов выводятся из W. Последняя ошибка acquisition хранится
+  отдельно от выбранного старого кеша: новая дата запроса не освежает старую map.
+- Gate проверяет согласованные источник/subjects, неизменяемые данные,
+  текущие H/Q/I, давность на admission, status policy и chain/action constraints.
+- Новый принятый deny до admission отвергает старый W. Если admission был
+  раньше, действие и отмена после него подчиняются отдельно выбранной
+  in-flight policy; мгновенный эффект ОС или удалённый отзыв не обещаются.
+- Необратимый эффект не помещается в функцию CAS/update, которую можно вызвать
+  повторно. AtomicReference атомарно меняет ссылку, не делает содержимое
+  глубоко неизменяемым, не сохраняет файл и не выполняет удалённое действие.
+- Read-only Set/val не устанавливают владение. Нужны принадлежащие операции
+  неизменяемые данные либо эквивалентно защищённый lease. Restore/reboot/ABA
+  не создают новую действительность старого доказательства. Счётчик epoch
+  не лечит полностью откатанное состояние.
 
-Не требуется новый mandatory network service/telemetry; existing platform
-owner may hold the witness. Pure classification не становится permission owner.
+Отсюда не следует новая БД, обязательная сетевая служба или телеметрия.
+W может принадлежать существующему платформенному владельцу;
+чистая классификация не получает права разрешать операцию.
 
-## Остальные связанные cases TASK continuation
+## 4. Связанные ограничения
 
-- **Error-to-oldSuccess**, даже без error-to-emptySet, теряет последнюю ошибку
-  и возраст выбранного cache. Типизированный error нужен до UI/gate/fallback.
-- **Time queue**: rev=head equality не enough; разрешённая давность может истечь
-  при задержке, t_gate отдельный input.
-- **304**: cache key URL/method/Vary+validators. ETag opaque, не monotonic floor.
-  Header update legal only matching representation; failed refresh не reset age.
-- **Semantic partial**: JSON EOF success не source completeness. Incomplete200
-  допустим cache как incomplete по RFC, не как полный status snapshot.
-- **Roots**: anchor excluded из path checker, retirement/root provider отдельно.
-  Chosen JCA provider actual runtime unknown, algorithm-name registration не
-  аттестация поставщика каждого вызова.
-- **Schema reuse**: check type/required/enum before projection; generic
-  AdditionalPropertiesValidator skip `#` means root/entry whitelist still
-  нужен. PropertyNames entry guard не заменяет root extra-field guard.
+- **Error-to-oldSuccess:** даже без error-to-emptySet можно потерять последнюю
+  ошибку и возраст выбранного кеша. Ошибка должна дойти до UI/gate/fallback.
+- **Ожидание:** равенство rev=head недостаточно; разрешённый возраст может
+  истечь в очереди. Время gate — отдельный вход.
+- **304:** cache key учитывает URL/method/Vary и validators. ETag — opaque,
+  не монотонный status floor. Обновлять headers можно для соответствующего
+  representation; неудачный refresh не обнуляет возраст.
+- **Неполный смысл:** JSON EOF не подтверждает полноту status snapshot.
+  Incomplete200 может храниться как incomplete, но не выдаваться за полный ответ.
+- **Корни/provider:** anchor исключён из path checker; его retirement и root
+  provider рассматриваются отдельно. Имя алгоритма JCA не аттестует фактический
+  provider каждого исполнения.
+- **Схема:** type/required/enum проверяются до проекции.
+  AdditionalPropertiesValidator с пропуском `#` не даёт универсальный whitelist;
+  PropertyNames для serial map не заменяет проверку root/entry полей.
 
-## Exact ready reuse / licence / price
+## 5. Готовые решения, лицензии и цена
 
-- **Android keyattestation**34652d3df68b8d6887a6670b00eb0856090dae6d:
-  supplied Set/status callback/path verifier; manifest Gson2.11/Kotlin2.2/JDK21,
-  не drop-in Android toolchain17. Actual integrated consumer not found.
-- **Gson2.11.0**828a97be0f8d58108b140b77df8dc76b657f4a87:
-  ready strict JsonReader/TypeAdapter primitives; small explicit supported-schema
-  adapter needed, **not implemented here**; no default coercive DTO for trust.
-- **Jackson-core2.18.3**cc34e8d5b75d4c911c16f2bc87d6e13e42eafddd:
-  explicit duplicate detection before tree; StreamReadConstraints + actual
-  ingress-byte bounds. Defaults not global RAM bound.
-- **NetworkNT1.5.9**270df62471e6a0c564dc13ae6cf2bf4116916f82:
-  fixed local Draft7 schema, typeLoose/nullable disabled; map loader then
-  DisallowSchemaLoader, errors not ignored. Java8 and second Jackson/validator
-  stack. Generic guarantee deferred due scoped `#` keyword skip.
-- Apache2 LICENSE files прочитаны; transitive licence/security/cost measurements
-  absent. Memory/CPU overhead bounded only under named B/N/L/D/A/R premises;
-  values not guessed, no RSS/latency estimate promoted to product guarantee.
+| Основа | Что переиспользовать | Ограничение |
+|---|---|---|
+| android/keyattestation `34652d3df68b8d6887a6670b00eb0856090dae6d` | Supplied Set/status callback/path verifier как источник API и ограничений | Gson2.11/Kotlin2.2/JDK21 в манифесте, не готовая замена Android toolchain17; интегрированный consumer не найден |
+| Gson2.11.0 `828a97be0f8d58108b140b77df8dc76b657f4a87` | Строгие JsonReader/TypeAdapter primitives | Нужен явный адаптер одной схемы; он здесь не реализован. Coercive DTO не становится trust validation |
+| Jackson-core2.18.3 `cc34e8d5b75d4c911c16f2bc87d6e13e42eafddd` | Явная duplicate detection до tree, StreamReadConstraints | Нужны фактические входные byte bounds; defaults не общий предел RAM |
+| NetworkNT1.5.9 `270df62471e6a0c564dc13ae6cf2bf4116916f82` | Фиксированная локальная Draft7 schema, выключенные typeLoose/nullable, разрешённый map loader и DisallowSchemaLoader | Второй Jackson/validator stack, Java8; ошибки нельзя игнорировать. Общая гарантия схемы отложена из-за указанной ветви `#` |
 
-## Пройденные stages и proof boundaries
+Прочитаны Apache2 LICENSE. Transitive licence/security и измеренная цена
+не установлены. Аллокационная модель условна на B/N/L/D/A/R; это не измерение
+heap/RSS и не обещание задержки. Значения затрат не подставлены нулями.
 
-C05 REPORT §§2–3 прочитаны адресно; готовый HANDOFF при review отсутствовал. Независимая сверка с ним не заявляется.
+## 6. Применение и открытая приёмка
 
-Future finite cases **F1–F12 все NOT_RUN** (REPORT §10): no parser fixtures,
-Java/Gson/crypto/device/load/HTTP status probes; no real certs/keys/profiles/vault.
+Основное изложение — [границы доказательств поставки](../../../../architecture/RELEASE-EVIDENCE-BOUNDARIES.md)
+и [доверие](../../../../architecture/SAFETY-AND-TRUST.md).
+Практический маршрут: PC-02/08 [плана ПК](../../../../../planning/knowledge-application/PC-PLAN.md),
+ANDR-01/04 [плана Android](../../../../../planning/knowledge-application/ANDROID-PLAN.md).
+Выбор action/in-flight policy и реализация gate остаются у владельца платформы.
 
-**Остаток:** независимое принятие named claim; actual product caller и выбранная
-action/in-flight policy; runtime/provider/schema acceptance; durable/global
-resource proof и current endpoint headers/status **UNKNOWN**.
+Первоначально адресно прочитаны C05 REPORT §§2–3; готового HANDOFF тогда не было.
+Позднее научное решение учитывается отдельно, в своей области.
+F1–F12 в REPORT §10 — **NOT_RUN**: parser fixtures, Java/Gson/crypto,
+device/load/HTTP status probes, реальные certs/keys/profiles/vault не использовались.
+Не установлены фактический consumer, runtime/provider/schema acceptance,
+долговечность, общий предел ресурсов и актуальные endpoint headers/status.
+
+<a id="handoff--r28-z06-связанный-revocation-witness-и-operation-gate"></a>
+<a id="главный-ответ"></a>
+<a id="проверенные-named-subclaims-и-предложенные-verdicts"></a>
+<a id="strongest-opposing-trace-и-guard"></a>
+<a id="минимальный-witness-contract-proposed-без-новой-бдкриптосхемы"></a>
+<a id="остальные-связанные-cases-task-continuation"></a>
+<a id="exact-ready-reuse--licence--price"></a>
+<a id="пройденные-stages-и-proof-boundaries"></a>

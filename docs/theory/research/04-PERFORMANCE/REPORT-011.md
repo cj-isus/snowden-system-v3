@@ -1,6 +1,6 @@
 # R04-011 — Android Doze/App Standby, VPN FGS и энергия QUIC
 
-27 октября2026. **READY_FOR_REVIEW**, не ACCEPTED и не product/device PASS.
+27 октября 2026. **READY_FOR_REVIEW**, не ACCEPTED и не product/device PASS.
 Область: source/spec/model; device/energy измерения не выполнялись.
 
 ## 1. Пробел и точная область
@@ -102,69 +102,69 @@ Therefore «10s» is neither a fixed callback schedule nor a wire/NAT receipt:
 PTO can make it longer, peer idle can cap it, traffic reanchors it, queue/socket/
 network add delay, and blocked state changes the path.
 
-Clock source model (not shipped artifact attestation): quic-go monotime uses
-`time.Since`; explicit Go1.26.0 reference maps runtimeNano→nanotime→Linux arm64
-`CLOCK_MONOTONIC`, excluding suspend. Go Timer `when(d)` uses the same
-runtimeNano. Android authority uses `SystemClock.elapsedRealtime`, including
-sleep. Thus during deep suspend native transport duration does not age like
-Kotlin authority. On resume authority may already be expired while transport
-keepalive/idle deadlines have not advanced by the suspended interval. Existing
-callback/lifecycle fences recheck authority but cannot preempt an already-entered
-native call. Exact adopted AAR/Go remain unknown.
+Модель часов по исходникам, не идентичность поставленного артефакта:
+quic-go monotime использует `time.Since`. Справочная Go1.26.0-цепочка
+runtimeNano→nanotime→Linux arm64 `CLOCK_MONOTONIC` исключает suspend;
+Go Timer `when(d)` использует тот же runtimeNano. Android-полномочия опираются
+на `SystemClock.elapsedRealtime`, включающий сон. При применимости этого
+reference длительность transport не стареет во сне так же, как Kotlin authority.
+После resume полномочие может истечь, пока keepalive/idle не учли время сна.
+Lifecycle/callback guards перепроверяют полномочия, но не прерывают уже вошедший
+native call. Точный принятый AAR/Go в этом срезе не установлен.
 
 ### Strong alternatives / falsifiers
 
-- Different approved Go runtime/ABI clock behavior invalidates the Android arm64
-  reference transfer; pin receipt is mandatory.
-- Device never enters deep suspend because other workload keeps it awake: timer
-  might continue, but energy belongs to shared device state, not solely Snowden.
-- PTO > 6.67s makes `3/2*PTO > 10s`; the nominal keepalive is no longer 10s.
-- Peer traffic every <D suppresses standalone keepalive while carrier still has
-  outer traffic. Counting PINGs alone undercounts transport activity.
-- An accepted PING queue entry without successful UDP write does not refresh NAT.
+- Другие принятые Go runtime/ABI и семантика часов могут нарушить перенос
+  Linux-arm64 reference; нужна идентичность конкретного артефакта.
+- Если иная нагрузка не даёт CPU глубоко уснуть, таймер может продолжить работу,
+  но энергия относится к состоянию всего устройства.
+- При PTO > 6.67s величина `3/2*PTO > 10s`; номинальные 10s уже не период.
+- Трафик peer с интервалом<D подавляет отдельный keepalive, хотя внешний
+  трафик остаётся. Один счётчик PING не учитывает всю активность.
+- Принятие PING в очередь без успешного UDP write не обновляет NAT.
 
 ## 5. R04-011-C — upstream pause caller is not HY2 timer proof
 
-Pinned SFA commit `bc73504…` is a useful **reference**, not a compatible drop-in:
-it registers `ACTION_DEVICE_IDLE_MODE_CHANGED` and calls libbox
-`CommandServer.pause()/wake()`. Pinned libbox1.13.19 maps these calls to
-`PauseManager.DevicePause/DeviceWake`. The default manager only changes pause
-channels and invokes registered callbacks. `pause.RegisterTicker` demonstrably
-stops/resets the URL-test ticker. In the searched exact HY2/quic-go path no
-PauseManager callback/register call was found.
+SFA `bc73504…` — полезный ориентир вызывающего кода, не готовая замена.
+Он регистрирует `ACTION_DEVICE_IDLE_MODE_CHANGED` и вызывает libbox
+`CommandServer.pause()/wake()`. В libbox1.13.19 это
+`PauseManager.DevicePause/DeviceWake`. Менеджер меняет pause channels и вызывает
+зарегистрированные callbacks; `pause.RegisterTicker` останавливает/reset URL-test.
+В названной HY2/quic-go области подписка PauseManager не найдена.
 
 Therefore:
 
-- source proves a real Android lifecycle-to-pause caller;
-- source does **not** prove that quic-go connection Timer/PTO/HY2 PING is stopped;
-- current Snowden facade has no such caller;
-- copying SFA code would also conflict with current ownership/safety seams, and
-  its license is GPL-3.0-or-later plus a name/association condition.
+- Найден реальный Android lifecycle→pause caller.
+- Не доказана остановка quic-go connection Timer/PTO/HY2 PING этим caller.
+- В прочитанной Snowden facade такого caller нет; это датированная граница.
+- Перенос всего SFA-кода не согласован с владельцем и защитой Snowden.
+  В прочитанной лицензии — GPL-3.0-or-later и условие о названии/ассоциации.
 
-Reuse choice: **reference/adapt only**. If a future pause seam is proposed, trace
-its exact consumers and define whether it closes/restarts carrier, stops optional
-URL tests, or pauses specific timers. A generic pause marker is not energy proof.
+Выбор переноса — только ориентир/адаптация. Будущий pause-интерфейс требует
+найти конкретных потребителей и определить смысл: закрыть/restart соединение,
+остановить необязательные URL tests или определённые таймеры.
+Общая отметка pause не доказывает экономию энергии.
 
 ## 6. Энергетический вывод без выдуманных чисел
 
 Let observations over matched interval Δ include:
 
-- `B_out`, `P_out`: actual outer UDP bytes/packets after socket write;
-- `K_due`, `K_queued`, `K_written`: keepalive due/queue/write stages;
-- `T_cpu`: app/native CPU time; callbacks/timers;
-- radio/WLAN rail energy `E_rail` where ODPM exists;
-- `R(t)`: RAT/signal/thermal/charging/metered/screen/interactive/LPS/Doze context;
-- useful completion/reconnect/handshake latency and failures.
+- `B_out`, `P_out`: фактические внешние UDP bytes/packets после socket write.
+- `K_due`, `K_queued`, `K_written`: отдельные due/queue/write стадии keepalive.
+- `T_cpu`: время CPU приложения/native, callbacks и таймеры.
+- `E_rail`: энергия radio/WLAN rail там, где доступен ODPM.
+- `R(t)`: RAT/signal/thermal/charging/metered/screen/interactive/LPS/Doze.
+- Полезное завершение, reconnect/handshake latency и отказы.
 
-`E_rail` is device-level and includes other applications. A difference-in-
-conditions estimator needs matched/preregistered workloads and context control;
-it cannot attribute every joule to K without an isolation/model assumption.
-P05's 3G tail numbers illustrate mechanism only. No percent/mAh saving follows
-from changing 10s, pause callbacks or packet count.
+`E_rail` относится к устройству и включает другие приложения. Сравнение
+условий требует согласованной заранее нагрузки и учёта контекста; без модели
+изоляции нельзя приписать каждый джоуль K. Числа3G tail из P05 лишь
+иллюстрируют механизм. Из изменения10s, pause callback или числа пакетов
+не следуют проценты/mAh экономии.
 
-Possible tradeoff is bidirectional: reducing idle packets may lower radio/CPU
-work, but can increase carrier expiry, reconnect, TLS/QUIC handshake, lost task
-latency and bytes. The outcome must include both steady idle and recovery cost.
+Обмен двусторонний: меньше idle-пакетов может уменьшить radio/CPU работу,
+но увеличить истечение соединения, reconnect, TLS/QUIC handshake, задержку
+потерянной задачи и байты. Исход должен учитывать и простой, и восстановление.
 
 ## 7. Reuse / adapt / reject
 
@@ -198,51 +198,54 @@ build tags, Android/OEM/patch/modem/carrier). Thresholds/stop rules задают
 | D9 OEM/patch matrix | At least one reference AOSP-like and owner-selected OEMs/patches, same script | Record policy divergence; no universal Android claim from one device |
 | D10 Safety during power transitions | Revoke/Stop/authority expiry/network block while sleep/resume/JNI entered | No renewed grant, parallel worker or direct fallback; protection wins over energy optimization |
 
-Privacy: collect local redacted counters and manual export only; no domains,
-credentials, app inventory or traffic content. ODPM device-level noise and
-censoring/missing outcomes are retained, not imputed to zero.
+Приватность: локальные сокращённые counters и только ручной экспорт.
+Без domains, credentials, app inventory и содержимого трафика. Шум измерения
+ODPM всего устройства, цензурированные и пропавшие исходы сохраняются;
+неизвестное не заполняется нулями.
 
 <a id="9-выводы-для-руководителя"></a>
 ## 9. Выводы для разработки
 
 ### R04-011-A — OS power-mode contract
 
-**READY_FOR_REVIEW (specification + pinned AOSP source):** a real foreground VPN
-UID is treated differently from an idle background app for ordinary Doze/App
-Standby network rules, but FGS/systemExempted is not universal exemption. LPS,
-CPU deep suspend, jobs/alarms, power allowlist and OEM/user restrictions remain
-separate. Current source does not request a wake lock or power exemption.
+**READY_FOR_REVIEW, спецификация и закреплённый AOSP:** настоящий foreground
+VPN UID отличается от idle background app в обычных Doze/App Standby network
+правилах. FGS/systemExempted не дают универсального исключения: LPS, сон CPU,
+jobs/alarms, power allowlist и OEM/user ограничения рассматриваются отдельно.
+В исходном срезе Snowden не запрашивал WakeLock или power exemption.
 
 ### R04-011-B — QUIC timer contract
 
-**READY_FOR_REVIEW (pinned source model):** HY2's 10s is a config input to a
-receive-anchored/PTO-bounded timer, not fixed wire traffic or energy rate. Exact
-formula/stages are in §4. On explicit Go1.26/Linux-arm64 reference the clock
-excludes suspend; this does not attest the future Android AAR.
+**READY_FOR_REVIEW, модель закреплённых исходников:**10s HY2 — вход
+receive-anchored/PTO-bounded таймера, не фиксированный внешний трафик
+или расход энергии. Формула и стадии — §4. Go1.26/Linux-arm64 reference
+исключает suspend; он не подтверждает будущий Android AAR.
 
 ### R04-011-C — reuse boundary
 
-**READY_FOR_REVIEW (pinned OSS source):** SFA demonstrates Android Doze→libbox
-pause/wake integration, but pinned PauseManager does not establish HY2/quic-go
-timer suppression; direct HY2 registration was not found in named source scope.
-Reference/adapt, not copy/drop-in.
+**READY_FOR_REVIEW, закреплённые OSS-исходники:** SFA показывает Doze→libbox
+pause/wake. PauseManager сам не доказывает подавление HY2/quic-go timer;
+регистрация HY2 не найдена в названной области. Это ориентир для адаптации,
+не совместимая прямая замена.
 
 <a id="10-предлагаемая-вставка-в-общую-теорию-руководитель-решает"></a>
 ## 10. Предлагаемый вывод для общей теории
 
-> Android VPN foreground service, App Standby active status, Doze network
-> allowance, power allowlist and Low Power Standby are separate contracts. In
-> Android16 source foreground process state clears ordinary Doze/App-standby
-> network reasons; LPS can still disable network and ignore wake locks for FGS.
-> FGS itself does not acquire a wake lock. HY2's nominal10s keepalive is
-> `last receive + max(min(period,idle/2),1.5*PTO)`, then queue→socket→network;
-> it is not a fixed radio wakeup or NAT receipt. Energy claims require exact
-> artifact plus matched device/RAT/power-state measurement including reconnect
-> cost; pause APIs count only after tracing their concrete consumers.
+> Foreground service VPN, App Standby active, разрешение сети Doze, power
+> allowlist и Low Power Standby — разные контракты. В Android16 source
+> foreground state снимает обычные Doze/App Standby network reasons; LPS может
+> запрещать сеть и игнорировать WakeLock для FGS. Сам FGS не приобретает WakeLock.
+> Номинальные 10s HY2 соответствуют
+> `last receive + max(min(period,idle/2),1.5*PTO)`, затем queue→socket→network.
+> Это не фиксированное пробуждение радио и не NAT receipt. Энергетический вывод
+> требует точного артефакта, сопоставимых device/RAT/power-state измерений
+> и цены reconnect; pause API учитывается после проверки реальных подписчиков.
+
+Подробное продолжение от 28 октября — [таймер HY2 и pause](../cycles/2026-10-28-contracts/Z05/REPORT.md).
 
 ## 11. Остаток знания
 
-Unknown: exact accepted AAR/Go clock, actual process state under each OEM, whether
-LPS is enabled/exempts VPN, real radio/CPU/battery cost, NAT lifetimes, SFA pause
-coverage outside searched paths, and comparative value of any new seam. These
-unknowns are not zeros and are not product bugs by themselves.
+Не установлены точный принятый AAR и его Go clock, process state на разных OEM,
+включение/исключения LPS для VPN, цена radio/CPU/батареи, сроки NAT, покрытие
+SFA pause за пределами указанного поиска и сравнительная польза нового
+интерфейса. Неизвестное не равно нулю и само по себе не является дефектом продукта.

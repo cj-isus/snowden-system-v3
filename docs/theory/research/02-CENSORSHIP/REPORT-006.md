@@ -1,8 +1,8 @@
 # R02-006 — framing, оптимизированный IO и ложная атрибуция блокировки
 
-26 октября2026 · **READY_FOR_REVIEW**.
-[Источники](SOURCES-006.md). Окно до `10:03:26Z`.
-Это следующий вопрос после005: одинаков ли protocol contract у всех IO variants,
+26 октября 2026 · **READY_FOR_REVIEW**.
+[Источники](SOURCES-006.md).
+Это следующий вопрос после 005: одинаков ли protocol contract у всех IO variants,
 через какие callers они доступны и что можно ошибочно принять за DPI?
 
 ## 1. R02-13 — разные writers имеют разные HMAC/framing semantics
@@ -36,7 +36,7 @@ Receiver `verifyApplicationData` вычисляет тот же t до доба�
 
 ### Размер record зависит от варианта API
 
-Обычный Write режет P на части не больше16384 bytes. WriteBuffer и WriteVectorised
+Обычный Write режет P на части не больше 16384 bytes. WriteBuffer и WriteVectorised
 записывают длину всего buffer/aggregate в16-bit поле и не повторяют эту нарезку.
 Поэтому есть два отдельных условия, которые нельзя заменить одним «buffer valid»:
 
@@ -44,7 +44,7 @@ Receiver `verifyApplicationData` вычисляет тот же t до доба�
   больше предела TLS1.3 ciphertext16640. ShadowTLS reader этот предел отдельно
   не проверяет; поток может быть принимаем своим peer и всё же иметь наблюдаемое
   несоответствие TLS camouflage. [RFC8446 §5.2](https://www.rfc-editor.org/rfc/rfc8446.html#section-5.2).
-- Для L=65532 `4+uint16(L)` даёт0 по modulo65536, хотя далее идёт65536 body bytes.
+- Для L=65532 `4+uint16(L)` даёт 0 по modulo65536, хотя далее идёт 65536 body bytes.
   Это уже рассогласование собственного framing. Для vector aggregate аналогично.
   Размеры — ручные граничные модели, buffers не создавались/не исполнялись.
 
@@ -82,12 +82,12 @@ copyWaitVectorisedWithPool. CreateVectorisedWriter распознаёт ShadowTL
 
 Не установлено, что конкретный Windows TUN stack, socket wrappers, source reader,
 forceSTDIO/LowMemory и направление в пользовательском runtime выберут эту ветку.
-Число512000 — source threshold copy loop, **не измеренный порог блокировки**.
+Число 512000 — source threshold copy loop, **не измеренный порог блокировки**.
 Обычный local proxy/TCP source и native TUN path нельзя объявить одинаковыми.
 
-Уже отклонённая по confidentiality композиция004 не становится приемлемой после
+Уже отклонённая по confidentiality композиция 004 не становится приемлемой после
 одного исправления IO; её quarantine proposal сохраняет приоритет. Здесь source
-gap полезен для приёмки любых будущих wrappers/candidates, не для легализации004.
+gap полезен для приёмки любых будущих wrappers/candidates, не для легализации 004.
 
 ## 3. R02-14 — ошибка раннего chunk может исчезнуть из результата
 

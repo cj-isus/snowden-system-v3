@@ -1,5 +1,10 @@
 # Windows: применение теории защиты, восстановления и рабочей сети
 
+**Вывод:** уточнять существующие владельцев ресурсов и отображение результатов;
+новый контроллер не требуется. **Применение:** [ПК, этапы 01 и 03–07](../PC-PLAN.md).
+**Ограничение:** описанные пробелы относятся к исходникам 28 октября; их наличие
+после изменений проверяется по плану и реестру владельца Windows.
+
 ## Состояние кода на source cut 2026-10-28
 
 Windows-клиент уже имеет существенную основу, которую не следует заменять новым
@@ -45,89 +50,91 @@ controller или вторым daemon:
 
 ## Приоритетная последовательность компонентных изменений
 
-### W0. Зафиксировать frozen producer contracts до UI и новых network features
+### W0. Зафиксировать контракты наблюдений до UI и новых сетевых функций
 
-**Owner:** Windows client core. **Plan:** FR-009/010, OFF-01/02/03/05.
+**Владелец:** Windows client core. **Пункты плана:** FR-009/010, OFF-01/02/03/05.
 
-Reuse current `operationID`, manager identity/generation, session/network epoch,
-process owners and diagnostic reservations. Define compact internal receipts:
+Переиспользовать существующие `operationID`, идентичность/поколение manager,
+epoch сессии/сети, владельцев процессов и резервирования диагностики.
+Компактные внутренние свидетельства должны отражать:
 
-- `LifecycleReceipt`: intent, owner/generation, applied config/session, phase,
-  cleanup disposition (`confirmed | retained-uncertain | not-attempted`), time scope.
-- `ProtectionReceipt`: mode, WFP policy generation, observed LUID/config/selector,
-  evidence kind (`lifecycle-external | periodic-local | unavailable`), observation age.
-- `SettingsReceipt`: actor/owner token, exact before fingerprint, exact owned value,
-  mutation generation, write/readback result, conflict/unknown, cleanup result.
+- `LifecycleReceipt`: намерение, владелец/поколение, применённые config/session,
+  фаза, исход очистки (`confirmed | retained-uncertain | not-attempted`) и время наблюдения.
+- `ProtectionReceipt`: режим, поколение WFP policy, наблюдённые LUID/config/selector,
+  вид свидетельства (`lifecycle-external | periodic-local | unavailable`) и его возраст.
+- `SettingsReceipt`: actor/owner token, точный исходный fingerprint, записанное значение,
+  поколение изменения, результат записи/readback, conflict/unknown и исход очистки.
 
-These are frozen semantic contracts first; final DTO names are developer-owned.
-No second lifecycle owner, no database and no generic event bus.
+Сначала фиксируется смысл контрактов; итоговые имена DTO выбирает владелец реализации.
+Второй владелец lifecycle, БД и общая шина событий для этого не требуются.
 
-### W1. Proxy settings owner and heal precondition — first code slice
+### W1. Владение настройками proxy и условия восстановления
 
 **Owner:** `windows/backend/core`, then App facade. **Plan:** OFF-03/05,
 COM-06/07; protection implications FR-009/010.
 
-1. Replace loose `ProxySnapshot{values,originalSet}` with an owner-scoped transaction:
-   exact presence/value for ProxyEnable/ProxyServer/AutoConfigURL, operation/session
-   generation and canonical owned target. Do not infer owner from `127.0.0.1:1080`.
-2. Before SetProxy, check authority/compatibility: managed/policy/per-connection
-   states that cannot be represented remain `unsupported/unknown`; no mutation.
-3. Apply under one retained owner. PAC deletion errors and all value writes require
-   readback. A partial Set is a cleanup obligation, not a successful configured state.
-4. Restore only if current values still equal this owner's expected written state.
-   External S2 yields `conflict_external_change`; preserve S2 and surface action.
-   Compare/readback is not atomic with MDM, so retain uncertainty if final read/write
-   cannot be established; never report “restored” on unknown.
-5. Startup/manual heal accepts only a durable owner receipt from a prior Snowden
-   session. Legacy heuristic remains **read-only diagnosis** or explicit user-confirmed
-   compatibility path; no automatic `ProxyEnable=0` from address+dead listener.
-6. Unify Go startup/manual/PowerShell UserMode around the contract or retire the
-   duplicate writer. Do not leave two uncoordinated registry writers.
+1. Вместо свободного `ProxySnapshot{values,originalSet}` нужна транзакция владельца:
+   точные наличие/значение ProxyEnable/ProxyServer/AutoConfigURL, поколение операции/сессии
+   и каноническая целевая конфигурация. Адрес `127.0.0.1:1080` не устанавливает владельца.
+2. До SetProxy проверяются полномочия/совместимость: непредставимые managed/policy/
+   per-connection состояния остаются `unsupported/unknown` и не изменяются.
+3. Изменение выполняется под одним удерживаемым владельцем. Ошибка удаления PAC и
+   запись каждого значения требуют readback. Частичный Set означает обязанность
+   очистки, а не успешно настроенное состояние.
+4. Restore разрешён, только если значения ещё равны ожидаемой записи этого владельца.
+   Внешний S2 даёт `conflict_external_change`: S2 сохраняется, интерфейс сообщает действие.
+   Сравнение/readback не атомарны относительно MDM; при неопределённости итог не «восстановлено».
+5. Автоматический/ручной heal принимает долговечное свидетельство прежней сессии Snowden.
+   Старая эвристика остаётся **диагностикой без записи** либо явно подтверждённым пользователем
+   режимом совместимости; адрес и мёртвый listener не разрешают автоматический `ProxyEnable=0`.
+6. Go startup/manual и PowerShell UserMode должны использовать один контракт;
+   дублирующий writer следует убрать, если согласовать его невозможно.
 
-**Cheapest sufficient slice:** owner token + exact expected-current compare/readback
-for current `ProxyManager`, disable auto-heal mutation when token missing. This
-preserves foreign proxy/PAC immediately without implementing enterprise proxy auth.
+**Минимально достаточное изменение:** owner token и точное сравнение ожидаемого
+текущего состояния/readback в существующем `ProxyManager`; без token auto-heal
+не меняет настройки. Это защищает чужие proxy/PAC без реализации корпоративной proxy-auth.
 
-### W2. Lifecycle/cleanup projection, not another controller
+### W2. Отображение жизненного цикла и очистки
 
 **Owner:** App/Manager/Engine. **Plan:** FR-009/010, OFF-01/02/03.
 
-- Thread `LifecycleReceipt` through Start/Stop/Reload/Switch result. Keep existing
-  manager/engine/helper owner objects; do not clear runtime or release WFP when any
-  retained owner is uncertain.
-- Distinguish `stop_requested`, `engine_retired`, `helpers_retired`,
-  `settings_restored/conflict`, `protection_released/retained`, and final outcome.
-- An accepted Stop or cleanup timeout is not terminal success. Automatic retry remains
-  disabled for cleanup uncertainty; explicit action may retry cleanup using original
-  owners. Parent late return cannot authorize successor publication.
-- Preserve source-implemented safeguards: old generation cannot publish; Stop intent
-  captured before waiting; probe reports bound to owner/session/epoch; WFP released
-  only after Manager/helper retirement succeeds.
+- Передавать `LifecycleReceipt` через результаты Start/Stop/Reload/Switch.
+  Существующие manager/engine/helper сохраняют владение; неопределённость не разрешает
+  очистить runtime или снять WFP.
+- Различать `stop_requested`, `engine_retired`, `helpers_retired`,
+  `settings_restored/conflict`, `protection_released/retained` и финальный исход.
+- Приём Stop и тайм-аут очистки не означают завершённый успех. При неопределённости
+  автоматический retry отключён; явное действие повторяет очистку с исходными владельцами.
+  Поздний возврат родителя не разрешает публикацию преемника.
+- Сохранять существующие source guards: старое поколение не публикует результат,
+  намерение Stop фиксируется до ожидания, пробы связаны с owner/session/epoch,
+  WFP снимается после успешного завершения Manager/helper.
 
-No need to implement Android SDK/accepted provider first; this is isolated Windows
-lifecycle work over existing contracts.
+Эта изолированная работа над lifecycle Windows использует существующие контракты
+и не требует предварительно завершить Android SDK или принятый provider.
 
-### W3. Effective route/DNS and working-network compatibility preflight
+### W3. Предварительная проверка маршрутов, DNS и рабочей сети
 
-**Owner:** render/config + Windows platform adapter; policy approval remains owner.
-**Plan:** COM-04/05/06/07, OFF-04/05/06, FR-001/008/011.
+**Владелец:** render/config и платформенный адаптер Windows; политику одобряет её владелец.
+**Пункты плана:** COM-04/05/06/07, OFF-04/05/06, FR-001/008/011.
 
-Build a **read-only preflight** before any settings mutation:
+До изменения настроек нужна **предварительная проверка без записи**:
 
-- intended task/profile scope; route and DNS suffix ownership; actual carrier
-  requirement (TCP proxy versus UDP QUIC); proxy P and endpoint E resolution realm;
-  WFP/app/LUID prerequisites; known corporate/foreign owner conflict; unknown fields.
-- Explain renderer candidate separately from OS-observed/applied outcome. RFC1918,
-  `.local` and `172.16/12` are not one LAN grant. mDNS/LLMNR/SMB and IPv6/link-local
-  remain unsupported until explicit policy/caller evidence.
-- For split DNS, use a signed/versioned namespace→resolver policy with terminal
-  default and network/profile scope. Do not rewrite NRPT/PAC/adapter DNS automatically.
-  Unknown or managed full-tunnel returns action barrier, not another transport retry.
-- Future enterprise HTTP proxy path is conditional TCP carrier support only; reject
-  silent default credentials, unlimited 407 retries and claims that CONNECT success
-  proves inner trust/protected egress/task success.
+- Предполагаемая область задачи/профиля, владельцы маршрутов и DNS-суффиксов,
+  требование carrier (TCP proxy или UDP QUIC), области разрешения proxy P и endpoint E,
+  условия WFP/app/LUID, известный конфликт с корпоративным/чужим владельцем и неизвестные поля.
+- Кандидат renderer отдельно от наблюдённого/применённого результата ОС. RFC1918,
+  `.local` и `172.16/12` не составляют единого разрешения LAN. mDNS/LLMNR/SMB,
+  IPv6/link-local требуют явной политики и свидетельства вызывающего пути.
+- Для split DNS — подписанная версионированная политика namespace→resolver с конечным
+  правилом по умолчанию и областью сети/профиля. Автоматически менять NRPT/PAC/DNS адаптера
+  нельзя. Неизвестный или управляемый full-tunnel возвращает требование действия,
+  а не запускает ещё один повтор транспорта.
+- Будущий корпоративный HTTP proxy условно поддерживает TCP carrier. Исключены неявные
+  default credentials и неограниченные повторы 407; успешный CONNECT не доказывает
+  inner trust, защищённый выход или завершение задачи.
 
-### W4. UI weak-to-strong ladder and NetGuard copy correction
+### W4. Точные состояния UI и формулировки NetGuard
 
 **Owner:** Go projection + Vue existing views/components. **Plan:** OFF-08,
 COM-02/07/11/12, TH-04/08.
@@ -156,22 +163,22 @@ COM-02/07/11/12, TH-04/08.
 5. Reuse existing backendState/poller generation and components; no router/store/UI
    framework. A11y/native WebView2 remains NOT_RUN.
 
-### W5. Resource and legacy NetGuard separation
+### W5. Разделение ресурсов клиента и старого NetGuard
 
 **Owner:** Windows/platform operations, not UI. **Plan:** COM-12, OFF-05/06.
 
-- Keep `DiagnosticProtected` and optional lanes; classify budget rejection as local
-  admission, not channel failure. One controller owns retries; PTO/HTTP/UI are not
-  additional independent recovery loops.
-- Inventory scheduled NetGuard DNS heal as a separate privileged legacy controller:
-  adapter selection, DoH endpoint probes, HKLM flags and DNS replacement are not
-  represented by App lifecycle/epoch/budget. Until an ownership/conflict/restore
-  contract exists, do not advertise it as Snowden protection or auto-recovery.
-- Prefer retiring or narrowing that script over importing it into App. If retained,
-  give it explicit admin policy scope, adapter identity/generation, previous DNS
-  state, conflict-safe restore, bounded network calls and separate UI status.
+- Сохранить `DiagnosticProtected` и необязательные линии. Отказ бюджета — отказ
+  локального допуска, а не неисправность канала. Повторами владеет один контроллер;
+  PTO/HTTP/UI не создают независимые циклы восстановления.
+- Отдельно учитывать старый привилегированный NetGuard DNS heal: выбор адаптера,
+  DoH-пробы, флаги HKLM и замена DNS не представлены lifecycle/epoch/бюджетом App.
+  Без контракта владения, конфликта и восстановления он не подтверждает защиту Snowden.
+- Предпочтительны сужение или прекращение использования скрипта. Если он сохраняется,
+  нужны явная административная область политики, идентичность/поколение адаптера,
+  прежнее состояние DNS, восстановление с учётом конфликта, ограниченные сетевые вызовы
+  и отдельный статус в интерфейсе.
 
-## Frozen contracts and dependencies
+## Минимальные контракты и зависимости
 
 | Contract | Minimal inputs | Outputs / consumers | Dependency and gate |
 |---|---|---|---|
@@ -182,73 +189,79 @@ COM-02/07/11/12, TH-04/08.
 | UI action | typed reason, evidence scope/age, current intent, allowed actor action | request receipt and later effect receipt; views/toasts | UI never owns authority; generation fences retained |
 | Recovery episode (future) | fixed goal/scope/time basis and task producer | pending/success/failure/unknown; local opt-in | Z09/C06 contract; not prerequisite for W0–W4 safety changes |
 
-Independent Windows deliverables W1, W2 and NetGuard projection corrections do not
-depend on full Android/SDK completion. Split-DNS/proxy transport implementation
-needs profile/security and platform compatibility, but read-only preflight and honest
-unsupported states can ship first.
+Изменения Windows W1/W2 и исправление отображения NetGuard не зависят от полного
+завершения Android/SDK. Реализация split-DNS/proxy транспорта требует согласования
+профиля, безопасности и платформенной совместимости; предварительная проверка без
+записи и точное состояние «не поддерживается» возможны раньше.
 
-## Strong opposing cases and guards to preserve
+## Контрпримеры и сохраняемые ограничения
 
-- Another VPN happens to use the same loopback address/port: address predicate is
-  not ownership. Existing nonmatching-port/external/PAC/live-listener guards are
-  retained but insufficient for mutation.
-- MDM/user changes proxy after Snowden writes it: expected-current conflict must
-  preserve new settings. A mutex inside process cannot serialize external actor.
-- Listener accepts TCP but is not usable SOCKS/Snowden: listener success is only a
-  port observation; no positive repair/protection conclusion.
-- Stop accepted while worker/helper close hangs: no successor/release; existing Job
-  owner and `cleanup_unconfirmed` guard win over UX convenience.
-- Network transition during probe: existing epoch/owner/intent publication rejects
-  observed stale report. TUN no-event remains unknown; do not “refresh” timestamp.
-- Private route through engine can work while direct app path is blocked; reverse
-  also possible with other WFP layers. Config intent is not effective outcome.
-- Proxy 200/browser works but connector auth/carrier/inner trust fails: report exact
-  stage, no password spray or automatic transport downgrade.
-- Scheduler ready/no-access and stale log event do not show current execution/effect.
-- User Stop ends intent but does not prove task completion or foreign policy removal.
+- Другой VPN использует тот же loopback/порт: совпадение адреса не устанавливает
+  владельца. Существующие ограничения для другого порта, внешнего proxy, PAC и живого
+  listener сохраняются, но не дают достаточных полномочий на изменение.
+- MDM/пользователь меняет proxy после Snowden: конфликт ожидаемого состояния сохраняет
+  новую запись. Mutex процесса не синхронизирует внешнего участника.
+- Listener принимает TCP, но не является рабочим SOCKS/Snowden: это только наблюдение порта.
+- Stop принят, а worker/helper завис при закрытии: преемник и освобождение запрещены;
+  действуют существующие Job owner и `cleanup_unconfirmed`.
+- Сеть меняется во время пробы: epoch/owner/intent отклоняют устаревший результат.
+  Отсутствие события в TUN не позволяет обновить время старого свидетельства.
+- Частный маршрут через engine может работать при заблокированном прямом пути приложения,
+  и наоборот при других слоях WFP. Конфигурация не доказывает фактический результат.
+- Proxy отвечает 200 или браузер работает, но auth/carrier/inner trust connector не проходят:
+  сообщается точный этап, без перебора паролей и автоматического ослабления транспорта.
+- Состояния планировщика ready/no-access и старое событие лога не доказывают текущий эффект.
+- Пользовательский Stop завершает намерение, но не доказывает завершение задачи или снятие чужой политики.
 
-## Future acceptance — all NOT_RUN
+## Будущая приёмка — всё NOT_RUN
 
-1. **Proxy ownership:** unchanged owned values; PAC present; partial Set; foreign S2
-   before restore/heal; competing writer during compare/readback; same address foreign
-   listener/dead owner; crash/reboot and missing receipt. Verify no foreign overwrite.
-2. **Lifecycle:** Stop/Disconnect/failure/restart/quit at every Start/Reload phase;
-   engine/helper uncertain close; both helper lanes; stale result; WFP retained/released
-   only by reason; successor forbidden until actual owners retire.
-3. **WFP/TUN:** static filter arbitration, reauthorization, pre-existing TCP and
-   one-way UDP, external provider/veto, BFE restart, IPv4/IPv6/DNS/reboot. Source
-   enum/transaction/route removal is not acceptance.
-4. **Route/DNS:** 192.168 versus excluded 172.16, IPv6/link-local/overlap, `.local`
-   unicast versus mDNS/LLMNR/SMB, split suffix/resolver loss, corporate full-tunnel,
-   proxy-named versus numeric endpoint, TCP versus HY2 UDP carrier.
-5. **Observer:** physical network changes under TUN/no event, sleep/resume, callback
-   loss, late report, network epoch ABA, periodic local observation versus lifecycle
-   external evidence.
-6. **Resources:** protected versus optional lanes; blocked network/IO callbacks;
-   queued writers/buffers/helpers/process memory and scheduler PowerShell work. Timeouts
-   do not refund work still running.
-7. **UI:** factual states, stale/unknown, cleanup/settings conflict, task statuses,
-   native WebView2 scaling/keyboard/screen-reader; wording comprehension. Browser/mock
-   is not OS acceptance.
+1. **Владение proxy:** неизменённая собственная запись; PAC; частичный Set; внешний S2
+   до restore/heal; конкурентная запись при compare/readback; чужой listener на том же
+   адресе; crash/reboot и отсутствие receipt. Чужие настройки не перезаписываются.
+2. **Lifecycle:** Stop/Disconnect/failure/restart/quit на каждой фазе Start/Reload;
+   неопределённое закрытие engine/helper и обеих helper lanes; поздний результат;
+   WFP снимается/сохраняется по причине, преемник ждёт фактического завершения владельцев.
+3. **WFP/TUN:** арбитраж статических фильтров, повторная авторизация, прежние TCP и
+   односторонний UDP, внешний provider/veto, перезапуск BFE, IPv4/IPv6/DNS/reboot.
+   Перечень исходников, транзакция и удаление маршрута не заменяют приёмку.
+4. **Маршруты/DNS:** 192.168 и исключённый 172.16; IPv6/link-local/overlap; unicast
+   `.local` и mDNS/LLMNR/SMB; потеря split suffix/resolver; корпоративный full-tunnel;
+   proxy по имени и числовой endpoint; TCP и HY2 UDP carrier.
+5. **Observer:** смена физической сети под TUN без события, sleep/resume, потеря callback,
+   поздний отчёт, ABA epoch, локальное периодическое и внешнее lifecycle-наблюдение.
+6. **Ресурсы:** защищённые и необязательные линии, блокирующие сетевые/IО вызовы,
+   очереди writers/buffers/helpers, память процесса и PowerShell планировщика.
+   Тайм-аут не возвращает бюджет ещё выполняющейся работы.
+7. **UI:** фактические состояния, stale/unknown, конфликт очистки/настроек, статусы задач,
+   масштабирование native WebView2, клавиатура, screen reader и понятность формулировок.
+   Браузер/mock не доказывает поведение ОС.
 
-## Existing plan routing and disposition
+## Связь с действующими пунктами плана
 
-- **P0 reuse/change:** FR-009, OFF-01/02 for barrier/process/cleanup ownership;
-  W1 proxy owner is a missing prerequisite before current auto-heal writes.
-- **P1:** FR-010, OFF-03/05 for operation/evidence/observer atomicity; COM-04/05/06/07
-  for route/DNS/work; COM-12 resources; OFF-08/UI projections.
-- **Later/deferred:** COM-09 quiet intent after safety receipts; COM-11 task readiness
-  after producer contract; COM-17 seamless/bonding remains deferred.
-- **Reject now:** broad LAN/direct fallback, automatic corporate policy changes,
-  default credential reuse, second controller/daemon/store, generic “protection active”
-  from Scheduler/port/readback, new database/telemetry framework.
+- **P0 — переиспользовать/уточнить:** FR-009, OFF-01/02 для барьера, процессов и очистки;
+  owner proxy W1 необходим до автоматических записей auto-heal.
+- **P1:** FR-010, OFF-03/05 для атомарности operation/evidence/observer;
+  COM-04/05/06/07 для маршрутов/DNS/рабочей сети; COM-12 для ресурсов; OFF-08 для UI.
+- **Позже:** COM-09 — quiet intent после safety receipts; COM-11 — готовность задачи
+  после контракта producer; COM-17 — бесшовность/bonding остаются отложенными.
+- **Не включать сейчас:** широкие LAN/direct fallback, автоматическую смену корпоративной
+  политики, неявные default credentials, второй controller/daemon/store, заявления о
+  защите из Scheduler/порта/readback и новую БД/платформу телеметрии.
 
-## Sources, coverage and limits
+## Источники и границы разбора
 
-Frozen knowledge unit coverage and dispositions are machine-readable in
-`.artifacts/planning/knowledge-application/2026-10-28/coverage/Z08.json`.
-Source cut and selected frozen excerpts are under the assigned private captures.
-Current code/plan snapshots were copied sequentially, not atomically. No executable,
-registry, WFP, proxy, DNS, NetGuard task or UI behavior was invoked. No tests/build/
-web/new research occurred. Estimates of implementation time, runtime overhead or
-field success are unknown; they are not filled with zero.
+Снимки исходников и планов на 28 октября получены последовательно, не атомарно.
+Этот разбор описывает их ограничения; позднейшее состояние проверяется по плану ПК.
+Срок реализации, runtime-расходы и полевой успех остаются неизвестными и не заменяются нулём.
+
+<a id="w0-зафиксировать-frozen-producer-contracts-до-ui-и-новых-network-features"></a>
+<a id="w1-proxy-settings-owner-and-heal-precondition--first-code-slice"></a>
+<a id="w2-lifecyclecleanup-projection-not-another-controller"></a>
+<a id="w3-effective-routedns-and-working-network-compatibility-preflight"></a>
+<a id="w4-ui-weak-to-strong-ladder-and-netguard-copy-correction"></a>
+<a id="w5-resource-and-legacy-netguard-separation"></a>
+<a id="frozen-contracts-and-dependencies"></a>
+<a id="strong-opposing-cases-and-guards-to-preserve"></a>
+<a id="future-acceptance--all-not_run"></a>
+<a id="existing-plan-routing-and-disposition"></a>
+<a id="sources-coverage-and-limits"></a>

@@ -360,7 +360,7 @@ E09 — только проект будущего matched comparison, не те
 > acceptance и useful/protected connection — разные состояния. После успешного
 > resolution с ech на всех endpoints generic non-SVCB fallback запрещён;
 > unauthenticated timeout не разрешает отключить ECH. FOCI2025 устанавливает
-> для московского AS50867 пути марта2025 составное условие Cloudflare-фильтра
+> для московского AS50867 пути марта 2025 составное условие Cloudflare-фильтра
 > (extension + outer SNI + destination Cloudflare range), а не current nationwide
 > ECH-block. Current Windows WS/CDN renderer не задаёт ech; его chrome-profile
 > содержит GREASE. uTLS adapter state не переносит ECHAccepted, поэтому false

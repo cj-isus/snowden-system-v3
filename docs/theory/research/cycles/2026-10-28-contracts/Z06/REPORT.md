@@ -129,7 +129,7 @@ E0 chain authenticity не ложна: ложен перенос её narrow res
 
 **Сильнейшая противоположная защита:** если baseline-фразу «current authority»
 понимать как gate-атомарное сравнение H/Q/I плюс статусный S(E) и пересчёт
-freshness, шаг6 невозможен. Тогда trace не опровергает полную logical conjunction,
+freshness, шаг 6 невозможен. Тогда trace не опровергает полную logical conjunction,
 а показывает недостающее operational definition её predicates. Вердикт
 NEEDS_REVISION scoped sufficiency, не отбрасывание entire five-result разделения.
 
@@ -364,7 +364,7 @@ default document/token limits unlimited; name/string defaults велики. Зн
 B/N/L/A/R владелец задаёт из purpose, не из отсутствия измерения.
 
 Read-timeout отдельно не overall deadline (trickle data продлевает операцию).
-Google helper не задаёт own timeouts; JDK docs говорят0 infinite, но actual
+Google helper не задаёт own timeouts; JDK docs говорят 0 infinite, но actual
 custom provider defaults неизвестны. После caller cancellation старый future
 может закончиться; revoked attempt generation fencing обязателен независимо
 от promise cancel. Никаких размеров/rate/benchmarks во время работы не измерялось.

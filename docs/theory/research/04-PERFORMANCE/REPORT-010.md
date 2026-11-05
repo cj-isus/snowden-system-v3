@@ -1,6 +1,6 @@
 # R04-010 — Windows/HY2 UDP: фактический путь и границы retained ресурсов
 
-Срез источников: 27 октября2026.
+Срез источников: 27 октября 2026.
 Статус: **READY_FOR_REVIEW**, не ACCEPTED. Источники: [SOURCES-010](SOURCES-010.md);
 handoff: [R04-010](handoffs/R04-010.md); evidence:
 `.artifacts/research/theory-04/2026-10-27-win-udp-gso-res4/`.

@@ -6,16 +6,16 @@
 
 | ID | Источник / read depth | Что используется |
 |---|---|---|
-| B1 | [INTERVALS-AND-POLICY-EVALUATION](../../../../adaptation/INTERVALS-AND-POLICY-EVALUATION.md),28октября2026; **SECTIONS_READ §§1–6** | finite/historical/target различия, Γ/TV/prefix/shared-envelope бюджеты, complete-policy estimand/support. Формулы не объявляются новым результатом C03 |
-| B2 | [REPORT-010](../../../03-ADAPTATION/REPORT-010.md),27октября; **SECTIONS_READ §§3.2,3.4–3.5,5,6** | A1/A2, disclosure versus admission, minimal producer obligations, selected bbolt/confseq path |
+| B1 | [INTERVALS-AND-POLICY-EVALUATION](../../../../adaptation/INTERVALS-AND-POLICY-EVALUATION.md),28 октября 2026; **SECTIONS_READ §§1–6** | finite/historical/target различия, Γ/TV/prefix/shared-envelope бюджеты, complete-policy estimand/support. Формулы не объявляются новым результатом C03 |
+| B2 | [REPORT-010](../../../03-ADAPTATION/REPORT-010.md),27 октября; **SECTIONS_READ §§3.2,3.4–3.5,5,6** | A1/A2, disclosure versus admission, minimal producer obligations, selected bbolt/confseq path |
 | B3 | [Ограниченный review010-A](../../../reviews/NINE-2026-10-27-R03-010-A.md); **FULL_TEXT_READ** | ACCEPTED только перечисленная математическая область; не real producer/код/библиотеки/field |
 | B4 | [Erratum R03-17](../../../reviews/NINE-2026-10-27-R03-17-ERRATUM.md); **FULL_TEXT_READ** | Не использовать independence product для arbitrary dependence и старое универсальное infinite-credit утверждение |
 
 ## 2. Actual project seam / source-only
 
 В `.artifacts/research/r28-contracts/C03/local-inputs.json`23repo inputs:
-before/copy/after SHA256 и capture UTC28октября. Это addressed non-atomic cuts,
-не commit/artifact/runtime identity. Старые versions26/27октября не выданы за current.
+before/copy/after SHA256 и capture UTC28 октября. Это addressed non-atomic cuts,
+не commit/artifact/runtime identity. Старые versions26/27 октября не выданы за current.
 
 | ID | Файлы / depth | Реально прослеженная область |
 |---|---|---|
@@ -39,7 +39,7 @@ SDK и existing Windows preference caller, но не production Windows caller S
 
 - Exact manifest version: `v0.0.0-20231014093535-ea5cb2fe9f0a`.
 - Fresh primary metadata: [official Go proxy .info](https://proxy.golang.org/github.com/sagernet/bbolt/@v/v0.0.0-20231014093535-ea5cb2fe9f0a.info),
-  capture28октября; full commit **ea5cb2fe9f0afaec4827c0591954db0e11ba548c**,
+  capture28 октября; full commit **ea5cb2fe9f0afaec4827c0591954db0e11ba548c**,
   source version time2023-10-14T09:35:35Z.
 - Selected source: [db.go](https://github.com/SagerNet/bbolt/blob/ea5cb2fe9f0afaec4827c0591954db0e11ba548c/db.go),
   [bucket.go](https://github.com/SagerNet/bbolt/blob/ea5cb2fe9f0afaec4827c0591954db0e11ba548c/bucket.go),
@@ -69,7 +69,7 @@ SDK и existing Windows preference caller, но не production Windows caller S
 - LICENSE **FULL_TEXT_READ MIT,2021confseq developers**; setup **SECTIONS_READ**
   skbuild/package requirements. Runtime dependency/import not introduced.
 - [Waudby-Smith/Ramdas arXiv2010.09686v7](https://arxiv.org/html/2010.09686v7),
- 25августа2022, **SECTIONS_READ §2/§3.1/Proposition1**: constant conditional mean,
+ 25 августа 2022, **SECTIONS_READ §2/§3.1/Proposition1**: constant conditional mean,
  predictable bets/bounded input. Journal2024 issue — другой publication date.
 - Reuse disposition: **OFFLINE_REFERENCE**, не missingness/registration/bridge
   producer и не ready Windows/Android implementation.
@@ -102,7 +102,7 @@ Read-depth source register ограничивает attribution; захваче�
 полностью прочитанными не объявляются. Primary URLs не исполнялись; README/build/
 example instructions не выполнялись.
 
-`final-input-drift.json`,09:29:35Z: current hashes всех23repo inputs и8module
+`final-input-drift.json`,09:29:35Z: current hashes всех 23repo inputs и8module
 inputs совпали с captured hashes; сами capture bytes тоже неизменны. В эту
 область входят read-only TASK/COMMON и baseline. Это сравнение выбранных файлов,
 не полная atomic tree identity и не проверка runtime. Own final doc hashes

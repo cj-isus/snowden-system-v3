@@ -1,6 +1,6 @@
 # R02-005 — sources, callers, pins
 
-26 октября2026; текущая дата получения, не дата всех источников.
+26 октября 2026; текущая дата получения, не дата всех источников.
 Capture namespace `.artifacts/research/theory-02/2026-10-26-r02-005/`.
 
 ## Actual sources
@@ -13,7 +13,7 @@ Capture namespace `.artifacts/research/theory-02/2026-10-26-r02-005/`.
 | **sing-shadowsocks2 v0.2.1** `1f9f20777fd1aedc3aeaebbc08fad00a2e2f8c40` | [method.go](https://github.com/SagerNet/sing-shadowsocks2/blob/1f9f20777fd1aedc3aeaebbc08fad00a2e2f8c40/shadowaead_2022/method.go): exact key length, writeRequest/readResponse, request-salt check; protocol.go KDF; internal/shadowio writer/reader AEAD; cipher/method_registry.go and [method_none.go](https://github.com/SagerNet/sing-shadowsocks2/blob/1f9f20777fd1aedc3aeaebbc08fad00a2e2f8c40/cipher/method_none.go) |
 | **server sing-shadowsocks v0.2.8** `e0612494bafdd1429e9632bc52fd278585d28690` | [service.go](https://github.com/SagerNet/sing-shadowsocks/blob/e0612494bafdd1429e9632bc52fd278585d28690/shadowaead_2022/service.go): NewService local replay filter, newConnection/writeResponse, long-key handling; service_multi.go scoped constructor/key handling; protocol.go matching KDF. Полный multi-user audit не сделан |
 | sing v0.8.13, actual manifest | `common/replay/simple.go`: in-memory map/mutex per instance, timeout60s from caller. Scope — process object; serverless/global persistence не существует в прочитанной реализации |
-| ShadowTLS v0.2.1 `af3279d7446641d5dd2e66cada24ce4597e98d35` | Сохранённый004 exact raw/cache data writer, actual core caller и option. В005 не повторяется finding004 как новый |
+| ShadowTLS v0.2.1 `af3279d7446641d5dd2e66cada24ce4597e98d35` | Сохранённый 004 exact raw/cache data writer, actual core caller и option. В005 не повторяется finding004 как новый |
 
 Client method и server service raw GitHub contents при exact tags совпали с cache
 SHA-256. `PINS.json`, `INDEX.json`, `LOCAL.json`, `REVIEW.json` фиксируют область.
@@ -22,7 +22,7 @@ SHA-256. `PINS.json`, `INDEX.json`, `LOCAL.json`, `REVIEW.json` фиксирую
 
 Локальные inputs: windows/go.mod, backend/render/render.go, config/config.go;
 android/native/source-lock.json и NativeGraphSecurity.kt; тематические transports/
-SAFETY-AND-TRUST; собственный004. Секреты, реальные profiles/runtime/logs не читались.
+SAFETY-AND-TRUST; собственный 004. Секреты, реальные profiles/runtime/logs не читались.
 Тексты upstream licenses GPL-3.0-or-later сохранены; notices иных транзитивных
 компонентов не заменяются одной лицензией server/client Go packages.
 

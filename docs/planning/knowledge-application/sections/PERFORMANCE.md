@@ -439,8 +439,9 @@ file/worker owner inventory не требуют общего portable resource m
 
 **A. Session write admission/cancellation**
 
-Вход: original session generation/context; current carrier owner; payload/header
-bound; count+byte permit; queue admission deadline в явно названном clock domain.
+Вход: исходные generation/context сессии, текущий владелец carrier, предел
+payload/header, разрешение на число и объём данных, срок допуска в очередь
+с явно указанной областью часов.
 
 1. Существующий public `SendDatagram([]byte)` сохранить. Внутренний context-aware
    seam должен проводить session cancellation до ожидания Add; legacy callers

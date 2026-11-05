@@ -1,6 +1,6 @@
 # R02-009 — граница повтора: framing, inner authority и target
 
-26 октября2026 · **READY_FOR_REVIEW**.
+26 октября 2026 · **READY_FOR_REVIEW**.
 [Sources](SOURCES-009.md) · [паспорт передачи](handoffs/R02-009.md).
 Новый вопрос: какие сильные альтернативы R02-15 действительно блокируют вывод,
 и какое событие следует считать результатом? Сам HRR finding не считается новым.
@@ -23,7 +23,7 @@ R02-10 отдельно принят руководителем только в 
 
 Baseline: наблюдённая legitimate HRR-сессия, остающийся PSK, повторимый первый
 ServerHello-HRR и доступность прежнего signed ClientHello/first data record;
-нет дополнительного внешнего replay gate. Эти условия из007 не доказываются заново.
+нет дополнительного внешнего replay gate. Эти условия из 007 не доказываются заново.
 Текущий source sing-shadowtls0.2.1/af3279d7… перечитан адресно.
 
 | Альтернатива | Что проверено | Итог и граница |
@@ -72,7 +72,7 @@ timestamp±30s и variable header до handler. Поэтому если преж
    В последнем случае первое принятие не является duplicate application effect.
 
 В005 outer credential access был отдельной предпосылкой delivery к SS decoder.
-Условная HRR-модель007 — один возможный способ изменить эту предпосылку при
+Условная HRR-модель 007 — один возможный способ изменить эту предпосылку при
 наблюдённом transcript без знания PSK; это не автоматическая возможность любого
 пассивного наблюдателя. Local filter не становится cluster-wide или durable от
 наличия профиля с подписью.
@@ -109,7 +109,7 @@ transport handshake/probe. Это ручной distributed-delivery контрп
 
 | Механизм | Выбор и exact reuse | Цена/граница |
 |---|---|---|
-| Existing verified inner TLS | **Adapt** core1.13.19 TLS/VLESS caller, real TLS identity и actual record session | Both-end certificate/profile/admission migration; handshake/CPU; nested ClientHello visibility из005. Не обещать exporter или resumption по одному имени TLS |
+| Existing verified inner TLS | **Adapt** core1.13.19 TLS/VLESS caller, real TLS identity и actual record session | Both-end certificate/profile/admission migration; handshake/CPU; nested ClientHello visibility из 005. Не обещать exporter или resumption по одному имени TLS |
 | Existing SS2022 salt filter/codec | **Reuse с узким scope**, server0.2.8/NewService и client2 0.2.1 | Cache/clock/key scope; новый Service не наследует old seen-salt map. Нет PFS и глобального at-most-once |
 | VLESS static UUID как replay barrier | **Reject это свойство** для traced no-flow branch | Membership check полезен, freshness им не заменяется |
 | Включить consumer direct/raw fallback при старом/битом session proof | **Reject** | Ошибка проверки не даёт новой authority |

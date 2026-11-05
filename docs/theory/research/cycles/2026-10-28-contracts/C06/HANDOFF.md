@@ -36,9 +36,9 @@ P не создаётся из порта/consent/плитки/пробы; не�
 ## Самая сильная оппозиция
 
 - **К maturity:** из двух зарегистрированных A рано успешен, B pending; baseline
-  resolved-only N даёт100%, хотя full-cohort result ещё не установлен. Наш N
-  остаётся2; pending не исчезает, early partial не становится failure.
-- **К защите:** receipt в точке11 не покрывает completion interval[10,12]; свежий
+  resolved-only N даёт 100%, хотя full-cohort result ещё не установлен. Наш N
+  остаётся 2; pending не исчезает, early partial не становится failure.
+- **К защите:** receipt в точке 11 не покрывает completion interval[10,12]; свежий
   sample не доказывает whole-task protection. Own Stop также не доказывает foreign
   protection off. Unknown нельзя исправить только новым названием метрики.
 - **К Windows repair:** один и тот же loopback1080 может выставить другая сторона;
@@ -74,16 +74,16 @@ Android local source SPDX GPL-3.0-or-later; AOSP captures Apache-2.0 headers.
 
 Четыре work stages пройдены: source/pins/callers; actor/state/action matrix;
 opposition + concrete outcome/cohort; reuse/API/licence/cost/paired availability.
-Z08/Z09 HANDOFF **не были доступны** на единственном review read09:21:32Z;
-независимый peer input не получен, ожидания/сообщений/повторного polling нет.
+Z08/Z09 HANDOFF **не были доступны** при чтении 28 октября в 09:21:32Z.
+Поэтому независимое сопоставление этих результатов не входило в данный срез.
 
 Авторский source/математический review и статическая сверка завершены;
-36/36 source inputs неизменны на09:42:19Z; final document receipts — в STATUS.
+36/36 исходных файлов совпали с сохранёнными хешами на 09:42:19Z.
 Runtime/tests/fixtures/build/simulation/native/
 device/live/admin/VPS/SSH/deploy/OS-network: **NOT_RUN** по текущему plan-only.
 Task census/receipt validity/clock bridge/native parity и реальная понятность UX
-остаются открытыми предпосылками будущей реализации. Product plans/code/общие
-chapters/registry/чужие STATE и прежние отчёты не редактировались этим пакетом.
+остаются открытыми предпосылками будущей реализации.
 
-Руководителю: принять/отклонить ограниченные claims отдельно; сопоставить будущие
-Z08/Z09 handoffs, когда они готовы; не повышать source-only пакет до product PASS.
+Позднейшие [Z08](../Z08/HANDOFF.md) и [Z09](../Z09/HANDOFF.md) сохранены
+отдельно; совпадение тем не означает независимого принятия друг друга.
+Результат по исходникам не является продуктовым PASS.

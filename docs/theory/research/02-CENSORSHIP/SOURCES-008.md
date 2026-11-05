@@ -1,12 +1,12 @@
 # R02-008 — source и контекст
 
-26 октября2026. `.artifacts/research/theory-02/2026-10-26-r02-008/`.
+26 октября 2026. `.artifacts/research/theory-02/2026-10-26-r02-008/`.
 
 - sing-shadowtls0.2.1 `af3279d7446641d5dd2e66cada24ce4597e98d35`:
   [v3_server.go](https://github.com/SagerNet/sing-shadowtls/blob/af3279d7446641d5dd2e66cada24ce4597e98d35/v3_server.go)
   extractFrame/extractServerName/verifyClientHello; [service.go](https://github.com/SagerNet/sing-shadowtls/blob/af3279d7446641d5dd2e66cada24ce4597e98d35/service.go)
   case3 parse-error before fallback, failed-auth donor relay. Cache captures;
-  raw service equality не установлена, как отмечено007.
+  raw service equality не установлена, как отмечено 007.
 - sing0.8.13 `common/bufio/only.go` ReadOnlyConn оборачивает переданный Reader;
   вторые records из настоящего socket туда не добавляются автоматически.
 - sing-box1.13.19 `b5ebaa1fc0f2b94256180b95468e73ef53caa27d`:

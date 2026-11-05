@@ -1,167 +1,131 @@
 # ECH, измерения, ресурсы и доверие: карта подробных материалов
 
-Девять предметных разборов с прямыми ссылками на аргументы, источники и принятые ограничения. Научный статус относится к названной области, а не ко всему пакету.
+<a id="предметы"></a>
+<a id="2-рф-качество-измерений-и-ooni-labels"></a>
+<a id="6-attestation-операция-и-полноценный-status-consumer"></a>
+<a id="7-tuf-progress-retention-и-действующая-authority"></a>
+<a id="8-vpnmdm-uid-capture-и-принадлежность-app-rule"></a>
+<a id="9-полезное-восстановление-задачи-и-приватный-pilot"></a>
+
+Карта девяти вопросов связывает основной тематический разбор с подробным
+аргументом, источниками и решением. Полные оглавления REPORT не копируются сюда.
 
 [Общая карта](../KNOWLEDGE-MAP.md) · [Все пакеты](CATALOG.md) · [Реестр решений](REVIEW-REGISTER.md)
-
-## Предметы
-
-| № | Вопрос | Пакет |
-|---|---|---|
-| 1 | [ECH/SVCB и согласованный bootstrap](#author-1) | R02-013 |
-| 2 | [РФ: качество измерений и OONI labels](#author-2) | R02-014 |
-| 3 | [Бюджет ошибок, физические кредиты и журнал](#author-3) | R03-010 |
-| 4 | [Windows/HY2: UDP, очереди и владельцы ресурсов](#author-4) | R04-010 |
-| 5 | [Android: Doze/FGS и цена keepalive](#author-5) | R04-011 |
-| 6 | [Attestation, операция и полноценный status consumer](#author-6) | R05-009 |
-| 7 | [TUF: Progress, retention и действующая authority](#author-7) | R05-010 |
-| 8 | [VPN/MDM, UID capture и принадлежность app-rule](#author-8) | R06-012 |
-| 9 | [Полезное восстановление задачи и приватный pilot](#author-9) | R06-013 |
 
 <a id="author-1"></a>
 
 ## 1. ECH/SVCB и согласованный bootstrap
 
-**Вопрос:** Какие имена, ECHConfig, адреса и fallback принадлежат одной попытке?
+Какие имена, ECHConfig, адреса и повторные попытки принадлежат одной попытке соединения? Наличие ECH API и GREASE не доказывает реальное принятие ECH.
 
-Нормативный ECH/GREASE/retry, Windows CDN/uTLS caller и область полевых наблюдений; D связывает ECHConfig с endpoint.
+**Основной разбор:** [ECH и DNS-bootstrap](../transports/ECH-DNS-BOOTSTRAP.md) · [TLS-композиция](../transports/COMPOSITION-AND-TLS-CONTRACTS.md).
 
-**Область принятия:** A/B/C ожидают рецензии; исторический D — PARTIAL_AT_CUTOFF.
+**Граница:** A/B/C ожидают рецензии. Исторический D — PARTIAL_AT_CUTOFF; эта отметка не превращается в принятие из-за навигационной правки.
 
-[REPORT](02-CENSORSHIP/REPORT-013.md) · [SOURCES](02-CENSORSHIP/SOURCES-013.md) · [Handoff](02-CENSORSHIP/handoffs/R02-013.md)
-
-Связанные тематические тексты: [transports/ECH-DNS-BOOTSTRAP.md](../transports/ECH-DNS-BOOTSTRAP.md) · [transports/COMPOSITION-AND-TLS-CONTRACTS.md](../transports/COMPOSITION-AND-TLS-CONTRACTS.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Пробел и что не принимается за аксиому; 2. Нормативная база — номер, дата, статус; 3. Принятие ECH, GREASE и retry/fallback; 4. Property matrix: наблюдатель и пределы ECH; 5. R02-013-B — actual Windows CDN/uTLS caller; 6. R02-013-C — доказательства фильтрации и их область; 7. Сильнейшие противоположные примеры; 8. Reuse, цена и адресаты (без реализации); 9. Конечные будущие cases — ВСЕ NOT_RUN; 10. Предлагаемая вставка в канон — только предложение; 11. Границы проверки; 12. FUP-1-01 — связь выбранного ECHConfig с endpoint.
+[Аргумент](02-CENSORSHIP/REPORT-013.md) · [Источники](02-CENSORSHIP/SOURCES-013.md) · [Краткий паспорт](02-CENSORSHIP/handoffs/R02-013.md)
 
 <a id="author-2"></a>
 
-## 2. РФ: качество измерений и OONI labels
+## 2. РФ: качество измерений и интерпретация OONI
 
-**Вопрос:** Что действительно установлено числом, raw outcome и classifier label?
+Что установлено публикацией числа, исходной записью измерения и меткой классификатора? Происхождение, методика, стадия и покрытие различаются.
 
-Lineage процентов/счётчиков, неполная ISP/access matrix, различие raw test_keys, engine и агрегатора; D разбирает версии и слой интерпретации.
+**Основной разбор:** [Корпус измерений и его покрытие](../methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md).
 
-**Область принятия:** A принят только в области числовых источников; B/C/D READY_FOR_REVIEW.
+**Граница:** Принята только область A: недостаточность доказательств процентов/сопоставимости счётчиков. B/C/D не приняты. [Рецензия](reviews/NINE-2026-10-27-R02-014-A.md).
 
-[REPORT](02-CENSORSHIP/REPORT-014.md) · [SOURCES](02-CENSORSHIP/SOURCES-014.md) · [Handoff](02-CENSORSHIP/handoffs/R02-014.md) · [Сохранённая рецензия](reviews/NINE-2026-10-27-R02-014-A.md)
-
-Связанные тематические тексты: [methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md](../methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Вопрос, baseline и предел результата; 2. R02-014-A — lineage и область числа важнее количества цитат; 3. R02-014-B — матрица наблюдений с незаполненными ячейками; 4. R02-014-C — область источника и наблюдаемость ограничивают диагноз; 5. Применение к системе без изменения продукта; 6. Предлагаемое применение; 7. Конечные непроведённые cases / остаток; 8. FUP-2-01 / R02-014-D — сопоставимость raw outcomes и summary labels OONI.
+[Аргумент](02-CENSORSHIP/REPORT-014.md) · [Источники](02-CENSORSHIP/SOURCES-014.md) · [Краткий паспорт](02-CENSORSHIP/handoffs/R02-014.md)
 
 <a id="author-3"></a>
 
 ## 3. Бюджет ошибок, физические кредиты и журнал
 
-**Вопрос:** Когда композиция ошибок валидна и что журнал действительно удостоверяет?
+Когда композиция ошибок валидна и что удостоверяет журнал? Статистический бюджет, физические ресурсы, выбор наблюдений и полнота регистрации требуют разных предпосылок.
 
-Разделены FWER/FDR, countable alpha spending, credit model и pre-work producer witness; reference confseq/bbolt не заменяет producer assumptions.
+**Основной разбор:** [Интервалы и сравнение политик](../adaptation/INTERVALS-AND-POLICY-EVALUATION.md).
 
-**Область принятия:** Выбранная математика A принята; остальные A/B/C и применимость libraries/producer не приняты. Прежний R03-17 имеет отдельный NEEDS_REVISION.
+**Граница:** Принята выбранная математика A, остальные A/B/C и применимость библиотек/producer не приняты. Старый R03-17 имеет отдельную поправку. [Рецензия](reviews/NINE-2026-10-27-R03-010-A.md). [Поправка R03-17](reviews/NINE-2026-10-27-R03-17-ERRATUM.md).
 
-[REPORT](03-ADAPTATION/REPORT-010.md) · [SOURCES](03-ADAPTATION/SOURCES-010.md) · [Handoff](03-ADAPTATION/handoffs/R03-010.md) · [Сохранённая рецензия](reviews/NINE-2026-10-27-R03-010-A.md)
-
-Связанные тематические тексты: [adaptation/INTERVALS-AND-POLICY-EVALUATION.md](../adaptation/INTERVALS-AND-POLICY-EVALUATION.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Что именно проверяется; 2. Словарь: четыре уровня, которые нельзя смешивать; 3. R03-010-A: композиция по фиксированному и счётному семейству; 4. R03-010-B: кредитная модель без ложного «положительного дрейфа»; 5. R03-010-C: минимальный producer-контракт; 6. Reuse только после доказательства; 7. Проверенные источники, русский язык и доказательные ограничения; 8. Конечная будущая программа — всё NOT_RUN; 9. Предлагаемый фрагмент теории (не внесён в общие главы).
+[Аргумент](03-ADAPTATION/REPORT-010.md) · [Источники](03-ADAPTATION/SOURCES-010.md) · [Краткий паспорт](03-ADAPTATION/handoffs/R03-010.md)
 
 <a id="author-4"></a>
 
 ## 4. Windows/HY2: UDP, очереди и владельцы ресурсов
 
-**Вопрос:** Какой именно размер/holder ограничен очередью и когда ресурс освобождён?
+Что именно ограничивает очередь и когда память освобождена? Путь Salamander/basicConn, копии до Add, завершаемые поколения и reap не сводятся к одному числу RAM.
 
-Scalar Salamander/basicConn путь, scoped sendQueue bound, copies до Add, retiring generations и close/drain/reap; корректирует прежние RAM/PTO/singleflight обобщения.
+**Основной разбор:** [Учёт QUIC и ресурсные пределы](../performance/QUIC-ACCOUNTING-AND-LIMITS.md).
 
-**Область принятия:** READY_FOR_REVIEW. Нет global RAM/latency/performance proof или принятия всех correction proposals.
+**Граница:** READY_FOR_REVIEW. Адресные возражения к прежним RAM/PTO/singleflight выводам не означают принятие всего нового пакета или измеренный эффект.
 
-[REPORT](04-PERFORMANCE/REPORT-010.md) · [SOURCES](04-PERFORMANCE/SOURCES-010.md) · [Handoff](04-PERFORMANCE/handoffs/R04-010.md)
-
-Связанные тематические тексты: [performance/QUIC-ACCOUNTING-AND-LIMITS.md](../performance/QUIC-ACCOUNTING-AND-LIMITS.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Вопрос, baseline и область; 2. R04-010-A — фактический scalar Windows путь, не GSO; 3. R04-010-B — одна корректная граница очереди, не глобальная RAM; 4. Адресный пересмотр прежнего R04-008; 5. R04-010-C — singleflight, graceful drain и настоящий Windows owner; 6. R04-009: что не переносится в новую теорию; 7. Reuse, цена и адресаты; 8. Конечная будущая программа — все NOT_RUN; 9. Предлагаемый фрагмент для главы (не интегрирован автором).
+[Аргумент](04-PERFORMANCE/REPORT-010.md) · [Источники](04-PERFORMANCE/SOURCES-010.md) · [Краткий паспорт](04-PERFORMANCE/handoffs/R04-010.md)
 
 <a id="author-5"></a>
 
 ## 5. Android: Doze/FGS и цена keepalive
 
-**Вопрос:** Какие power states влияют на доступность, clocks и фактическую работу таймера?
+Как состояния питания влияют на часы, доступность и фактическую работу таймера? Заданные 10 секунд не являются измерением радиопробуждений или батареи.
 
-Ordinary Doze/App Standby, foreground UID и LPS различаются; nominal HY2 10s не равен radio/battery rate. OSS PauseManager caller не доказывает остановку HY2 таймера.
+**Основной разбор:** [QUIC: время жизни и таймеры](../performance/QUIC-ACCOUNTING-AND-LIMITS.md) · [Android и UX](../android/PLATFORM-AND-UX.md).
 
-**Статус проверки:** READY_FOR_REVIEW. Происхождение и актуальность source-среза независимо не подтверждены; device/energy программа NOT_RUN.
+**Граница:** READY_FOR_REVIEW. Происхождение и актуальность исходного среза независимо не подтверждены; проверки устройства и энергии NOT_RUN.
 
-[REPORT](04-PERFORMANCE/REPORT-011.md) · [SOURCES](04-PERFORMANCE/SOURCES-011.md) · [Handoff](04-PERFORMANCE/handoffs/R04-011.md)
-
-Связанные тематические тексты: [performance/QUIC-ACCOUNTING-AND-LIMITS.md](../performance/QUIC-ACCOUNTING-AND-LIMITS.md) · [android/PLATFORM-AND-UX.md](../android/PLATFORM-AND-UX.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Пробел и точная область; 2. Фактическая Android-интеграция Snowden; 3. R04-011-A — матрица power-режимов, не единый «фон»; 4. R04-011-B — exact source модель 10s HY2 keepalive; 5. R04-011-C — upstream pause caller is not HY2 timer proof; 6. Энергетический вывод без выдуманных чисел; 7. Reuse / adapt / reject; 8. Конечная device-программа — все случаи NOT_RUN; 9. Выводы для разработки; 10. Предлагаемая вставка в общую теорию (требует отдельной рецензии); 11. Остаток знания.
+[Аргумент](04-PERFORMANCE/REPORT-011.md) · [Источники](04-PERFORMANCE/SOURCES-011.md) · [Краткий паспорт](04-PERFORMANCE/handoffs/R04-011.md)
 
 <a id="author-6"></a>
 
-## 6. Attestation, операция и полноценный status consumer
+## 6. Аттестация ключа, операция и обработка статуса
 
-**Вопрос:** Как сохранить различия статуса, ошибки, давности и разрешения операции?
+Как сохранить различия отзыва, неизвестности, ошибки и разрешения операции? Аттестация ключа, аутентификация пользователя и Protected Confirmation дают разные свойства.
 
-A/B/C разделяют key attestation, user authentication, Protected Confirmation и verifier assurance. D прослеживает status projection; новое §10 от 28 октября уточняет Gson и пять результатов consumer.
+**Основной разбор:** [Доказательства поставки](../architecture/RELEASE-EVIDENCE-BOUNDARIES.md) · [Защита и доверие](../architecture/SAFETY-AND-TRUST.md).
 
-**Область принятия:** A/B/C pending. D исторически PARTIAL_AT_CUTOFF; новая ограниченная задача завершена 28.10 06:56:36Z как READY_FOR_REVIEW, не ACCEPTED.
+**Граница:** A/B/C ожидают рецензии. D был частичным на срезе 27 октября; дополнение 28 октября — READY_FOR_REVIEW. Частное решение R28 по SUSPENDED не принимает весь consumer.
 
-[REPORT](05-TRUST-SAFETY/REPORT-009.md) · [SOURCES](05-TRUST-SAFETY/SOURCES-009.md) · [Handoff](05-TRUST-SAFETY/handoffs/R05-009.md)
-
-Связанные тематические тексты: [architecture/RELEASE-EVIDENCE-BOUNDARIES.md](../architecture/RELEASE-EVIDENCE-BOUNDARIES.md) · [architecture/SAFETY-AND-TRUST.md](../architecture/SAFETY-AND-TRUST.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Пробел и проверенный baseline; 2. R05-009-A — четыре разных объекта evidence; 3. R05-009-B — подтверждённый текст, nonce и current authority проверяются отдельно; 4. R05-009-C — ready verifier есть, но generic Success не равен requested assurance; 5. Применение к нашей системе без изменения продукта; 6. Оппонирующая самопроверка; 7. Конечная будущая приёмка — все NOT_RUN; 8. Предлагаемая адресная вставка (не интегрирована); 9. FUP-6-01 / R05-009-D — потери status projection и предел результата; 10. Дополнение 28 октября / source-model contract R05-009-D.
+[Аргумент](05-TRUST-SAFETY/REPORT-009.md) · [Источники](05-TRUST-SAFETY/SOURCES-009.md) · [Краткий паспорт](05-TRUST-SAFETY/handoffs/R05-009.md)
 
 <a id="author-7"></a>
 
-## 7. TUF: Progress, retention и действующая authority
+## 7. TUF: Progress, сохранение и действующие полномочия
 
-**Вопрос:** Когда pointer, retained bytes и accepted metadata — разные события?
+Когда указатель, удержанные байты и принятые метаданные — разные события? Сохранность истории не требует единственного маркера, БД или серверного способа восстановления.
 
-Нормативный predecessor и SDK mutation, offline latest, recovery alternatives; D ищет witness для сохранения timestamp. Новый marker/DB не следует автоматически из необходимости различимости.
+**Основной разбор:** [Непрерывность доверия](../architecture/TRUST-CONTINUITY-AND-AGREEMENT.md) · [Доказательства поставки](../architecture/RELEASE-EVIDENCE-BOUNDARIES.md).
 
-**Область принятия:** Принят только условный timestamp→returned Progress A; остальные части не приняты. D — PARTIAL_AT_CUTOFF по упаковке.
+**Граница:** Принят только условный timestamp→returned Progress trace A. Успешная запись, остальные A/B/C и update authority не следуют; D сохраняет PARTIAL_AT_CUTOFF. [Рецензия](reviews/NINE-2026-10-27-R05-010-A.md).
 
-[REPORT](05-TRUST-SAFETY/REPORT-010.md) · [SOURCES](05-TRUST-SAFETY/SOURCES-010.md) · [Handoff](05-TRUST-SAFETY/handoffs/R05-010.md) · [Сохранённая рецензия](reviews/NINE-2026-10-27-R05-010-A.md)
-
-Связанные тематические тексты: [architecture/TRUST-CONTINUITY-AND-AGREEMENT.md](../architecture/TRUST-CONTINUITY-AND-AGREEMENT.md) · [architecture/RELEASE-EVIDENCE-BOUNDARIES.md](../architecture/RELEASE-EVIDENCE-BOUNDARIES.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Область, метод и новая дельта; 2. R05-010-A — persistable predecessor не равен указателю TrustedMetadata; 3. R05-010-B — два ограничения знания offline latest; 4. R05-010-C — bounded recovery contract и готовые механизмы; 5. Цена, falsifiers и конечная приёмка — NOT_RUN; 6. Предлагаемая интеграция; 7. FUP-7-02 / R05-010-D — основание retention конкретного timestamp.
+[Аргумент](05-TRUST-SAFETY/REPORT-010.md) · [Источники](05-TRUST-SAFETY/SOURCES-010.md) · [Краткий паспорт](05-TRUST-SAFETY/handoffs/R05-010.md)
 
 <a id="author-8"></a>
 
-## 8. VPN/MDM, UID capture и принадлежность app-rule
+## 8. VPN/MDM, перехват UID и принадлежность правила приложению
 
-**Вопрос:** Кто управляет захватом/lockdown и что означает найденный socket UID?
+Кто управляет VPN/lockdown и что означает найденный socket UID? Общий UID, видимость PackageManager, sandbox и смена пакетов ограничивают сопоставление правил.
 
-A/B/C: Android authority sets, Windows CSP/WFP и наблюдаемость. Новый D: shared UID, видимость PackageManager, SDK sandbox, mapper API и package churn; capture не доказывает exact app-rule match.
+**Основной разбор:** [UID, маршруты и владелец VPN](../android/UID-ROUTING-AND-OWNERSHIP.md).
 
-**Область принятия:** READY_FOR_REVIEW. D рассматривается отдельно. Существующие owner/parity blockers и default protection не объявлены обойдёнными.
+**Граница:** READY_FOR_REVIEW; D рассматривается отдельно. Перехват трафика не доказывает точное совпадение app-rule, а доступный API — поведение итогового приложения.
 
-[REPORT](06-RELIABILITY-UX/REPORT-012.md) · [SOURCES](06-RELIABILITY-UX/SOURCES-012.md) · [Handoff](06-RELIABILITY-UX/handoffs/R06-012.md)
-
-Связанные тематические тексты: [android/UID-ROUTING-AND-OWNERSHIP.md](../android/UID-ROUTING-AND-OWNERSHIP.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Вопрос и метод; 2. Поправки к прежней матрице; 3. R06-012-A — Android: три разных полномочия, не один список исключений; 4. R06-012-B — Windows: профиль MDM, арбитраж WFP и реальные сокеты; 5. R06-012-C — объяснимость ограничивается полномочиями наблюдателя; 6. Reuse, цена и границы; 7. Конечная будущая приёмка — всё NOT_RUN; 8. Предлагаемая вставка и остаток; 9. R06-012-D — UID closure: захват VPN не равен принадлежности app-rule.
+[Аргумент](06-RELIABILITY-UX/REPORT-012.md) · [Источники](06-RELIABILITY-UX/SOURCES-012.md) · [Краткий паспорт](06-RELIABILITY-UX/handoffs/R06-012.md)
 
 <a id="author-9"></a>
 
-## 9. Полезное восстановление задачи и приватный pilot
+## 9. Полезное восстановление задачи и приватное измерение
 
-**Вопрос:** Как задать maturity/horizon/cohort до вычисления recovery rate?
+Как задать когорту, горизонт зрелости и охват защиты до расчёта доли восстановления? Незавершённый до D исход не обязательно является неуспехом к D.
 
-Два estimand, P/U/X/Q/F/C/M исходы, локальная privacy record и будущая программа; OONI reference берётся как boundary, не готовая метрика VPN.
+**Основной разбор:** [Неполные наблюдения](../adaptation/INTERVALS-AND-POLICY-EVALUATION.md) · [Границы сетевой проверки](../observability/PROBE-PROOF-BOUNDARIES.md).
 
-**Область принятия:** A NEEDS_REVISION по horizon/maturity/denominator/protection scope. B/OSS/пилот ожидают отдельного рассмотрения.
+**Граница:** A — NEEDS_REVISION по горизонту, знаменателю, времени и охвату защиты. B/OSS/пилот ждут отдельного рассмотрения. Сетевой OONI-результат не является готовой метрикой VPN-задачи. [Рецензия](reviews/NINE-2026-10-27-R06-013-A.md).
 
-[REPORT](06-RELIABILITY-UX/REPORT-013.md) · [SOURCES](06-RELIABILITY-UX/SOURCES-013.md) · [Handoff](06-RELIABILITY-UX/handoffs/R06-013.md) · [Сохранённая рецензия](reviews/NINE-2026-10-27-R06-013-A.md)
-
-Связанные тематические тексты: [adaptation/INTERVALS-AND-POLICY-EVALUATION.md](../adaptation/INTERVALS-AND-POLICY-EVALUATION.md) · [observability/PROBE-PROOF-BOUNDARIES.md](../observability/PROBE-PROOF-BOUNDARIES.md). Связь по вопросу не переносит чужое ACCEPTED на весь пакет.
-
-В отчёте: 1. Пробел и проверка baseline; 2. R06-013-A — два estimand вместо одного двусмысленного recovery rate; 3. R06-013-B — минимальный privacy-preserving local record; 4. Будущая локальная программа — дизайн, не запуск; 5. OSS reference: OONI Probe CLI v3.31.0 — adapt boundary, не код; 6. Цена, оппонирование и предел знания; 7. Предлагаемое уточнение.
+[Аргумент](06-RELIABILITY-UX/REPORT-013.md) · [Источники](06-RELIABILITY-UX/SOURCES-013.md) · [Краткий паспорт](06-RELIABILITY-UX/handoffs/R06-013.md)
 
 ## Два времени и два вида проверки
 
-PARTIAL_AT_CUTOFF 27 октября сохраняется даже при отдельной сдаче новой задачи 28 октября. DR27/Obsidian review использовал public source и документационный срез; NINE содержит свои source/caller trace и prerequisites. Одинаковая тема не делает pins, producer inputs и reviewed consumers одинаковыми. Новая общая навигация не является повторным независимым source review или product/runtime acceptance.
+Частичная сдача 27 октября и отдельное дополнение 28 октября — разные записи.
+Новая навигация не исправляет задним числом статус исходного среза. Похожие
+темы могут опираться на разные версии, вызывающий код и предпосылки. Принятие
+одного вывода не является принятием соседнего пакета или проверкой продукта.
+
+Практические решения и текущие этапы — в [плане ПК](../../planning/knowledge-application/PC-PLAN.md)
+и [плане Android](../../planning/knowledge-application/ANDROID-PLAN.md).

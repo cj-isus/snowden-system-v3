@@ -1,14 +1,17 @@
-# R28-Z05 — exact pause caller, HY2 timer и допустимый decision seam
+# R28-Z05 — Android: вызов pause, таймер HY2 и допустимое решение
 
-28 октября 2026. Авторский статус: **READY_FOR_REVIEW**; никакого product/native/live PASS. Все tests/build/device/adb/power/radio/NAT измерения — `NOT_RUN`. Exact pins/read-depth/licences — [SOURCES](SOURCES.md).
+**Срез 28 октября 2026 года. Статус автора — READY_FOR_REVIEW.**
+[Версии, источники и глубина чтения](SOURCES.md) · [Краткая сводка](HANDOFF.md).
+Проверка продукта/native/live не проводилась. Тесты, сборка, устройство/adb,
+энергия, радиомодуль и NAT — **NOT_RUN**.
 
-## 1. Вопрос и ограниченный ответ
+## 1. Вопрос, краткий ответ и предел применения
 
-**Вопрос:** достигает ли конкретный готовый Android pause/power callback HY2
-timer, и какое решение допустимо без реального wake/radio/NAT outcome?
+**Вопрос:** достигает ли готовый Android callback питания таймера HY2
+и какое действие обосновано без наблюдения wake/radio/NAT и полезного исхода?
 
-**Ответ R28-Z05-A (source-scoped negative):** в проверенном exact closure
-готовый SFA callback
+**Ответ R28-Z05-A:** в рассмотренном составе исходников SFA callback доходит
+до общего PauseManager, но не найдена его связь с таймером HY2/quic-go:
 
 ```text
 ACTION_DEVICE_IDLE_MODE_CHANGED
@@ -18,15 +21,15 @@ ACTION_DEVICE_IDLE_MODE_CHANGED
 → registered PauseManager subscribers only
 ```
 
-**не достигает** pinned HY2/quic-go connection timer. Конкретные доказанные
-subscribers — NTP ticker, URL-test ticker, WireGuard endpoint/callers; у HY2
-outbound, sing-quic HY2 client и quic-go timer нет `pause.Manager`, callback или
-`WaitActive` в названной source-области. `CommandServer.Pause()` сам не
-останавливает Box, connections, timers или UDP socket: он лишь вызывает
-`DevicePause()` общего manager; эффект существует только у подписчиков.
+Подтверждены подписчики NTP ticker, URL-test ticker, WireGuard endpoint/callers.
+В названных HY2 outbound, sing-quic HY2 client и quic-go timer не найдены
+`pause.Manager`, соответствующие callbacks и `WaitActive`.
+`CommandServer.Pause()` сам не останавливает Box, соединения, таймеры или
+UDP socket: он вызывает `DevicePause()` менеджера; эффект создают подписчики.
 
-Это не «в HY2 pause невозможен вообще» и не whole-ecosystem proof. Это bounded
-вывод для текущих pins и поиска по non-test Go callers:
+**Применимость:** проверить реального потребителя callback и условия решения
+после сна. **Предел:** выбранные версии и поиск вне тестовых Go-файлов,
+а не невозможность паузы во всех реализациях HY2:
 
 - sing-box v1.13.19 / `b5ebaa1f…`;
 - sing v0.8.13 / `7c349dac…`;
@@ -34,51 +37,53 @@ outbound, sing-quic HY2 client и quic-go timer нет `pause.Manager`, callback
 - quic-go v0.59.0-sing-box-mod.4 / `ccd46abe…`;
 - SFA callback commit `bc73504f…`.
 
-## 2. Exact caller и shared-manager construction
+Эти версии — исходный срез, не текущая идентичность установленного AAR.
 
-### 2.1 Android caller
+## 2. Вызывающий код и создание общего менеджера
+
+### 2.1. Android caller
 
 SFA `BoxService.kt`:
 
-1. при start регистрирует receiver `ACTION_DEVICE_IDLE_MODE_CHANGED`;
-2. `serviceUpdateIdleMode()` читает `isDeviceIdleMode`;
-3. unlimited coroutine channel serializes booleans;
-4. consumer вызывает `commandServer.pause()` / `wake()`.
+1. При start регистрирует receiver `ACTION_DEVICE_IDLE_MODE_CHANGED`.
+2. `serviceUpdateIdleMode()` читает `isDeviceIdleMode`.
+3. Неограниченный coroutine channel упорядочивает булевы сообщения.
+4. Потребитель вызывает `commandServer.pause()` / `wake()`.
 
-Получение broadcast, enqueue, dequeue и JNI-call — четыре события. Source не даёт
-upper bound delivery latency; deep suspend не гарантирует немедленное выполнение
-consumer coroutine.
+Получение broadcast, помещение в channel, извлечение и JNI-call — четыре
+события. Исходник не задаёт верхний предел доставки. Глубокий сон CPU
+не гарантирует немедленного выполнения coroutine потребителя.
 
-### 2.2 Manager identity
+### 2.2. Идентичность менеджера
 
-sing-box `Box.New` выполняет `pause.WithDefaultManager(ctx)` до создания network,
-router/outbounds. `daemon.Instance` позже берет manager из того же context, и
+`Box.New` выполняет `pause.WithDefaultManager(ctx)` до создания network,
+router/outbounds. `daemon.Instance` сохраняет менеджер из того же context;
 libbox `CommandServer.Pause` вызывает его `DevicePause`. `defaultManager`:
 
-- меняет `devicePaused` и заменяет/закрывает channel;
+- меняет `devicePaused` и заменяет либо закрывает channel;
 - вызывает зарегистрированные callbacks под своим mutex;
 - `WaitActive` ждёт закрытия device/network channels;
-- не перечисляет и не останавливает transports самостоятельно.
+- сам не перечисляет и не останавливает транспорты.
 
-### 2.3 Реальные consumers
+### 2.3. Подтверждённые потребители
 
-| Consumer | Pause effect | Это HY2? |
+| Потребитель | Эффект pause | Связь с HY2 |
 |---|---|---|
-| sing NTP service | `RegisterTicker`: stop on pause; optional immediate update + reset on wake | Нет; NTP clock service |
-| sing-box URL-test | `RegisterTicker`: stop/reset periodic selection probe | Нет; optional health work |
-| WireGuard endpoint | callback `device.Down/Up` | Нет; другой transport |
-| WireGuard client bind | `WaitActive` after connect error | Нет; retry gate |
-| RemoteRuleSet | содержит поле manager, но searched file не использует его в update loop | Нет; поле не является subscriber |
-| HY2/quic-go | no manager extraction/register/wait in searched exact roots | **Нет доказанного edge** |
+| sing NTP service | `RegisterTicker` останавливает ticker; после wake возможны немедленное обновление и reset | Служба часов, не HY2 |
+| sing-box URL-test | Остановка/reset периодических проб выбора | Необязательная проверочная работа |
+| WireGuard endpoint | Callback `device.Down/Up` | Другой транспорт |
+| WireGuard client bind | `WaitActive` после ошибки connect | Граница повтора другого транспорта |
+| RemoteRuleSet | Поле manager есть, но в прочитанном update loop использования не найдено | Хранение поля не является подпиской |
+| HY2/quic-go | В указанных корнях не найдены extraction/register/wait менеджера | Ребро к таймеру не установлено |
 
-Сильный guard против ложного вывода: quic-go создаёт отдельный `time.NewTimer`,
-reset'ит его по keepalive/PTO/idle deadlines и run loop ждёт `timer.C`. Ни один
-из этих callers не проверяет PauseManager. Поэтому Android receiver→manager
-reachability не транзитивна до HY2 timer без явного subscriber edge.
+quic-go создаёт отдельный `time.NewTimer`, перенастраивает его по keepalive/PTO/idle
+и ждёт `timer.C` в run loop. Эти callers не проверяют PauseManager.
+Достижимость Android receiver → manager поэтому не переносится на HY2 timer
+без явного потребителя.
 
-## 3. Как HY2 действительно реагирует на path change
+## 3. Как HY2 реагирует на изменение пути
 
-HY2 уже имеет готовый, но иной seam:
+У HY2 есть готовый, но другой путь восстановления:
 
 ```text
 NetworkManager interface update
@@ -89,73 +94,81 @@ NetworkManager interface update
 → one pending offer shared by concurrent callers
 ```
 
-Это **close/recreate on proven interface/context change**, а не Doze pause.
-Переиспользование допустимо, когда platform owner установил новое/утраченное
-physical context и принял retirement/replacement. Вызывать его на каждом wake
-без изменения path нельзя обосновать: дополнительный QUIC/TLS/auth handshake,
-CPU/radio work и task latency могут быть дороже сохранения carrier.
+Это закрытие/создание при установленном изменении интерфейса или контекста,
+а не приостановка Doze. Переиспользование зависит от платформенного владельца:
+он устанавливает новый или утраченный физический контекст и допускает
+завершение/замену. Каждый wake сам по себе этого не доказывает.
+Дополнительные QUIC/TLS/auth, CPU, радиомодуль и задержка задачи могут стоить
+дороже сохранения пригодного соединения.
 
-Current Snowden source строже upstream SFA: selected physical context включает
-network handle, transports, suspended/blocked flags, interface/MTU/address/DNS/
-routes; callback mismatch или loss делает session fault и supervisor retires
-worker. Но source не доказывает callback delivery до первого native post-resume
-packet; callback observation — не atomic OS firewall/transport barrier.
+В прочитанном Snowden контекст содержит network handle, transports,
+suspended/blocked, interface/MTU/address/DNS/routes. Mismatch/loss callback
+переводит session в fault и запускает завершение worker. Но доставка callback
+до первой нативной отправки после сна не доказана. Наблюдение callback
+не является атомарным firewall или транспортным барьером ОС.
 
-## 4. State / clock / action matrix
+## 4. Состояние, часы и действие
 
-| Состояние | Network / CPU fact | HY2 timer source | Допустимое source-only решение | Unknown без device evidence |
+| Состояние | Факт о сети/CPU | Таймер HY2 в прочитанной модели | Условно допустимое решение | Что неизвестно без устройства |
 |---|---|---|---|---|
-| Awake, same context | FGS/source eligible; CPU executes | native monotime ages; timer/PTO can fire | Keep existing carrier; no extra pause/reconnect | Actual energy/radio/NAT |
-| Ordinary Doze, actual foreground UID, CPU awake in maintenance/other work | Android16 source can exempt foreground UID from ordinary Doze/AppStandby network block | If CPU runs, timer can progress; if deep suspend, callback cannot execute | Observe blocked/context facts; no blanket close merely from Doze flag | OEM proc state, residency, callback order |
-| FGS active but CPU suspended | FGS is not wake lock | explicit Go/Linux reference monotime excludes suspend; timer callback not run | Do nothing solely from elapsed wall/authority gap; revalidate on return | Whether carrier/NAT/peer survived |
-| UID network-exempt but no timer execution | OS may allow packets, but sleeping CPU emits none | no due/queue/write | Do not infer carrier refresh from exemption | Wake source and timer firing |
-| Low Power Standby / blocked callback | Separate LPS policy may block FGS network; current path captures `blocked` when delivered | queued/native work can race delivery | Fail closed / retire on owned, current blocked/context fault | Atomicity vs first post-block write |
-| Resume, same path and authority valid | peer may have discarded state while local clock did not age | old carrier `active()` is only local state | First useful operation may reuse; on failure, bounded lazy offer/reconnect. No automatic success publication | Peer/NAT survival and reconnect cost |
-| Resume, changed/lost physical context | path fingerprint invalid / callback fault | old carrier no longer admitted | Reuse existing interface-update close/recreate/worker replacement owner | Callback latency; kernel in-flight packet |
-| Resume after authority deadline | `elapsedRealtime` includes sleep; transport reference clock may not | native timer may not consider itself expired | Authority check wins: retire process/session; never use keepalive to extend authority | Ordering of watchdog vs already-running native write |
-| Reboot/new process | `elapsedRealtime` boot-local resets; current source says deadline must not restore from cache | old native process/carrier gone | Fresh trust/profile admission only; no resumed old authority | Accepted cold-recovery policy |
+| Awake, тот же контекст | FGS/source допускает работу; CPU исполняет | Native monotime стареет, таймер/PTO может сработать | Сохранить соединение; нет причины для дополнительной pause/reconnect | Энергия, радио, NAT |
+| Обычный Doze, foreground UID, CPU работает в окне обслуживания или по иной причине | Android16 source может освобождать foreground UID от обычной Doze/AppStandby блокировки сети | При работающем CPU таймер может исполняться; при deep suspend callback не исполняется | Наблюдать blocked/context; не закрывать только по флагу Doze | OEM/proc state, сон, порядок callbacks |
+| FGS активен, CPU спит | FGS не равен WakeLock | Go/Linux reference monotime исключает suspend; callback таймера не выполняется | Сам по себе разрыв часов не доказывает гибель соединения; после возврата проверить полномочия и контекст | Сохранились ли peer/NAT |
+| UID допущен в сеть, таймер не исполняется | ОС может разрешать пакеты, но спящий CPU их не создаёт | Нет подтверждённых due/queue/write | Не выводить обновление соединения из исключения ОС | Источник пробуждения и срабатывание таймера |
+| Low Power Standby / blocked callback | Отдельная LPS policy может запрещать сеть FGS; путь сохраняет доставленный blocked | Нативная работа может пересекаться с доставкой | Защищённо завершать при принадлежащем операции актуальном fault | Порядок с первой отправкой после block |
+| Resume, путь тот же, полномочия действительны | Peer мог забыть состояние, пока локальные часы не старели | `active()` — только локальный факт | Первая полезная операция может использовать соединение; типизированный отказ запускает ограниченное восстановление | Сохранность peer/NAT и цена reconnect |
+| Resume, путь изменён или утрачен | Физический контекст недействителен | Старое соединение больше не допускается | Существующий interface-update close/recreate и владелец замены worker | Задержка callback и пакет в kernel I/O |
+| Resume после deadline полномочий | `elapsedRealtime` включает сон; справочные transport clock могут его не учитывать | Таймер может не считать себя просроченным | Проверка полномочий имеет приоритет: завершить session/process, keepalive не продлевает grant | Порядок watchdog и уже начатой native write |
+| Reboot/новый процесс | `elapsedRealtime` принадлежит загрузке; старый deadline нельзя восстанавливать из кеша | Старого процесса/соединения нет | Новое принятое trust/profile admission | Конкретная политика холодного восстановления |
 
-## 5. Opposing cases and strongest limits
+Семантика справочных Go/Linux часов не является измерением конкретного AAR,
+ОС или OEM. Матрица различает эти предпосылки, а не объявляет их проверенными
+для всех Android-устройств.
 
-### O1 — FGS-active-but-suspended
+## 5. Возражения и сильные ограничения
 
-An FGS can preserve foreground process classification while CPU deep-sleeps.
-Thus «foreground UID network allowed» does not imply timer execution or packet.
-Conversely `Pause` callback may not run before suspend; its existence cannot be
-credited as energy saving.
+### O1 — foreground service при спящем CPU
 
-### O2 — manager has callback list, therefore all services pause
+FGS может сохранять foreground-классификацию, пока CPU находится в глубоком сне.
+Разрешённая сеть foreground UID не означает исполнение таймера и пакет.
+Callback pause также может не успеть до сна; его наличие не доказывает
+энергетическую экономию.
 
-False: manager is opt-in. Exact closure proves consumer edges for URL-test/NTP/WG,
-not HY2. RemoteRuleSet even stores manager without using it, showing why field/
-context availability alone is insufficient.
+### O2 — список callbacks не означает паузу всех служб
 
-### O3 — close on every resume is safest
+Менеджер оповещает подписавшихся. В выбранном составе найдены URL-test/NTP/WG,
+но не HY2. RemoteRuleSet хранит manager без использования: доступность объекта
+в context недостаточна для вывода о достигаемом эффекте.
 
-It is safe only in the narrow sense of discarding possibly stale transport; it
-can worsen availability/energy due to needless handshakes and cannot prove NAT
-state was dead. Safety authority is already separate: invalid authority/context
-retires regardless of keepalive. Without outcome, universal close-on-resume is
-not justified.
+### O3 — закрытие при каждом resume не доказано лучшим решением
 
-### O4 — leave carrier and trust `active()`
+Оно отбрасывает возможное старое соединение, но может ухудшать доступность
+и энергию ненужными рукопожатиями. Смерть NAT из wake не следует.
+Недействительные полномочия и контекст уже имеют отдельное правило завершения;
+без полезного исхода универсальное close-on-resume не обосновано.
 
-HY2 `active()` checks local QUIC context/connDone only; peer/NAT may have expired.
-Therefore it is not readiness proof. Reuse is conditional; the first operation
-needs typed failure/recovery accounting, not fake Ready.
+### O4 — сохранение соединения не превращает active() в готовность
 
-### O5 — authority gates eliminate post-expiry packets
+HY2 `active()` проверяет локальный QUIC context/connDone. Peer/NAT могли истечь.
+Переиспользование условно: первая операция должна сохранять типизированные
+отказ и восстановление, а не публиковать выдуманный Ready.
 
-They gate Java/JNI lifecycle/platform callbacks and the 1s watchdog retires by
-`elapsedRealtime`, including sleep. But already-running Go quic timers/socket
-writes do not call `NativeCallbackGate` per packet. Source does not prove strict
-zero-packet ordering after deadline/resume. The correct claim is: authority is
-never renewed by keepalive and future admission closes/retirement is armed; a
-strict packet barrier requires separate platform enforcement/measurement.
+### O5 — lifecycle guards не доказывают отсутствие каждого позднего пакета
 
-## 6. Minimal decision seam without outcome data
+Java/JNI/platform callbacks проходят guards; watchdog с интервалом 1s инициирует
+завершение по `elapsedRealtime`, включая сон. Но уже работающие Go QUIC timers
+и socket writes не вызывают `NativeCallbackGate` на каждом пакете.
+Интервал watchdog не является жёстким временем исполнения после resume.
 
-Recommend **observe → classify → conservative action**, not «pause saves power»:
+Правильная граница: keepalive не обновляет полномочия; будущий допуск
+закрывается и запускается завершение. Строгий нулевой порядок отправок
+после deadline требует отдельного платформенного барьера и приёмки.
+
+## 6. Ограниченное решение без данных об исходе
+
+Предлагается наблюдение → классификация → действие по установленному основанию,
+а не обещание «pause экономит энергию». Схема исходного предложения сохранена
+дословно; это модель контракта, не уже существующий публичный API:
 
 ```text
 PowerPathObservation {
@@ -176,68 +189,95 @@ Decision (platform-owned):
 5. energy optimization remains abstain/unknown until wake/wire/peer/recovery cost.
 ```
 
-This is the smallest seam because it adds no transport fork, auto-exemption,
-permanent wake lock or new periodic probe. It preserves current strict owner and
-uses an existing transport recovery edge only after a reason. Exact atomic
-barrier between OS block/authority expiry and a native in-flight write remains
-outside this seam and belongs to platform protection acceptance.
+Такой вариант не требует transport fork, автоматического исключения из
+энергосбережения, постоянного WakeLock или новой периодической пробы.
+Он сохраняет единственного владельца и использует готовый recovery-путь
+при установленной причине. Это обоснование ограниченного изменения,
+не доказательство единственного или глобально минимального проекта.
+Атомарная граница OS block/истечения полномочий и уже начатой native write
+остаётся задачей платформенной защиты.
 
-## 7. Reuse, licence and cost
+## 7. Переиспользование, лицензии и цена
 
-| Candidate | Exact pin / licence | Verdict | Cost / limitation |
+| Кандидат | Прочитанная версия/лицензия | Что брать | Ограничение и цена |
 |---|---|---|---|
-| SFA idle receiver + serialized pause/wake caller | `bc73504f…`; GPL-3.0-or-later plus clause against derivative app name/association | **REFERENCE/ADAPT caller shape only** | Does not pause HY2; copying whole service conflicts with Snowden ownership/safety; no code copied |
-| sing pause.defaultManager / RegisterTicker | sing v0.8.13 `7c349dac…`; GPL-3.0-or-later | **REUSE inside matching core for optional ticker consumers** | Synchronous callback under manager mutex; no timer-wide guarantee; adding HY2 subscriber is core change requiring lifecycle/concurrency review |
-| HY2 `InterfaceUpdated→CloseWithError→offer` | sing-box1.13.19/sing-quic d838; GPL-3.0-or-later | **REUSE conditionally after path invalidation or typed failure** | Reconnect CPU/radio/latency; not an energy optimisation by source alone |
-| quic-go timer machinery | ccd46…; MIT | **REUSE unchanged** | Suspend/wake/NAT outcome unknown; no current platform pause hook |
-| Current physical context + blocked callback + authority gates | project GPL source, source-only/unverified AAR | **ADAPT as decision inputs** | Callback/order not atomic with packet write; no product proof |
-| Power allowlist / permanent wake lock / blanket close-on-wake | Android platform mechanisms/policy | **DEFER/REJECT default** | User/Play/battery cost or needless reconnect; none gives peer/NAT receipt |
+| SFA idle receiver и последовательный caller pause/wake | `bc73504f…`; в LICENSE GPL-3.0-or-later и условие о названии/ассоциации производного приложения | Форму вызывающего пути как ориентир | HY2 не приостанавливает; весь service не согласован с владельцем Snowden. Код не копировался |
+| sing pause.defaultManager / RegisterTicker | sing0.8.13 `7c349dac…`, GPL-3.0-or-later | Для реально подключённых необязательных ticker consumers того же ядра | Синхронный callback под mutex; подписка HY2 меняет core lifecycle/concurrency |
+| HY2 `InterfaceUpdated→CloseWithError→offer` | sing-box1.13.19/sing-quic d838, GPL-3.0-or-later | Условно при недействительности пути или типизированном отказе | Reconnect требует CPU/радио/времени; энергетическая польза не доказана исходником |
+| quic-go timer | ccd46…, MIT | Существующий механизм без приписанного pause hook | Сон, пробуждение и NAT outcome не измерены |
+| Контекст, blocked callback и authority guards Snowden | Прочитанный GPL source; AAR в срезе не подтверждён | Входы решения владельца | Callback не атомарен с отправкой; продуктового proof нет |
+| Power allowlist, постоянный WakeLock, закрытие на каждом wake | Механизмы и политика Android | Не включать по умолчанию из этого вывода | Пользовательская, Play и энергетическая цена; лишний reconnect не даёт peer/NAT receipt |
 
-A direct HY2 PauseManager subscription is not recommended yet. Its semantics
-would need an explicit choice: stop timer only, close connection, suppress new
-offers, or defer send; each has different PTO/idle/queued-data ownership and
-resume races. A generic `DevicePause` boolean is insufficient contract.
+Прямая подписка HY2 на PauseManager пока не обоснована. Нужно выбрать смысл:
+остановить таймер, закрыть соединение, запретить новые offers или отложить send.
+Варианты имеют разные PTO/idle, владение очередью и гонки возобновления.
+Одного булева `DevicePause` недостаточно.
 
-## 8. Future distinguishing observations — all NOT_RUN
+Практический маршрут — ANDR-04/07/08 [плана Android](../../../../../planning/knowledge-application/ANDROID-PLAN.md).
+В PC-05/06/07 [плана ПК](../../../../../planning/knowledge-application/PC-PLAN.md)
+переносится различие часов, факта наблюдения и эффекта; Android broadcast
+не становится Windows API. Основной разбор ресурсов и таймеров —
+[QUIC/HY2](../../../../performance/QUIC-ACCOUNTING-AND-LIMITS.md).
 
-1. Exact accepted APK/AAR/Go/ABI/build-tags receipt.
-2. Timestamp `broadcast received → channel enqueue → JNI pause → subscriber`;
-   prove whether it precedes actual suspend. No raw user traffic.
-3. QUIC stages due/queued/socket-return plus OS blocked callback and named clocks.
-4. Same-context resume: peer response, first useful completion, reconnect only on
-   typed failure; compare with unconditional reconnect.
-5. Changed-context resume: one retirement/offer owner, no old-path writes after
-   accepted platform barrier, no direct fallback.
-6. Authority expiry across suspend and reboot: watchdog/gate/actual process exit,
-   plus kernel/native in-flight boundary; keepalive never extends grant.
-7. Idle radio/NAT/peer outcome on Wi-Fi and selected cellular contexts, including
-   reconnect bytes/CPU/latency and censored/missing outcomes.
-8. Optional consumers (URL-test/NTP) pause before/after workload; no attribution
-   to HY2 unless exact subscriber added and measured.
+## 8. Будущие различающие наблюдения — NOT_RUN
 
-No percentages, mAh savings, NAT lifetime or wakeup guarantee are assigned.
+1. Точный принятый APK/AAR, Go, ABI и build tags.
+2. Времена broadcast received → channel enqueue → JNI pause → subscriber;
+   проверка порядка относительно suspend, без raw пользовательского трафика.
+3. QUIC due/queued/socket-return, OS blocked callback и именованные часы.
+4. Resume по тому же контексту: ответ peer, первое полезное завершение,
+   reconnect только по типизированной ошибке; сравнение с безусловным reconnect.
+5. Изменённый контекст: один владелец retirement/offer, отсутствие старых
+   отправок после принятого платформенного барьера, без direct fallback.
+6. Deadline через сон и reboot: watchdog/guard/фактический выход процесса,
+   отдельная kernel/native I/O граница; keepalive не продлевает grant.
+7. Radio/NAT/peer на Wi-Fi и выбранных мобильных сетях; reconnect bytes/CPU/
+   latency и пропавшие либо цензурированные исходы остаются в учёте.
+8. Pause URL-test/NTP до/после нагрузки; эффект не приписывается HY2
+   без конкретного добавленного и измеренного подписчика.
 
-## 9. Paired C04 input
+Проценты, mAh, время NAT и гарантированное пробуждение не установлены.
 
-C04 HANDOFF was available once at review stage and read narrowly. It corroborates
-that generic pause/wake and Android unknown AAR/Go are not energy/time proof, and
-adds resource/cancellation constraints. It does not supply a HY2 PauseManager
-edge and does not change R28-Z05-A. Agreement between packages is not independent
-runtime evidence.
+## 9. Что даёт сопоставление с C04
 
-## 10. Scoped verdict proposed to lead
+При исходном review адресно прочитан C04 HANDOFF. Он поддерживает различие
+общей pause/wake, неизвестного AAR/Go и доказанной энергии/времени, добавляет
+границы ресурсов и отмены. Он не создаёт связь HY2 → PauseManager и не меняет
+R28-Z05-A. Согласие пакетов не является независимым runtime-доказательством.
 
-**ACCEPT_SOURCE_SCOPED_NEGATIVE for R28-Z05-A:** the concrete SFA
-Doze→CommandServer→shared PauseManager callback does not reach HY2/quic-go timer
-in the reviewed exact closure; it reaches only opt-in consumers. This supports
-rejecting any claim that the ready callback already suppresses HY2 keepalive.
+## 10. Предлагаемые решения и что остаётся открытым
 
-**ACCEPT_MODEL_SCOPED for R28-Z05-B:** without wake/wire/peer/NAT/useful outcome,
-use only an observation/classification seam; retire on authority/context failure,
-conditionally reuse carrier when context/authority remain valid, and reconnect
-through existing owner only after path invalidation or typed carrier failure.
-Do not infer energy benefit, request exemption, hold a broad wake lock or close
-on every wake from source alone.
+**R28-Z05-A: предложение `ACCEPT_SOURCE_SCOPED_NEGATIVE`.** Конкретный путь
+SFA Doze → CommandServer → общий PauseManager в рассмотренном составе
+не достигает таймера HY2/quic-go. Он оповещает установленных подписчиков.
+Нельзя утверждать, что готовый callback уже подавляет HY2 keepalive.
 
-Not accepted by author: product correctness, zero post-expiry packet guarantee,
-battery gain, NAT survival, callback timeliness, device/OEM behavior or readiness.
+**R28-Z05-B: предложение `ACCEPT_MODEL_SCOPED`.** Без wake/wire/peer/NAT/useful
+outcome использовать наблюдение и классификацию; завершать при недействительных
+полномочиях/контексте, условно сохранять соединение при их действительности,
+восстанавливаться через существующего владельца при недействительности пути
+или типизированном отказе. Экономия энергии, исключение из политики питания,
+широкий WakeLock и закрытие на каждом wake из source не следуют.
+
+Эти предложения не принимают весь пакет автоматически. Не установлены
+корректность продукта, ноль поздних пакетов, батарея, NAT survival, своевременность
+callback, поведение конкретного устройства/OEM и готовность пользовательского пути.
+
+<a id="r28-z05--exact-pause-caller-hy2-timer-и-допустимый-decision-seam"></a>
+<a id="1-вопрос-и-ограниченный-ответ"></a>
+<a id="2-exact-caller-и-shared-manager-construction"></a>
+<a id="22-manager-identity"></a>
+<a id="23-реальные-consumers"></a>
+<a id="3-как-hy2-действительно-реагирует-на-path-change"></a>
+<a id="4-state--clock--action-matrix"></a>
+<a id="5-opposing-cases-and-strongest-limits"></a>
+<a id="o1--fgs-active-but-suspended"></a>
+<a id="o2--manager-has-callback-list-therefore-all-services-pause"></a>
+<a id="o3--close-on-every-resume-is-safest"></a>
+<a id="o4--leave-carrier-and-trust-active"></a>
+<a id="o5--authority-gates-eliminate-post-expiry-packets"></a>
+<a id="6-minimal-decision-seam-without-outcome-data"></a>
+<a id="7-reuse-licence-and-cost"></a>
+<a id="8-future-distinguishing-observations--all-not_run"></a>
+<a id="9-paired-c04-input"></a>
+<a id="10-scoped-verdict-proposed-to-lead"></a>

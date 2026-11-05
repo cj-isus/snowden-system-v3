@@ -224,9 +224,10 @@ Issue opened **07.11.2024**; title обозначает onset **05.11.2024**.
 
 ## 5. Source: версии, callers и границы
 
-Actual workspace: **D:\SNOWDEN-SYSTEM-V3**, не Obsidian docs-only snapshot.
-Текущий manifest windows/go.mod: Go1.26, sing-box v1.13.19,
-MetaCubeX/uTLS v1.8.4, sing v0.8.13.
+В исходном срезе рассматривался рабочий проект **D:\SNOWDEN-SYSTEM-V3**.
+Манифест windows/go.mod на ту дату: Go1.26, sing-box v1.13.19,
+MetaCubeX/uTLS v1.8.4, sing v0.8.13. Это не заявление об отсутствии
+исходников сегодня: Obsidian открывает те же docs внутри проекта.
 
 | Input / pin | Прочитанные symbols / строки | Что доказано и что нет |
 |---|---|---|

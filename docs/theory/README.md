@@ -7,19 +7,19 @@
 [Обоснования по темам](../planning/knowledge-application/README.md) сохраняют
 источники и условия применения. План не доказывает реализацию и работу VPN.
 
-**[Начать чтение](READING-GUIDE.md)** · [Найти ответ на вопрос](KNOWLEDGE-MAP.md) · [Планы разработки](../planning/knowledge-application/README.md)
+**[Начать чтение](READING-GUIDE.md)** · [Найти ответ на вопрос](KNOWLEDGE-MAP.md) · [Термины](GLOSSARY.md) · [Планы разработки](../planning/knowledge-application/README.md)
 
 ## Знания по темам
 
 | Тема | Основные материалы |
 |---|---|
 | **Модель угроз и границы обещаний** | [Исходная постановка](OVERVIEW.md) · [Противник и модель угроз](foundations/THREAT-MODEL.md) |
-| **Блокировки и транспорты** | [Механизмы фильтрации](transports/CENSORSHIP-MECHANISMS.md) · [REALITY/XHTTP](transports/REALITY-RESEARCH.md) · [Композиция и TLS identity](transports/COMPOSITION-AND-TLS-CONTRACTS.md) · [ECH и DNS bootstrap](transports/ECH-DNS-BOOTSTRAP.md) · [Padding и окно наблюдения](transports/PADDING-AND-OBSERVATION-WINDOW.md) |
-| **Измерения и диагностика** | [DNS и диагностика](observability/DNS-AND-DIAGNOSTICS.md) · [Что доказывает probe](observability/PROBE-PROOF-BOUNDARIES.md) · [Корпоративный proxy и NAT64](observability/PROXY-DNS-NAT64.md) · [Достоверность корпуса измерений](methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md) |
-| **Адаптивный выбор** | [Policy и evidence](adaptation/POLICY-AND-EVIDENCE.md) · [Неполные наблюдения и сравнение политик](adaptation/INTERVALS-AND-POLICY-EVALUATION.md) |
+| **Блокировки и транспорты** | [Механизмы фильтрации](transports/CENSORSHIP-MECHANISMS.md) · [REALITY/XHTTP](transports/REALITY-RESEARCH.md) · [Композиция и TLS-аутентификация](transports/COMPOSITION-AND-TLS-CONTRACTS.md) · [ECH и начальное DNS-разрешение](transports/ECH-DNS-BOOTSTRAP.md) · [Padding и окно наблюдения](transports/PADDING-AND-OBSERVATION-WINDOW.md) |
+| **Измерения и диагностика** | [DNS и диагностика](observability/DNS-AND-DIAGNOSTICS.md) · [Что подтверждает сетевая проверка](observability/PROBE-PROOF-BOUNDARIES.md) · [Корпоративный прокси и NAT64](observability/PROXY-DNS-NAT64.md) · [Достоверность корпуса измерений](methodology/MEASUREMENT-CORPUS-AND-COVERAGE.md) |
+| **Адаптивный выбор** | [Политика и доказательства](adaptation/POLICY-AND-EVIDENCE.md) · [Неполные наблюдения и сравнение политик](adaptation/INTERVALS-AND-POLICY-EVALUATION.md) |
 | **Доверие и обновления** | [Защита и доверие](architecture/SAFETY-AND-TRUST.md) · [Непрерывность доверия](architecture/TRUST-CONTINUITY-AND-AGREEMENT.md) · [Границы доказательств поставки](architecture/RELEASE-EVIDENCE-BOUNDARIES.md) |
-| **Скорость, память и ресурсы** | [Транспорты и ресурсы](performance/TRANSPORT-AND-RESOURCES.md) · [QUIC/HY2: accounting и lifetime](performance/QUIC-ACCOUNTING-AND-LIMITS.md) |
-| **Android и повседневное использование** | [Платформа и UX](android/PLATFORM-AND-UX.md) · [UID routing и ownership](android/UID-ROUTING-AND-OWNERSHIP.md) · [Полезные функции и готовые практики](ux/COMPETITOR-FEATURES.md) |
+| **Скорость, память и ресурсы** | [Транспорты и ресурсы](performance/TRANSPORT-AND-RESOURCES.md) · [QUIC/HY2: учёт и время жизни](performance/QUIC-ACCOUNTING-AND-LIMITS.md) |
+| **Android и повседневное использование** | [Платформа и UX](android/PLATFORM-AND-UX.md) · [UID, маршруты и владелец VPN](android/UID-ROUTING-AND-OWNERSHIP.md) · [Полезные функции и готовые практики](ux/COMPETITOR-FEATURES.md) |
 | **Ограничения знания и проверка** | [Метод и критерии доказательства](methodology/RESEARCH-METHOD.md) · [Выводы для разработки и открытые вопросы](roadmap/RESEARCH-HANDOFF.md) |
 
 [Карта вопросов](KNOWLEDGE-MAP.md) помогает выбрать материал по практической задаче.
@@ -27,7 +27,7 @@
 ## Аргументы, источники и поправки
 
 - [Подробные материалы и источники](research/README.md): полные аргументы,
-  контрпримеры и exact pins, на которых основаны тематические главы.
+  контрпримеры и точные версии источников, на которых основаны тематические главы.
 - [Решения и ограничения выводов](research/REVIEW-REGISTER.md): принятая область,
   спорное и требующее пересмотра. Источник или формула не доказывают работу продукта.
 - [Исходный авторский сборник](archive/CENSORSHIP-THEORY-before-split-2026-10-26.md)

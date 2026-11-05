@@ -1,6 +1,6 @@
 # R02-002 — совместный наблюдатель и границы behavioral defence
 
-**2026-10-25 · READY_FOR_REVIEW · Теория 2.**
+**2026-10-25 · READY_FOR_REVIEW.**
 Основание: [DEPTH-CYCLE-002](../LIMITATIONS.md), индивидуальное задание R02.
 Предыдущий [R02-001](handoffs/R02-001.md) сохранён и ещё не ACCEPTED.
 [Источники](SOURCES-002.md) · [новый handoff](handoffs/R02-002.md).
@@ -103,12 +103,12 @@ carrier, но и при новом stream через уже открытый mux
 `Windows renderer opt-in mux → sing-mux Client.offerNew → newProtocolConn →
 newPaddingConn → newClientSession → многие streams на одном wrapper`.
 
-`paddingConn` хранит свои read/write counters; первые16 padding records получают
+`paddingConn` хранит свои read/write counters; первые 16 padding records получают
 framing, после этого `write`/WriteBuffer/WriteVectorised больше его не добавляют.
 Открытие нового logical stream на **том же** carrier не создаёт новый wrapper.
 Счётчик не равен HTTP-запросам, TLS records или IP packets.
 
-**Ручной trace:** C1 открыт; ранняя обычная нагрузка исчерпала16 records; C1 ещё
+**Ручной trace:** C1 открыт; ранняя обычная нагрузка исчерпала 16 records; C1 ещё
 пригоден по mux policy; создан новый logical stream; его inner TLS handshake
 идёт через уже исчерпанный wrapper. Это source-valid counterexample к фразе
 «mux padding скрывает каждый inner handshake». Он не доказывает успешный remote
@@ -136,8 +136,8 @@ Vectorised и WriteBuffer ветки используют тот же counter/ra
 
 **Сильнейший контраргумент:** aggregate multiplexing само по себе может скрыть
 handshake без дополнительного padding. Принят: это отдельный workload-dependent
-эффект, который может сохраниться после16 records. Source finding не говорит,
-что весь канал «раскрыт», и не рекомендует ротировать все carriers после16.
+эффект, который может сохраниться после 16 records. Source finding не говорит,
+что весь канал «раскрыт», и не рекомендует ротировать все carriers после 16.
 Rotation увеличивает handshake overhead/churn и может добавить fingerprint.
 
 ## 5. R02-05 — готовый behavioral cover меняет механизм, но не все фазы
@@ -158,17 +158,17 @@ browser headers и HTTP API, отличающий обычный GET от CONNEC
 утечка: транспортный protection outcome и camouflage outcome надо разделять.
 
 В `NaiveConnection::DoConnectServerComplete` создаётся `NaivePaddingSocket` для
-данного stream. В Variant1 первые8 frames padded, потом write path unpadded.
+данного stream. В Variant1 первые 8 frames padded, потом write path unpadded.
 Это **другой reset scope**, чем один global mux wrapper D01. Он может покрыть
 начало позднего stream, но не обещает hiding всего steady payload этого stream.
 Направление/размер записи влияет на random range; README simplified description
-не заменяет source. Header3 и padding≤255 дают **не более2064 added bytes на
+не заменяет source. Header3 и padding≤255 дают **не более 2064 added bytes на
 восемь frames одного направления**, исключая preambles и прочие framing layers.
 Uniform mean130.5 bytes/frame допустим только для uniform ветки; общий mean
 без распределения sizes/directions не установлен.
 
 `WritePaddingV1Drain` в ветке `direction_==kServer` и
-`200<consumed_payload<1024` также дробит попытки transport.Write на100…200 bytes.
+`200<consumed_payload<1024` также дробит попытки transport.Write на 100…200 bytes.
 Это user-space write granularity, не гарантированный размер IP/TLS packets:
 нижние слои могут объединять/сегментировать writes. Такой механизм требует
 целого совместимого stack, а не настройки размера TCP-пакета в renderer.
@@ -330,7 +330,7 @@ user traffic direct. Admission/profile epochs должны пережить time
 | J2 | Blind / path-informed / outer-credential / full-service роли на своих endpoints; фиксировать selection of probes | Разные knowledge и direction visibility не объединять в один FPR; timeout с неверной локальной конфигурацией |
 | P16 | Cold carrier, затем исчерпанный wrapper, затем late logical stream на том же ID и отдельно новом carrier | Не считать first16 internal records first16 network packets; учесть carrier reassignment и background mux |
 | NP8 | Пер-stream padding negotiation, small/large/partial writes, late streams; actual extra bytes | Отсутствующий padding peer, error/disabled preamble, empty/broken root и repeated resource set |
-| M0 | finite valid machines со fractions0/positive, startup allowance, replacement и hard adapter caps | Не интерпретировать0 как disabled; no-machine control; не выдавать validity за safe resource policy |
+| M0 | finite valid machines со fractions0/positive, startup allowance, replacement и hard adapter caps | Не интерпретировать 0 как disabled; no-machine control; не выдавать validity за safe resource policy |
 | MA | TriggerAction→timer→queue→replace/drop/send→wire metrics с fake/no-send control в разрешённом стенде | Duplicate/stale/cancelled action, queue-full, sender error; counters не расходятся по units |
 | L1 | Bounded idle cover, hard quota, max queue age, PMTU change, CPU/battery/task latency | Quota exhaustion/overload снижает заявленный cover scope; direct запрещён; cap/recovery не притворяется full defence |
 | RF | После отдельного разрешения paired benign/proxy workload в конкретных РФ сетях, днях и обоих направлениях | Общий origin/carrier outage, ordinary web breakage, protocol config mismatch и old source snapshot |
@@ -347,7 +347,7 @@ user traffic direct. Admission/profile epochs должны пережить time
 > Уточнение R02-002: защитное утверждение относится к выбранным observer,
 > knowledge class, фазам и единице carrier/stream. Совпадение отдельных
 > marginal profiles не доказывает сходства joint trace. В pinned sing-mux0.3.5
-> padding ограничен первыми16 records одного wrapper; новый stream на том же
+> padding ограничен первыми 16 records одного wrapper; новый stream на том же
 > carrier не сбрасывает counter. NaiveProxy имеет другую stream-prefix и
 > preamble механику; его preamble error не блокирует Connect. Maybenot задаёт
 > actions, но не wire-byte/deadline/OS-protection contract: fraction0 не означает

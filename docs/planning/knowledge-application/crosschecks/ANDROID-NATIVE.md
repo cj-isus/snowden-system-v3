@@ -1,13 +1,18 @@
-# Android native: от source-кандидата к одному рабочему клиенту
+# Android: от исходников native-ядра к одному рабочему клиенту
 
 Анализ Android-каркаса на 28 октября. Позднейшие exact AAR/APK/UI/JNI
 результаты имеют собственные границы; см. [актуальный план Android](../ANDROID-PLAN.md).
 Старое отсутствие артефакта не следует переносить на новый source-срез.
 
-## Краткое состояние кода
+**Вывод:** первый согласованный native-клиент требует одной проверяемой цепочки
+исходники → AAR → trust/provider → lifecycle → устройство. **Применение:**
+[Android, этапы 00–04 и 09](../ANDROID-PLAN.md). **Ограничение:** это разбор
+среза 28 октября; отсутствие артефакта в нём не описывает позднейшую сборку.
 
-Android-дерево уже содержит правильный каркас владения, но **не содержит рабочего
-нативного клиента**:
+## Состояние исходников на 28 октября
+
+На срезе 28 октября Android-дерево содержит каркас владения, но **не подтверждает
+готовность рабочего нативного клиента**:
 
 - `:app` владеет одним `VpnSessionRepository`; UI/tile/widget не создают ядро.
 - `SnowdenVpnService` работает в private `:vpn`, продвигается в FGS до JNI и
@@ -62,28 +67,27 @@ Android-дерево уже содержит правильный каркас �
 
 ## Минимальная последовательность одного согласованного native artifact
 
-### Stage 0 — заморозить входной contract, не собирать два ядра
+### Этап 0. Зафиксировать входной контракт
 
-**Owner:** Android platform owner + trust owner как поставщик принятого portable API.
-**Plan:** AND-01/04, A-FR-03/13.
+**Владелец:** Android platform owner + trust owner как поставщик принятого portable API.
+**Пункты плана:** AND-01/04, A-FR-03/13.
 
 Зафиксировать один source manifest:
 
-- sing-box v1.13.19 commit `b5ebaa1…`;
-- strict-owner flavor
-  `owner-r1-session-cache-r1-closed-history-r1`, sourceRevision3;
-- все base hashes, `wiring.patch`, 6 overlays;
-- sing dependency v0.8.13 и selected transport pins;
-- **принятую** trust API/version/source revision T01…T14;
-- Go/gomobile/NDK/AGP/Kotlin/JDK, build tags, ABI set;
-- corresponding source, notices, SBOM input graph.
+- sing-box v1.13.19, commit `b5ebaa1…`;
+- вариант strict-owner `owner-r1-session-cache-r1-closed-history-r1`, sourceRevision3;
+- все хеши исходных файлов, `wiring.patch` и 6 overlays;
+- зависимость sing v0.8.13 и закреплённые версии выбранных транспортов;
+- **принятую** версию trust API и его исходников по T01…T14;
+- Go/gomobile/NDK/AGP/Kotlin/JDK, флаги сборки и набор ABI;
+- соответствующие исходники, уведомления о лицензиях и входной граф SBOM.
 
 Stop condition: пока T01…14 не опубликованы/приняты, допустима подготовка native
 build recipe, но нельзя фиксировать final artifact digest или включать Connect.
 Trust module добавляется в существующий gomobile bind/package list и один Go runtime;
 отдельный trust AAR/второй Go runtime запрещён.
 
-### Stage 1 — применить revision3 и получить source-parity receipt
+### Этап 1. Применить revision3 и подтвердить соответствие исходников
 
 **Owner:** один Android native/platform owner.
 **Plan:** AND-01, AND-11; ADR-057…060.
@@ -98,123 +102,127 @@ Trust module добавляется в существующий gomobile bind/pa
    один closure, а не набор marker-only файлов;
 6. включить принятый trust package и narrow JNI exports в тот же manifest.
 
-**Future acceptance, NOT_RUN:** patch applicability, formatting, compile; diff против
-manifest; deliberate missing/modified hunk rejects; older revision2/stock source rejects.
+**Будущая приёмка, NOT_RUN:** применимость патча, форматирование и компиляция;
+сравнение с манифестом; отклонение при пропущенном или изменённом фрагменте,
+при старой revision2 или исходниках без требуемых изменений.
 
-### Stage 2 — собрать один whole AAR и доказать generated API parity
+### Этап 2. Собрать один AAR и сверить сгенерированный API
 
 **Owner:** тот же Android native owner; security/release reviewer независимо выдаёт
 approved SHA.
 **Plan:** AND-01, AND-14; ADR-023/061.
 
-Build receipt обязан включать:
+Свидетельство сборки должно включать:
 
-- exact Go/gomobile fork/NDK/JDK/flags/tags/module graph;
-- whole AAR SHA-256 и corresponding source manifest SHA;
-- generated Java classes/JNI symbol inventory;
-- exactly expected `Libbox.version()==1.13.19`;
-- three revision1 marker methods and three OverrideOptions fields;
-- accepted trust API revision/methods/DTO ownership semantics;
-- ABI inventory (`arm64-v8a`, optional x86_64 lab), ELF/ZIP alignment and 16KiB;
-- no second Go runtime/native library with conflicting symbols;
-- licence/SBOM/notices/source-offer outputs.
+- точные версии Go/ветки gomobile/NDK/JDK, флаги, теги и граф модулей;
+- SHA-256 всего AAR и хеш манифеста соответствующих исходников;
+- перечень сгенерированных Java-классов и JNI-символов;
+- ожидаемое значение `Libbox.version()==1.13.19`;
+- три метода-маркера revision1 и три поля OverrideOptions;
+- принятую версию trust API, методы и правила владения DTO;
+- набор ABI (`arm64-v8a`, при необходимости x86_64 для лаборатории),
+  выравнивание ELF/ZIP и совместимость со страницами 16 KiB;
+- отсутствие второго Go runtime и native-библиотеки с конфликтующими символами;
+- лицензии, SBOM, уведомления и материалы для предоставления исходников.
 
-Existing Gradle gate remains authoritative: externally approved SHA is an input;
-`corebridge` compiles against extracted `classes.jar` from the approved stage; `:app`
-packs the same whole AAR. Hash approval does not derive from the candidate itself.
+Существующее условие допуска в Gradle сохраняется: независимо одобренный хеш —
+входной параметр. `corebridge` компилируется с `classes.jar`, извлечённым из
+одобренного AAR, а `:app` пакует тот же полный AAR. Кандидат не одобряет собственный хеш.
 
-**Strongest guard:** marker/API parity is necessary but not sufficient. A malicious or
-incomplete AAR could return correct revision numbers. Receipt must bind built source
-closure + generated inventory + native libraries + independently approved whole bytes.
+**Существенное ограничение:** совпадение API и маркеров необходимо, но недостаточно.
+Неполный или подменённый AAR тоже может вернуть ожидаемые номера версий.
+Свидетельство сборки должно связывать полный состав исходников, сгенерированный API,
+native-библиотеки и независимо одобренные байты всего артефакта.
 
-### Stage 3 — connect accepted profile to runtime without bypass
+### Этап 3. Соединить принятый профиль с выполнением
 
-**Owner:** Android profile/integration owner, after accepted trust dependency.
-**Plan:** AND-04/06, A-FR-03/05.
+**Владелец:** Android profile/integration после принятия зависимости trust.
+**Пункты плана:** AND-04/06, A-FR-03/05.
 
-Implement exactly two Android adapters, not a new architecture:
+В существующей архитектуре нужны два Android-адаптера:
 
-1. `ProfileTrustDriver` JNI adapter to accepted T01…T14 API:
-   - synchronous owned bytes;
-   - full TUF + application authority, progress/floors/revocation/clock;
-   - typed redacted outcomes;
-   - no ambient FS/network/global state;
-   - accepted deadline remains separate from preparation TTL.
-2. `RuntimeSourceProvider` accepted-only renderer:
-   - reads only accepted checkpoint/current policy;
-   - compiles `NativePolicyPlan` and `NativeConfigurationComposer` candidate;
-   - rejects every `admissionBlocker` and `signedAuthorityVerified=false` shortcut;
-   - binds exact config/policy digest, native required revisions, TUN tag,
-     network/app owner+epoch+fingerprint, worker/request and original authority deadline;
-   - returns one parent-local `IPreparedRuntimeSource` consumed once.
+1. JNI-адаптер `ProfileTrustDriver` к принятому API T01…T14:
+   - синхронный вызов с принадлежащими вызывающей стороне байтами;
+   - полная проверка TUF, полномочий приложения, progress, нижних границ, отзыва и часов;
+   - типизированные результаты без чувствительных данных;
+   - отсутствие неявного доступа к ФС, сети и глобальному состоянию;
+   - срок полномочий отдельно от TTL подготовки.
+2. `RuntimeSourceProvider`, создающий runtime-источник только из принятого состояния:
+   - читает принятый checkpoint и действующую политику;
+   - составляет кандидат через `NativePolicyPlan` и `NativeConfigurationComposer`;
+   - отклоняет любой `admissionBlocker` и обход через `signedAuthorityVerified=false`;
+   - связывает точные хеши конфигурации/политики, требуемые native revisions, TUN tag,
+     владельцев сети/приложения, epoch/fingerprint, worker/request и исходный срок полномочий;
+   - возвращает один локальный для родителя `IPreparedRuntimeSource` для однократного потребления.
 
-No direct construction from preview/JSON/UI/Intent; no default/mock success.
-`SnowdenApplication` may expose import/connect only after production driver/provider
-is installed and source identity matches the approved AAR.
+Прямое создание из preview/JSON/UI/Intent и фиктивный успешный результат исключены.
+`SnowdenApplication` может открыть импорт/подключение после установки рабочих
+driver/provider и проверки соответствия источника одобренному AAR.
 
-### Stage 4 — retain existing lifecycle/error/privacy/resource controls
+### Этап 4. Сохранить управление жизненным циклом, ошибками и ресурсами
 
-**Owner:** Android service/native owner; do not split into a second controller team.
-**Plan:** AND-02/03/05/06/11; A-FR-01/02/04/05/10.
+**Владелец:** Android service/native; отдельная команда второго контроллера не требуется.
+**Пункты плана:** AND-02/03/05/06/11; A-FR-01/02/04/05/10.
 
-Keep these frozen contracts:
+Сохраняются следующие контракты:
 
-- one app repository, one private worker, one native attempt/process;
-- FGS promotion before profile/JNI; typed foreground failure;
-- one original TUN owner, borrowed socket dup never closes caller fd;
-- physical/app/authority gates around every JNI/OS step; terminal faults close gate
-  before delayed cleanup;
-- no command listener/hot reload; Start/TUN never publishes Ready;
-- Stop/Close/coroutine timeout not death; successor waits for Binder death plus both
-  RPC returns, source body+Stub idle and parent monitor cleanup;
-- uncertain FD/native/observer owners retained to process exit;
-- raw core/config/domain/package/error text never crosses state/log/support seams;
-- persistent cache and closed-history override required for every worker;
-- no direct/allowBypass/plaintext fallback.
+- один репозиторий состояния приложения, один private worker и одна native-попытка на процесс;
+- перевод в FGS до профиля/JNI, типизированная ошибка запуска foreground service;
+- один владелец исходного TUN; заимствованный дубликат сокета не закрывает fd вызывающего;
+- проверки физической сети, приложения и полномочий у каждого JNI/OS шага;
+  терминальная ошибка закрывает допуск до отложенной очистки;
+- отсутствие command listener/hot reload; Start/TUN сами по себе не публикуют Ready;
+- Stop/Close/тайм-аут coroutine не означают смерть: замена ждёт Binder death,
+  возврата обоих RPC, завершения тела источника/Stub и очистки монитора родителя;
+- неопределённые владельцы FD/native/observer удерживаются до выхода процесса;
+- исходные конфигурации, домены, пакеты и тексты ошибок не проходят в состояние/логи/поддержку;
+- отключение постоянного кеша и closed-history требуется для каждого worker;
+- отсутствие direct/`allowBypass`/plaintext fallback.
 
-Resource additions should be minimal: first validate revision3 retention controls and
-existing fixed lanes. The C04 shared-carrier/session cancellation and resource ledger is
-a later scoped transport-owner task. Do not couple first AAR activation to a quic-go
-upgrade, CCA change or new pause subscriber.
+Ресурсные изменения следует ограничить необходимым: сначала проверить удержание
+владельцев revision3 и существующие фиксированные линии вызовов. Отмена общего
+carrier/session и учёт ресурсов из C04 — последующая задача владельца транспорта.
+Первое подключение AAR не зависит от обновления quic-go, смены CCA или нового подписчика pause.
 
-### Stage 5 — platform integration gates before “working VPN”
+### Этап 5. Проверить платформенную интеграцию
 
 **Owner:** Android platform owner.
 **Plan:** AND-02/03/05/06/07/11.
 
-Ordered future gates, all `NOT_RUN`:
+Последовательность будущей приёмки; всё `NOT_RUN`:
 
-1. generated Kotlin/Java/JNI calls return expected version/revisions and typed errors;
-2. FGS consent/eligibility/revoke/destroy on API29/API34+/target36;
-3. TUN establish/protect/bind with original PFD retention and failure paths;
-4. strict-owner path over TCP/UDP/PreMatch/DNS/fakeIP/ICMP/fragments; unknown UID denies;
-5. exact physical context before TUN/socket, blocked/lost/change causes controlled
-   retirement, no old-path direct fallback;
-6. profile expiry/revocation during blocking JNI, delayed callbacks and late PFD;
-7. startup normal/error/cleanup panic/hang retains nonnil typed cause, no raw diagnostics;
-8. cache/history flags: wrong scope/options reject, no cache DB, active tracker/event parity;
-9. observer late Subscribe/Close/backpressure and actual worker death;
-10. parent/child shutdown with blocked JNI/Binder/raw write and uncertain owner;
-11. accepted protected observation before `ready`; STARTED/handshake/key icon are not Ready.
+1. Сгенерированные вызовы Kotlin/Java/JNI возвращают ожидаемые версии и типизированные ошибки.
+2. Согласие, допустимость FGS, отзыв и destroy проверены на API29/API34+/target36.
+3. TUN establish/protect/bind сохраняют исходного владельца PFD, включая ошибки.
+4. Strict-owner действует для TCP/UDP/PreMatch/DNS/fakeIP/ICMP/фрагментов; неизвестный UID отклоняется.
+5. Физический контекст проверяется до TUN/socket; blocked/lost/change завершают старое владение
+   управляемо и не включают direct fallback старого пути.
+6. Истечение/отзыв профиля учитываются при блокирующем JNI, позднем callback и позднем PFD.
+7. Ошибка запуска сохраняет ненулевую типизированную причину при panic/hang очистки, без сырых диагностик.
+8. Флаги cache/history отклоняют неверные scope/options; проверяются отсутствие cache DB
+   и сохранение активных tracker/event.
+9. Проверены поздний Subscribe/Close, обратное давление observer и фактическая смерть worker.
+10. Проверено завершение родителя/потомка при заблокированном JNI/Binder/raw write и неопределённом владельце.
+11. До `ready` требуется принятое наблюдение защищённого пути; STARTED/handshake/иконка ключа его не заменяют.
 
-### Stage 6 — artifact/package/device/release evidence
+### Этап 6. Проверить артефакт, пакет, устройство и выпуск
 
 **Owner:** Android release/QA; dependencies AND-01…14.
 **Plan:** AND-14/15/16/17, A-FR-13…16.
 
-- Produce a signed complete APK/split set from the approved AAR, with signer lineage,
-  versionCode, SBOM/notices/corresponding source and channel identity.
-- Verify installation outcome separately from executing/adopted VPN readiness.
-- Device matrix: API29, API34+, API36, selected OEM/patch, 4/16KiB, arm64 and x86_64 lab.
-- Fault matrix: consent denial, notification denial, always-on/lockdown, another VPN,
-  process/UI/native death, reboot/force-stop/pre-unlock, network/Doze/LPS/OEM policy.
-- Protected-path and privacy checks precede performance claims.
-- Field/energy/Russia comparison only after AND-15 and explicit live authorization.
-- RC→canary→release only after all P0 and rollback/support gates.
+- Подписанный полный APK/набор split из одобренного AAR: история подписанта,
+  versionCode, SBOM, лицензии, соответствующие исходники и идентичность канала.
+- Результат установки отдельно от принятия установленного клиента и готовности VPN.
+- Матрица устройств: API29/API34+/API36, выбранные OEM/patch, 4/16 KiB, arm64 и лабораторный x86_64.
+- Матрица отказов: отказ в согласии/уведомлениях, always-on/lockdown, другой VPN,
+  смерть UI/native/процесса, reboot/force-stop/pre-unlock, сеть/Doze/LPS/политика OEM.
+- Проверки защищённого пути и приватности предшествуют заявлениям о скорости.
+- Полевое сравнение в России и замеры энергии — после AND-15 и явного разрешения live-проверок.
+- RC→canary→release — после закрытия P0 и условий rollback/поддержки.
 
-## Frozen cross-component contracts
+## Минимальные межкомпонентные контракты
 
-### Artifact identity
+### Идентичность артефакта
 
 ```text
 NativeArtifactIdentity {
@@ -229,9 +237,9 @@ NativeArtifactIdentity {
 }
 ```
 
-A marker return value or whole-AAR hash alone cannot satisfy this contract.
+Одного возвращаемого маркера или хеша всего AAR недостаточно для выполнения этого контракта.
 
-### Accepted runtime source
+### Принятый источник выполнения
 
 ```text
 AcceptedRuntimeSource {
@@ -246,10 +254,11 @@ AcceptedRuntimeSource {
 }
 ```
 
-It is parent-local, one-shot, redacted, retained through producer return and Binder
-reply marshalling. Reconnect/new worker cannot renew authority.
+Источник локален для родителя, потребляется однократно и не раскрывает чувствительные
+данные. Он удерживается до возврата producer и завершения формирования Binder-ответа.
+Переподключение или новый worker не продлевают полномочия.
 
-### Native ownership
+### Владение native-ресурсами
 
 ```text
 NativeOwnerReceipt {
@@ -263,9 +272,10 @@ NativeOwnerReceipt {
 }
 ```
 
-Graceful `Close` and local zero callbacks are intermediate facts, not release.
+Штатный `Close` и отсутствие локальных callbacks — промежуточные факты;
+они сами по себе не разрешают освободить все ресурсы владельца.
 
-### Path/power/transport observation
+### Наблюдение пути, энергии и транспорта
 
 ```text
 PathObservation {
@@ -277,50 +287,53 @@ PathObservation {
 }
 ```
 
-SFA PauseManager does not reach HY2 timer in the reviewed pin. Do not add a generic
-pause edge to the first artifact. Same-context resume conditionally reuses carrier;
-context invalidation or typed carrier failure uses existing retire/recreate owner.
-Battery/radio/NAT gain remains unknown until AND-15/16 evidence.
+В изученном pin SFA PauseManager не достигает таймера HY2. Поэтому общий обработчик
+pause не входит в первый артефакт. Возобновление в том же контексте условно допускает
+повторное использование carrier; недействительный контекст или типизированный отказ
+carrier используют существующего владельца завершения/пересоздания.
+Выигрыш для батареи, радиомодуля и NAT остаётся неизвестным до приёмки AND-15/16.
 
-## Strongest opposing guards and dependencies
+## Контрпримеры и зависимости
 
-- **“Source patch already implements it.”** No: sourceRevision3 and markers have
-  `artifactProof=false`; no AAR/Go/compiler/JNI inventory exists.
-- **“Independent SHA is enough.”** No: it authenticates approved bytes but not source
-  parity, generated API, ABI/16KiB or correct trust implementation.
-- **“Stock AAR plus Kotlin checks.”** Rejected: stock release lacks required APIs/wiring.
-- **“Build native now, add trust later.”** A technical intermediate build may validate
-  patch/JNI, but must not become final approved runtime artifact or enable Connect.
-  Final AAR source closure must include accepted trust module/API.
-- **“Second trust AAR is cleaner.”** Rejected: creates second Go runtime/dependency/
-  ABI/lifecycle boundary contrary to T14 and current one-owner architecture.
-- **“SFA pause/wake saves HY2 battery.”** Rejected by exact caller trace; no HY2
-  subscriber and no device outcome.
-- **“Close carrier on every resume.”** Rejected without path/failure evidence; may add
-  handshake/latency/energy. Existing context invalidation path is sufficient.
-- **“Timeout then release resources.”** Rejected: blocked JNI/Binder/UDP/raw write may
-  retain owners. Keep slot/process/source until actual return/death.
-- **“One developer per layer in parallel.”** Avoid until contracts freeze. Native patch,
-  generated JNI, Kotlin bridge, trust adapter, provider and service share one artifact
-  and lifecycle boundary. Independent work is safe only for immutable docs/fixtures/
-  release review after source/API freeze; integration has one principal Android owner.
+- **«Патч уже реализует рабочий клиент».** На срезе 28 октября sourceRevision3 и маркеры
+  имеют `artifactProof=false`; AAR и перечня Go/compiler/JNI для его сборки нет.
+- **«Независимого SHA достаточно».** Хеш связывает одобренные байты, но не доказывает
+  соответствие исходникам, generated API, ABI/16 KiB и корректность trust.
+- **«Достаточно stock AAR и проверок Kotlin».** В этом срезе stock release не содержит требуемых API/wiring.
+- **«Соберём native, trust добавим позже».** Промежуточная сборка может проверить patch/JNI,
+  но не становится финальным runtime-артефактом и не открывает Connect.
+  Полный состав финального AAR включает принятый trust module/API.
+- **«Отдельный trust AAR проще».** Он создаёт второй Go runtime и границы зависимости,
+  ABI и lifecycle вопреки T14 и существующему единому владельцу.
+- **«SFA pause/wake экономит батарею HY2».** Изученный вызов не имеет HY2-подписчика;
+  результат на устройстве также не получен.
+- **«На каждом resume надо закрывать carrier».** Без отказа/смены пути это не обосновано
+  и может увеличить число handshake, задержку и расход энергии. Существующего пути
+  отзыва контекста достаточно как исходного решения.
+- **«По тайм-ауту можно освободить ресурсы».** Заблокированный JNI/Binder/UDP/raw write
+  может удерживать владельцев: slot/process/source сохраняются до возврата или смерти.
+- **«Каждому слою нужен независимый разработчик».** До фиксации контрактов native patch,
+  generated JNI, Kotlin bridge, trust adapter, provider и service разделяют один артефакт
+  и жизненный цикл. Независимый разбор неизменяемых документов/fixtures/выпуска допустим
+  после фиксации source/API; интеграцией управляет один основной владелец Android.
 
-## Future acceptance and remaining unknowns
+## Будущая приёмка и неизвестное
 
-All acceptance below is `NOT_RUN`:
+Все перечисленные проверки остаются `NOT_RUN`:
 
-- exact patch/build/API/ABI/toolchain/artifact reproducibility;
-- production trust API acceptance and semantic parity T01…14;
-- JNI ownership/error/cancellation/privacy parity;
-- lifecycle/process death/FD/IPC races and hard cutoff limits;
-- actual transport writers, queue/cancel/resource ceilings and retirement latency;
-- API/OEM/patch/Doze/LPS/reboot/force-stop/lockdown behavior;
-- protected egress and task completion;
-- device energy/speed/RSS/FD/wakeup and NAT outcomes;
-- signed package install/update/adoption and release rollback/support.
+- воспроизводимость патча, сборки, API/ABI, toolchain и артефакта;
+- принятие рабочего trust API и соответствие семантике T01…14;
+- владение данными, ошибки, отмена и приватность JNI;
+- жизненный цикл, смерть процесса, гонки FD/IPC и пределы прекращения работы;
+- фактические writers транспорта, очереди, отмена, ресурсные пределы и задержка завершения;
+- поведение API/OEM/patch/Doze/LPS/reboot/force-stop/lockdown;
+- защищённый выход и завершение полезной задачи;
+- энергия, скорость, RSS, FD, пробуждения и NAT на устройстве;
+- установка/обновление/принятие подписанного пакета, откат и поддержка выпуска.
 
-Unknown inputs remain gates, not inferred failures or zeros. No battery/speed gains,
-runtime readiness or release date follows from the current source.
+Неизвестные входы остаются условиями будущей приёмки; их нельзя считать отказом
+или заменять нулём. Из описанного source-среза не следуют выигрыш скорости/батареи,
+готовность runtime или дата выпуска.
 
 ## Что не стоит делать
 
@@ -335,17 +348,17 @@ runtime readiness or release date follows from the current source.
 
 ## Источники и трассируемость
 
-Основные frozen knowledge families:
+Основные материалы:
 
-- Android ownership/platform: `PLATFORM-AND-UX` §§12.2/12.3/12.5–12.7/13.8/15.5;
-- power/HY2: R04-011 REPORT/SOURCES/HANDOFF;
-- QUIC ownership/time: `QUIC-ACCOUNTING-AND-LIMITS` §§4–7;
-- pause callback: R28-Z05 REPORT/SOURCES/HANDOFF;
-- resource/cancellation: R28-C04 REPORT/HANDOFF;
-- artifact/adoption/recovery: R05-004 §§4/6–8, R05-008 §§2–4;
-- late strict-owner crosscheck: Z08 SOURCES N01/N02/drift sections.
+- владение Android и платформа: `PLATFORM-AND-UX` §§12.2/12.3/12.5–12.7/13.8/15.5;
+- энергия/HY2: R04-011 REPORT/SOURCES/HANDOFF;
+- владение и время QUIC: `QUIC-ACCOUNTING-AND-LIMITS` §§4–7;
+- вызов pause: R28-Z05 REPORT/SOURCES/HANDOFF;
+- ресурсы/отмена: R28-C04 REPORT/HANDOFF;
+- артефакт/принятие/восстановление: R05-004 §§4/6–8, R05-008 §§2–4;
+- поздняя сверка strict-owner: Z08 SOURCES, разделы N01/N02/изменений среза.
 
-Actual source/plan anchors:
+Исходники и пункты планов:
 
 - `android/native/{README.md,source-lock.json,strict-owner/}`;
 - `android/{corebridge,profile,vpn,app}`;
@@ -353,6 +366,23 @@ Actual source/plan anchors:
 - `docs/android/CHANGE-REQUEST-TRUST-001.md`;
 - `android/STATE.md`, `docs/ANDROID-PLAN.md` (read-only current status).
 
-Unit-level dispositions are in private `coverage/Z05.json`; current source hashes are
-in `captures/Z05/current-source-cut.json`. This crosscheck covers 69 selected initial
-units and 3 relevant late units, not the whole 2714-unit corpus.
+Это сопоставление относится к выбранным знаниям и последовательным снимкам исходников
+28 октября; оно не доказывает атомарность общего среза или поведение позднейших сборок.
+Актуальные артефакты и их приёмка проверяются по плану Android.
+
+<a id="android-native-от-source-кандидата-к-одному-рабочему-клиенту"></a>
+<a id="краткое-состояние-кода"></a>
+<a id="stage-0--заморозить-входной-contract-не-собирать-два-ядра"></a>
+<a id="stage-1--применить-revision3-и-получить-source-parity-receipt"></a>
+<a id="stage-2--собрать-один-whole-aar-и-доказать-generated-api-parity"></a>
+<a id="stage-3--connect-accepted-profile-to-runtime-without-bypass"></a>
+<a id="stage-4--retain-existing-lifecycleerrorprivacyresource-controls"></a>
+<a id="stage-5--platform-integration-gates-before-working-vpn"></a>
+<a id="stage-6--artifactpackagedevicerelease-evidence"></a>
+<a id="frozen-cross-component-contracts"></a>
+<a id="artifact-identity"></a>
+<a id="accepted-runtime-source"></a>
+<a id="native-ownership"></a>
+<a id="pathpowertransport-observation"></a>
+<a id="strongest-opposing-guards-and-dependencies"></a>
+<a id="future-acceptance-and-remaining-unknowns"></a>

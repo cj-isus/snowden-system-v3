@@ -1,8 +1,8 @@
 # R02-010 — готовый binding должен пережить adapter boundary
 
-26 октября2026 · **READY_FOR_REVIEW** · до `14:44:16Z`.
+26 октября 2026 · **READY_FOR_REVIEW**.
 [Sources](SOURCES-010.md) · [паспорт](handoffs/R02-010.md).
-Вопрос после009: какие готовые session-binding свойства реально доступны через
+Вопрос после 009: какие готовые session-binding свойства реально доступны через
 pinned TLS caller, а какие только существуют в библиотеке/спецификации?
 
 ## 1. R02-19 — ConnectionState metadata не равно exporter capability
@@ -61,7 +61,7 @@ TLS connection не даёт отдельной уникальности нес�
 client выдаёт verifiedConn над исходным соединением. Даже наличие exporter у C
 не создаёт общего TLS endpoint на E. Это ограничение композиции, не недостаток
 HKDF/Go/uTLS. Перейти на настоящий TLS между C и X — другая архитектура termination,
-с server identity/profile/migration/camouflage ценой из005/009.
+с server identity/profile/migration/camouflage ценой из 005/009.
 
 Свежесть data record уже даёт правильно выбранный terminating TLS protocol.
 Добавлять отдельный exporter необязательно для каждого VPN потока. Его применение
@@ -78,7 +78,7 @@ HKDF/Go/uTLS. Перейти на настоящий TLS между C и X — �
 - ShadowTLS default helper создаёт **новый** uTLS Config из subset STD fields;
   ClientSessionCache не копируется. Native support resumption не делает его
   действующим в этой цепочке.
-- VLESS TCP tlsDialer завершает HandshakeContext до DialEarlyConn, как установлено009.
+- VLESS TCP tlsDialer завершает HandshakeContext до DialEarlyConn, как установлено 009.
   Ленивый VLESS header и WS `max_early_data` — **не TLS0-RTT**. Поиск нашёл WS fields,
   но не их превращение в TLS early-data API.
 - Внешний mutator/другой adapter/другой artifact могли бы изменить Config; их
@@ -93,7 +93,7 @@ HKDF/Go/uTLS. Перейти на настоящий TLS между C и X — �
 какие key exchange modes разрешены, разрешён ли early data и где его replay state.
 Fresh 1-RTT resumption и replayable early data — разные cases. Regular exporter
 и early exporter также разделены в [RFC8446 §7.5](https://www.rfc-editor.org/rfc/rfc8446.html#section-7.5).
-Exported bytes не добавляют application exactly-once из009.
+Exported bytes не добавляют application exactly-once из 009.
 
 ## 4. Выбор reuse и цена
 

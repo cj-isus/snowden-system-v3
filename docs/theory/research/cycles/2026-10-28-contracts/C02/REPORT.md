@@ -1,6 +1,6 @@
 # R28-C02 — допуск защищённого пути при неизвестной причине отказа
 
-Автор: Теория (2), C02. Дата: 28.10.2026. **READY_FOR_REVIEW; source/spec/manual model, plan-only.**
+Дата: 28.10.2026. **READY_FOR_REVIEW; source/spec/manual model, plan-only.**
 
 ## 1. Ограниченный ответ и новая дельта
 
@@ -245,4 +245,4 @@ Primary: [VLESS outbound](https://github.com/SagerNet/sing-box/blob/b5ebaa1fc0f2
 
 ### Итог документационной сверки
 
-28 remote/local source records совпали; 18 local/baseline inputs без hash drift на 09:14:21Z; матрица содержит15 строк, missing local Markdown links —0. Это статическая provenance/link проверка, **не product test/PASS**. Основной контракт и связанные source/model вопросы конечны; оставшиеся проверки требуют отдельного artifact/native/field назначения.
+28 remote/local source records совпали; 18 local/baseline inputs без hash drift на 09:14:21Z; матрица содержит 15 строк, missing local Markdown links —0. Это статическая provenance/link проверка, **не product test/PASS**. Основной контракт и связанные source/model вопросы конечны; оставшиеся проверки требуют отдельного artifact/native/field назначения.

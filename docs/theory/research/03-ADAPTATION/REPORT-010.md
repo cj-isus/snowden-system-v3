@@ -413,12 +413,13 @@ predmix.py совпала SHA-256 с prior captured файлом; LICENSE/README
 заново прочитаны. Read scope — selected Python path; numerical/C++/ABI audit
 и runtime installation отсутствуют [C2].
 
-API и actual path:
+Рассмотренный API и вызывающая цепочка:
 `predmix_hoeffding_cs(x, alpha, truncation, running_intersection=False, N=None,
 fixed_n=None)` → lower_cs с alpha/2 + `1−lower_cs(1−x,alpha/2)`
 (predmix.py:172–220) → `predmix_hoeffding_lower_cs` (:121–169) →
-`predmix_lower_cs` (:10–69). Последняя использует weighted cumulative center,
-margin `(log(1/α)+Σλ²/8)/Σλ`. Input x в [0,1], N=None; не imputed unknowns.
+`predmix_lower_cs` (:10–69). Последняя использует взвешенный накопительный центр
+и margin `(log(1/α)+Σλ²/8)/Σλ`. Вход x в [0,1], N=None;
+произвольное заполнение неизвестных исходов этим API не обосновано.
 
 **Проверка математического target.** Waudby-Smith–Ramdas [P4, §2, §3]
 предполагают постоянное conditional mean μ. Для предсказуемых λ_i при этой

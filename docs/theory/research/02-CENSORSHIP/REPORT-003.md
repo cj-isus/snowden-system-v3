@@ -1,9 +1,7 @@
 # R02-003 — готовый автомат: бюджет, дедлайн и граница остановки
 
-2026-10-26 · **READY_FOR_REVIEW**. R02, сессия
-`01a171e0-a1b5-7542-80f1-6da9694158c4`.
-Окно заканчивается **2026-10-26T06:30:26Z**. На boundary check05:56:55Z открыто.
-[Источники](SOURCES-003.md). Предыдущие пакеты001–002 не изменены и не ACCEPTED.
+2026-10-26 · **READY_FOR_REVIEW**.
+[Источники](SOURCES-003.md). Предыдущие пакеты 001–002 не изменены и не ACCEPTED.
 
 ## 1. Новый вопрос
 
@@ -31,8 +29,8 @@ constructor → Machine states → core Framework events/timers/actions → plat
 | Время | Событие | Возраст последнего packet A |
 |---|---|---|
 | 0 | Три NormalSent: a1, a2, A; A в конце очереди | 0 |
-| 0.6C | TunnelSent(a1); timer переустановлен до1.6C | 0.6C |
-| 1.2C | TunnelSent(a2); timer переустановлен до2.2C | 1.2C |
+| 0.6C | TunnelSent(a1); timer переустановлен до 1.6C | 0.6C |
+| 1.2C | TunnelSent(a2); timer переустановлен до 2.2C | 1.2C |
 | 1.8C | TunnelSent(A), ни один timeout не успел истечь | **1.8C>C** |
 
 Этот event trace опровергает получение per-packet guarantee C **из одного
@@ -56,7 +54,7 @@ WFP/TUN. Контроль: progress-gap watchdog и oldest-packet cap прове
 - создаётся Machine с `allowed_padding_packets=u64::MAX`, fraction0.
 
 Ручной source witness: `padding_budget_max=2`, `num_states=3`, корректный
-положительный непустой range window. Sampled budget всегда1; каждый из трёх
+положительный непустой range window. Sampled budget всегда 1; каждый из трёх
 padding states имеет limit1 и переходит по LimitReached в следующий/END.
 При корректной подаче PaddingSent и отсутствии внешнего cap эта цепь запрашивает
 три padding actions. Проверено дополнительное возражение: core Dist допускает
@@ -69,13 +67,13 @@ hard cap2**, а sampled target1 не равен суммарной count3. Эт�
 source observation; raw-byte equality не установлена.
 
 При обычных параметрах target намного больше states, но это не доказывает cap
-для всех разрешённых inputs. Framework fraction/allowance semantics из002 остаётся
+для всех разрешённых inputs. Framework fraction/allowance semantics из 002 остаётся
 отдельной границей. Проверять также NaN/nonpositive/degenerate inputs до constructor;
 валидность protobuf/JSON/подписи не означает пригодность численных параметров.
 
 **Единицы важны:** core sample durations конвертируются `Duration::from_micros`.
 RegulaTor `c` переводит seconds→microseconds; Tamaraw `p` переводит seconds/packet
-через множитель10^6, а `stop_window` передаёт в duration напрямую и документирован
+через множитель 10^6, а `stop_window` передаёт в duration напрямую и документирован
 как microseconds в StaticMachine. FRONT ranges проходят без такой конверсии.
 Нельзя передавать одинаковое число «секунд» во все floating-point аргументы.
 
@@ -92,7 +90,7 @@ Maybenot в продукт не встроен. Нужна явно выбран
 
 Tamaraw constructor включает padding machine и soft-stop machine. В последней
 NormalSent перевзводит timer; после TimerEnd начинается tail state и затем release.
-Source использует счётчик100, но до tail считает TunnelSent, а в tail — PaddingSent.
+Source использует счётчик 100, но до tail считает TunnelSent, а в tail — PaddingSent.
 Уже установленное в002 различие queued intent / replacement / emitted означает,
 что комментарий «кратно100 packets» нельзя без adapter trace объявить wire invariant.
 NormalSent — enqueue event, а не подтверждение, что пользовательская операция

@@ -824,8 +824,8 @@ bounded δ=2s и перечисленные upper durations; в реальном
 | Trace | Премисы и ручной ход | Вывод / что способно его опровергнуть |
 |---|---|---|
 | T1 Warm без issuer/DNS A | Уже accepted B имеет достаточный locator/TLS/credential, physical сеть достижима, guard/permissions применимы; local admission5s → single-owner path25s → task5s. Всего≤35s; applicable expiry120s, D60s: `35+2<120`, `35≤60` | Условно возможна G без O_admin и без нового import. Любой обязательный donor/DNS/time dependency вне initial inputs либо неограниченный network duration снимает этот bound |
-| T2 Matching K с человеком | q0 совпадает; permit до90s, target до110s, D80s; read/preview до15s, явный confirm до18s, retirement≤15s, commit≤5s → commit≤38s; path≤20s+task≤5s →≤63s. `38+2<90`, `63+2<110`, `63≤80` | Есть условный порядок P3→P5→P7; preview не его последний gate. Поменявшийся q/approval/clock/sourceFence или настоящий unbounded stage опровергает применимость |
-| T3 Поздний commit | Preview в20s, applicable permit expiry50s; retirement/staging доводят commit до54s | `54+δ<50` ложно; fresh fence должен отклонить. Нельзя считать старый path живым после retirement и нельзя продлевать permit |
+| T2 Matching K с человеком | q0 совпадает; permit до 90s, target до 110s, D80s; read/preview до 15s, явный confirm до 18s, retirement≤15s, commit≤5s → commit≤38s; path≤20s+task≤5s →≤63s. `38+2<90`, `63+2<110`, `63≤80` | Есть условный порядок P3→P5→P7; preview не его последний gate. Поменявшийся q/approval/clock/sourceFence или настоящий unbounded stage опровергает применимость |
+| T3 Поздний commit | Preview в20s, applicable permit expiry50s; retirement/staging доводят commit до 54s | `54+δ<50` ложно; fresh fence должен отклонить. Нельзя считать старый path живым после retirement и нельзя продлевать permit |
 | T4 Семантически старый K | Permit ещё действителен час, но FromVersion/envelope/trust/epoch не соответствует q1; O_admin отсутствует, других authority inputs нет | C2 именно для recovery-permit ветки. Ordinary accepted B или законная другая enrollment ветка могут обходить этот cut, если их prerequisites действительно есть |
 | T5 «Есть backup», но нет custody/permission | Репозиторий цел; единственный decrypt capability потерян либо DPAPI ciphertext перенесён в неподдержанный user/machine context; либо default restic lock запрещён backend permissions | Restore bytes/permission cut; не «сломанный transport». Новый корректный ключ/поддержанная migration/разрешённый immutable restore путь меняют премисы, сами ciphertext не помогают |
 | T6 Оба недоступны | A выключен; B отсутствует/тоже выключен; backup цел, operator/provisioning нет | C1 до изменения среды. Никакой конечный перебор портов не производит работающий gateway |
@@ -1297,10 +1297,10 @@ recipient/native share flow этим срезом **не проверен**.
 | Evidence authority | Validated Binder reply — dated reported fact, printable text — несекретный editable export | Ни timestamps, ни TraceId/sequence не подпись, не proof OS enforcement/egress/task outcome |
 
 StateFlow current official API описывает conflation/equality. Однако web API
-сейчас1.11.0, проект явно использует coroutines-android**1.10.2**. Release commit
+сейчас 1.11.0, проект явно использует coroutines-android**1.10.2**. Release commit
 1.10.2 найден, **две raw-download попытки StateFlow.kt/LICENSE.txt истекли по
 timeout**. Пinned implementation comparison не выполнен. Поэтому это reference
-API semantics, не исследование source internals именно1.10.2/не повод обновить
+API semantics, не исследование source internals именно 1.10.2/не повод обновить
 зависимость. [E35 StateFlow API](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-state-flow/).
 
 ### 22.3. Условие обоснованного диагноза и ручные контрпримеры
@@ -1382,12 +1382,12 @@ provider/native/device proof остаётся открытым. Windows OFF-05/C
 
 ## 24. R06-004 — конечные будущие случаи и предлагаемая вставка
 
-Следующие10 случаев **не выполнены**; no new fixtures/tests/simulation:
+Следующие 10 случаев **не выполнены**; no new fixtures/tests/simulation:
 
 | ID | Будущий случай | Ожидаемое конечное различие |
 |---|---|---|
 | D01 | Медленный collector, все relevant events ещё внутри ring | Последний snapshot восстанавливает retained events; не фиктивный loss alarm |
-| D02 | Больше128 записей / Clear / новый parent process | Разные retention scopes; никакой lifetime completeness/uptime из zero counter |
+| D02 | Больше 128 записей / Clear / новый parent process | Разные retention scopes; никакой lifetime completeness/uptime из zero counter |
 | D03 | Повторные same phase/reason replies, но новые observation times | History dedup не выдаёт old event за fresh sample; current facts читаются своим путём |
 | D04 | Новый binding к тому же worker и новый worker | ctx_new не переводится в утверждение о restart без actual evidence |
 | D05 | Worker reply→IPC return→parent запись с invalid/reordered times | Original times сохраняются; unknown/ordered interpretation не чинится свежими часами |
@@ -1684,14 +1684,14 @@ gateway E имеет IPv4 literal либо имя. Browser может работ
 | Сочетание фактических возможностей | Что принципиально возможно / неизвестно |
 |---|---|
 | Native IPv6 route + admitted IPv6 gateway | Native IPv6 dial при valid authority/свежих receipts; наличие адреса не health proof |
-| IPv6 underlay + рабочий CLAT/PLAT + IPv4 E | IPv4 literal/socket может работать через464XLAT; нельзя объявлять каждый literal неисправимым |
+| IPv6 underlay + рабочий CLAT/PLAT + IPv4 E | IPv4 literal/socket может работать через 464XLAT; нельзя объявлять каждый literal неисправимым |
 | DNS64/NAT64 без пригодного IPv4 socket path + FQDN E | AAAA synthesis может дать compatible IPv6 representation, если используется подходящий resolver/path |
 | Та же сеть, но только IPv4 literal без admitted synthesis/CLAT | У этого представления endpoint нет доказанного пути; это ещё не global server failure |
 | Сломанный authoritative AAAA и живой A | Обычный DNS64 может не синтезировать AAAA; RFC8305§7.2 описывает отдельный local-synthesis fallback, не автоматическое право клиента делать его |
 
 RFC6147 DNS64 синтезирует AAAA из A для обращения **по имени**; RFC6877
 описывает CLAT для IPv4 literals/sockets; это разные механизмы [E45/E46].
-NAT64 prefix не обязательно64:ff9b::/96: RFC6052 поддерживает network-specific
+NAT64 prefix не обязательно 64:ff9b::/96: RFC6052 поддерживает network-specific
 prefixes нескольких длин и свой encoding [E47]. Простое приписывание IPv4 bytes
 к hardcoded /96 не универсальное решение.
 
@@ -1962,6 +1962,19 @@ placement DNS/translation и per-leg identity/authority. Модель не до�
 
 ## 39. R06-010 — рабочие сети: split DNS/NRPT/PAC, LAN-сервисы и чужая политика на exact callers
 
+> **Матрица ниже не является универсальным справочником запретов.**
+> Отсутствие одного LocalSubnet-permit не устанавливает результат всех
+> маршрутов app→TUN→engine→physical и всех слоёв WFP. На Android capture UID,
+> always-on owner, lockdown и исключения — разные области; per-app списки
+> задаёт Builder приложения, а prepare не всегда отбирает VPN у любого владельца.
+> [Поздний разбор с предпосылками](handoffs/R06-012.md) содержит адресные возражения,
+> но не принят автоматически целиком. Основной принятый смысл платформенных
+> API изложен в [главе UID и владения](../../android/UID-ROUTING-AND-OWNERSHIP.md).
+> Не назначать пользователю причину либо отключение защиты по одной строке
+> старой матрицы; фактическое сосуществование и задача требуют своей проверки.
+
+
+
 Дата среза: **2026-10-26**. Область — R06-010; baseline R06-006…008 не повторяется. Использованы Snowden source и официальные документы ОС.
 
 ### 39.1 Windows: фактическая строгая политика и её следствия
@@ -2019,6 +2032,17 @@ K(y) §22-24): успешное восстановление задачи, а н
 эмпирический per-app набор; замер K(y) на W1…W4/A1…A4. Все future cases NOT_RUN.
 
 ## 40. R06-011 — измерение useful-task recovery: контракт событий и референсы
+
+> **Ограничение метрики и её основания.** Эта схема — предложение,
+> а не доказательство существующего producer пользовательских исходов.
+> Зависимость от прежней product-формулы R03-009 неприменима:
+> [поправка R03-17](../reviews/NINE-2026-10-27-R03-17-ERRATUM.md)
+> задаёт условия суммарной ошибки, но сама не строит интервал recovery-rate.
+> Горизонт зрелости, незавершённые исходы и область защиты также требуют
+> уточнения: [рецензия R06-013-A](../reviews/NINE-2026-10-27-R06-013-A.md).
+> Успех задачи после явного снятия защиты не является защищённым успехом.
+
+
 
 Дата среза: **2026-10-26**. Уточняется измерение useful-task recovery с exact caller/version/license; baseline §39 (owner-badge) и R06-004 K(y) не повторяются.
 

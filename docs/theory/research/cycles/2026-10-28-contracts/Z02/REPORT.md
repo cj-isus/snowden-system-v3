@@ -143,13 +143,14 @@ hostname после redirect может пройти underlying resolver. В S18
 request, но exporter не заполнил request.address: конкретный HTTP selected-IP
 из raw не устанавливаем только по candidate DNS set.
 
-`queries[].ttl=null` не0 и не infinity; observed snapshot не равен
+`queries[].ttl=null` не 0 и не infinity; observed snapshot не равен
 авторитетному TTL-controlled mapping всего window. RFC1035 §3.2.1 определяет
 TTL как permission на caching, **не** immutable DNS identity до конца TTL.
 Не превращаем отсутствие age guard в exploit или новый product defect:
 это свойство snapshot-style measurement, пригодное для конечного trace.
 
-### 3.4 Почему code200 + empty body + timeout не равно0байт
+<a id="34-почему-code200--empty-body--timeout-не-равно0байт"></a>
+### 3.4 Почему code200 + empty body + timeout не равно 0 байт
 
 Новый source путь: `Runner.httpGet:63–103` вызывает транспорт, затем читает
 body до EOF/ошибки. `netx/http.go:42–43` действительно подключает
@@ -193,7 +194,7 @@ interval отсутствует. Для узкого descriptive TCP join это
 | dns_consistency | inconsistent/consistent/consistent | в historical source общий AS допустим | равный IP, current DNS и одинаковый endpoint |
 | x_status |8480/8704/1 | experimental flags historical engine | version-independent bitfield/API score |
 | API anomaly/confirmed/failure | summary S18/S19 присутствуют; raw root/test_keys отсутствуют | сохранённый backend response неизвестной revision | field absence=false; failure=false отменяет HTTP timeout |
-| requests.address/t0/transaction_id | отсутствуют во всех3 old records | unknown endpoint/transaction linkage | заполнять из современного optional schema |
+| requests.address/t0/transaction_id | отсутствуют во всех 3 old records | unknown endpoint/transaction linkage | заполнять из современного optional schema |
 | annotations.network_type | S19wifi; другие absent | self-reported local connection | fixed/cellular upstream или current user profile |
 | backend_version/bucket_date | отсутствуют в raw | unknown collector version/process-date | modern API retrieval date=measurement time |
 
@@ -298,12 +299,12 @@ endpoint/stage/context/time-cells. `Y_d=1` — stage-specific success в cell d,
 - Если desired statement — existence for каждый пользователь/весь период,
   требуется иной квантор: positive одного пользователя не свидетель этого claim.
 
-Если D известно и равновзвешенно, `N=|D|>0`, наблюдены s истинных1,f истинных0,
+Если D известно и равновзвешенно, `N=|D|>0`, наблюдены s истинных 1,f истинных 0,
 u неизвестных, N=s+f+u, то finite population share идентифицировано лишь:
 
 ` s/N <= theta_D <= (s+u)/N `.
 
-**Вывод:** неизвестные могут все оказаться0 или все1; оба заполнения дают
+**Вывод:** неизвестные могут все оказаться 0 или все 1; оба заполнения дают
 края, независимость/MAR не нужна. Это deterministic missing-data identification,
 **не** confidence interval и не новая ошибка budget theorem. Если N/sampling
 и целевые strata неизвестны, формула не вычисляется; нельзя подставлять
@@ -437,6 +438,6 @@ HTTP chosen endpoint/TH precise timings; true clock/GeoIP/path quality;
 6. clock/upload/dashboard failure при сохранённом local outcome;
 7. licence/legal check перед product-data integration.
 
-Запись только собственные4файла/captures. Продукт, общая теория/индексы,
-документы соседей и прежний R02-014 не изменены. Probes/test/fixtures/
-build/simulation/crypto/native/live/OS/VPS/SSH/schedules/agents не запускались.
+Проверки трафика, тесты, fixtures, сборка, симуляции, crypto/native/live,
+действия с ОС и VPS не выполнялись. Эти границы относятся к срезу
+28 октября; результаты R02-014 не принимаются автоматически.

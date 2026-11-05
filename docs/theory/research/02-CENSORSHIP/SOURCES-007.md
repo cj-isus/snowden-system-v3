@@ -1,6 +1,6 @@
 # R02-007 — HRR, policy caller и provenance
 
-26 октября2026. Captures `.artifacts/research/theory-02/2026-10-26-r02-007/`.
+26 октября 2026. Captures `.artifacts/research/theory-02/2026-10-26-r02-007/`.
 
 | Pin / source | Symbols и предел |
 |---|---|

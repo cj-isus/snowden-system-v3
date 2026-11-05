@@ -1,6 +1,6 @@
 # R04-011 — источники: Android power modes, VPN FGS и HY2 keepalive
 
-Срез источников: 27 октября2026. Последняя внешняя запись `15:02:13Z`;
+Срез источников: 27 октября 2026. Последняя внешняя запись `15:02:13Z`;
 captures и manifests:
 `.artifacts/research/theory-04/2026-10-27-android-energy-res5/`.
 
@@ -26,14 +26,14 @@ source reference без доказательства shipped artifact; `FETCH_FA
 
 Tag `android-16.0.0_r1` independently resolved on 2026-10-27 to:
 
-- `platform/frameworks/base` commit
-  `99b01a65cc4c104933788b3143285ab6bae65827`;
-- `platform/packages/modules/Connectivity` commit
-  `627eb3c63e7c7cb3cb9f8ea319e4bb1676079c3a` (recorded for scope; no claim
-  below depends on an unread Connectivity file).
+- `platform/frameworks/base`, commit
+  `99b01a65cc4c104933788b3143285ab6bae65827`.
+- `platform/packages/modules/Connectivity`, commit
+  `627eb3c63e7c7cb3cb9f8ea319e4bb1676079c3a`: указан как граница источника;
+  нижеследующие выводы не опираются на непрочитанный Connectivity-файл.
 
-Selected `frameworks/base` files were read from the immutable commit. Their
-headers declare Apache-2.0.
+Выбранные frameworks/base-файлы прочитаны по immutable commit;
+их headers указывают Apache-2.0.
 
 | ID | Файл / symbols | Source-факт и граница |
 |---|---|---|
@@ -45,13 +45,14 @@ headers declare Apache-2.0.
 | A06 | `apex/jobscheduler/.../AppStandbyController.java`: `getAppMinBucket` | Power allowlists/admin/app-op can lower the minimum bucket; exact VPN exemption mapping was not traced end-to-end here. Public P04 is the basis for the VPN restricted-bucket statement |
 | A07 | `core/java/android/os/SystemClock.java` | `uptimeMillis`/`System.nanoTime` stop in deep sleep; `elapsedRealtime` includes it. Existing Snowden authority clocks use the latter; native QUIC reference uses the former family |
 
-Raw AOSP captures and tag records: `aosp-*.b64/json`; decoded review copies:
-`aosp-*.read.txt`. This is source analysis, not Android device conformance.
+AOSP-копии и tag records: `aosp-*.b64/json`; декодированные файлы чтения —
+`aosp-*.read.txt`. Это разбор исходников, не подтверждение соответствия
+конкретного Android-устройства.
 
 ## 3. Snowden Android current source inputs
 
-Selected inputs copied into `local/` with SHA-256; selected list and
-post-copy equality are in `selected-source-manifest.json`.
+Выбранные входы скопированы в `local/` с SHA-256. Перечень и совпадение
+байтов после копирования — в `selected-source-manifest.json`.
 
 | ID | Current source | Fact / boundary |
 |---|---|---|
@@ -66,11 +67,11 @@ post-copy equality are in `selected-source-manifest.json`.
 
 ## 4. QUIC/HY2 source model
 
-Manifest source: sing-box v1.13.19 `go.mod` pins quic-go
+Манифест sing-box v1.13.19 закрепляет quic-go
 `v0.59.0-sing-box-mod.4`, sing-quic
-`v0.6.4-0.20260803041914-d83826c306d7`, sing v0.8.13. Module `.info` dates and
-local source were recorded. Three critical files were freshly retrieved by
-immutable commit and matched local cache byte-for-byte:
+`v0.6.4-0.20260803041914-d83826c306d7`, sing v0.8.13. Записаны даты module `.info`
+и локальные исходники. В первоначальном срезе три критичных файла получены
+по immutable commit и побайтово совпали с module cache:
 
 - quic-go `connection.go` — `ccd46abedd39c6f8384b1df8daf42008724958f5`;
 - sing-quic `hysteria2/client.go` — `d83826c306d7c008cafb3fd6d8ee07cbcfd656ed`;
@@ -91,14 +92,14 @@ immutable commit and matched local cache byte-for-byte:
 Go `go1.26.0`, commit `d90b98e65320778f3b1f99a6951ab20f04d218b3`
 (BSD-3-Clause), was read only as an explicit reference:
 
-- `time.Since` / timer `when(d)` use `runtimeNano`;
-- runtime `time_runtimeNano` calls `nanotime`;
-- Linux arm64 `nanotime1` requests `CLOCK_MONOTONIC`;
-- Linux man-page says this clock excludes suspend.
+- `time.Since` и timer `when(d)` используют `runtimeNano`.
+- Runtime `time_runtimeNano` вызывает `nanotime`.
+- Linux arm64 `nanotime1` запрашивает `CLOCK_MONOTONIC`.
+- Прочитанная Linux man-page указывает, что эти часы исключают suspend.
 
-This reference is consistent with Android `SystemClock` documentation that
-`System.nanoTime`/uptime stop in deep sleep. It does **not** attest the future
-Snowden AAR, because L08 leaves Go and AAR digest unknown.
+Справочная модель согласуется с Android SystemClock-документацией:
+`System.nanoTime`/uptime останавливаются в глубоком сне. Она не удостоверяет
+будущий Snowden AAR: в датированном L08 Go и digest AAR не установлены.
 
 ## 6. OSS Android reference and licence
 
@@ -107,22 +108,21 @@ SagerNet `sing-box-for-android` commit
 2026-10-11T04:15:19Z (`1.15.0-alpha.12`), files `BoxService.kt`,
 `VPNService.kt`, LICENSE:
 
-- receiver observes `ACTION_DEVICE_IDLE_MODE_CHANGED` and calls libbox
-  `pause()/wake()`;
-- this demonstrates a real Android caller, but U06 shows it is not proof of
-  HY2 QUIC timer suppression;
-- license says GPL-3.0-or-later and additionally prohibits derivative works
-  using the app name or implying association without consent. Reuse decision:
-  **reference/adapt concept only**, no code copied, no claim of drop-in.
+- Receiver наблюдает `ACTION_DEVICE_IDLE_MODE_CHANGED` и вызывает libbox
+  `pause()/wake()`.
+- Это реальный Android caller; U06 показывает, почему он не доказывает
+  подавление таймера HY2 QUIC.
+- В прочитанной лицензии — GPL-3.0-or-later и условие о названии/ассоциации
+  производного приложения без согласия. Решение — ориентир/адаптация идеи;
+  код не копировался, совместимая прямая замена не заявлена.
 
 ## 7. Failed/limited sourcing and execution boundary
 
-- `setup-power-rails?hl=ru` returned HTTP404; corrected P06 page was read.
-- repository-root AOSP LICENSE URL returned HTTP404; selected AOSP file headers
-  independently identify Apache-2.0.
-- Android RU pages explicitly identify AI/Cloud Translation; key Doze/FGS/job
-  statements were cross-read in EN. P05/P06 numerical/device statements are not
-  converted into Snowden effects.
-- No tests, builds, toolchains, device/adb, forced Doze, network/VPN runtime,
-  simulation, benchmark or battery measurement were run. All device cases in
-  REPORT are `NOT_RUN`.
+- `setup-power-rails?hl=ru` вернул HTTP404; прочитана исправленная страница P06.
+- URL корневого AOSP LICENSE вернул HTTP404; headers выбранных файлов
+  отдельно указывают Apache-2.0. Это не полный аудит NOTICE всей поставки.
+- Android RU-страницы отмечают AI/Cloud Translation; ключевые Doze/FGS/job
+  положения сопоставлены с EN. Числа и сведения об устройствах P05/P06
+  не превращаются в измеренный эффект Snowden.
+- Тесты, сборка/toolchains, device/adb, принудительный Doze, VPN runtime,
+  симуляции, benchmarks и батарея не измерялись. Все device-случаи REPORT — NOT_RUN.

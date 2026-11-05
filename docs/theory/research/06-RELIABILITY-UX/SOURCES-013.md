@@ -106,17 +106,16 @@ Artifacts: `.artifacts/research/theory-06/2026-10-27-recovery-pilot-res9/`.
 
 ### Pin/provenance
 
-- Проект: `ooni/probe-cli`.
-- Tag: `v3.31.0`.
+- Проект: `ooni/probe-cli`, tag `v3.31.0`.
 - Commit: `1605e00481e2b98488d62cfc2f7ce34ff345eb70`.
-- Release timestamp: 2026-10-22T13:05:42Z.
-- Repository: <https://github.com/ooni/probe-cli>.
-- License: **GPL-3.0**, root `LICENSE` full text read/captured; SHA-256
+- Release timestamp:2026-10-22T13:05:42Z.
+- [Репозиторий](https://github.com/ooni/probe-cli).
+- Корневой `LICENSE` прочитан/сохранён целиком: GPL-3.0, SHA-256
   `3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986`.
-- Exact source tar SHA-256:
+- Архив исходников: SHA-256
   `18f5c7b38926fed38015782bfb3bcedcd00b7f6aa8bf062639099e21bfe250ef`.
-- Статус: **SOURCE_FULL_RELEVANT_PATHS_READ** from captured exact-tag tree;
-  project was not built/run and network experiments were not invoked.
+- SOURCE_FULL_RELEVANT_PATHS_READ выбранных путей exact-tag дерева.
+  Проект не собирался/не запускался, сетевые эксперименты не исполнялись.
 
 ### Checked callers
 
@@ -132,11 +131,13 @@ Artifacts: `.artifacts/research/theory-06/2026-10-27-recovery-pilot-res9/`.
 
 ### Reuse/license decision
 
-`REFERENCE/ADAPT`, not code reuse. Take only the verified separation
-`local saver / submit gate / explicit network side effect`. Do not copy GPL-3.0
-source into Snowden; do not adopt OONI inputs/test keys or network experiments;
-do not claim its IP scrub solves privacy. Our typed producer allowlist is
-narrower. OONI is not evidence that task recovery was measured successfully.
+Решение — REFERENCE/ADAPT без переноса кода: брать различие
+`local saver / submit gate / explicit network side effect`. Готовые OONI
+inputs/test keys и сетевые эксперименты не становятся частью Snowden.
+Его IP scrub не доказывает нашу приватность; список разрешённых полей producer в Snowden более узок.
+Возможный последующий перенос кода требует отдельного обоснования
+совместимости и полного состава лицензий, а не запрета или разрешения
+только по названию GPL-3.0. OONI не доказывает измеренное восстановление задачи.
 
 ## 4. Own artifacts manifest
 
@@ -150,6 +151,6 @@ narrower. OONI is not evidence that task recovery was measured successfully.
 | captured `oonirun/submitter.go` | `e403fdcf9bc78bbb51f5b2a8bacc5baa15f424fc82101e5f89d942fef4a342f8` |
 | captured CLI `upload.go` | `8e6630dc62175871ad945f3f7ec796d43489022402a4d080e863762f9a1e39d0` |
 
-GitHub API metadata, public documents and source tar were retrieved over HTTPS.
-No certificate verification was disabled. No dependency installation, tests,
-build, simulations, native/device/user measurement or telemetry occurred.
+Метаданные GitHub API, публичные документы и архив исходников получались
+по HTTPS с проверкой сертификатов. Установка зависимостей, тесты, сборка,
+симуляции, native/device/user измерения и телеметрия не выполнялись.

@@ -10,23 +10,22 @@ SHA256 здесь удостоверяет идентичность прочит
 
 | ID | Прочитанный input | Read depth / значение |
 |---|---|---|
-| B0 | C05/TASK и COMMON нового цикла | FULL_TEXT_READ при начале нового назначения; дальнейшие выводы в рамках четырёх stages. Старые окна не возобновлялись |
+| B0 | Историческое назначение C05/TASK и COMMON | Прочитано как граница области работы, не источник научного доказательства |
 | B1 | `docs/theory/research/05-TRUST-SAFETY/REPORT-009.md` | SECTIONS_READ: §10.1–10.4, scoped verdict/остаток; §9 только граница предыдущего partial. Не принят автоматически |
 | B2 | `docs/theory/research/05-TRUST-SAFETY/REPORT-010.md` | SECTIONS_READ: current retention trace, scope/reset ordering, §7/F/H/G и contrasting outcomes |
 | B3 | `docs/theory/architecture/TRUST-CONTINUITY-AND-AGREEMENT.md` | SECTIONS_READ: §§1–3 (history/coherent cut/root ordering/overlap). TAP/hash-agreement за пределами этого пакета |
 | B4 | `docs/theory/architecture/RELEASE-EVIDENCE-BOUNDARIES.md` | SECTIONS_READ: время status evidence, historical CRL coverage, source/native boundary; не whole release audit |
-| B5 | Z06/Z07 TASK | SECTIONS_READ программы/strongest question; HANDOFF на09:10:09Z отсутствуют, не SOURCE_NOT_AVAILABLE для наших upstream inputs |
+| B5 | Z06/Z07 TASK | SECTIONS_READ программы/strongest question; HANDOFF на 09:10:09Z отсутствуют, не SOURCE_NOT_AVAILABLE для наших upstream inputs |
 
 Baseline/current copies и hashes: `local-preimage.json` (09:01:57–58Z),
 `local-supplement.json` (09:18Z). Paths в этих manifests относятся к project root.
-TASK/COMMON/shared chapters/old reports/продукт не редактировались.
 
 ## 2. Primary documents
 
 | ID | Источник / version | Прочитанная область и граница |
 |---|---|---|
 | P1 | [Android key-attestation guide](https://developer.android.com/privacy-and-security/security-key-attestation), retrieved28.10 | SECTIONS_READ: verification roles, status schema/serial/enum/expiry cleanup, root/path distinction. Дата страницы не runtime evidence. Actual status URL НЕ запрашивался; capture `public/google-attestation-doc.html` |
-| P2 | [TUF spec1.0.37](https://theupdateframework.github.io/specification/v1.0.37/), version header Last modified2026-10-08 | SECTIONS_READ: §§5.1–5.5, особенно5.3.7–11/5.4 ordering/expiry/discard. Не весь conformance audit; capture `public/tuf-spec-1.0.37.html` |
+| P2 | [TUF spec1.0.37](https://theupdateframework.github.io/specification/v1.0.37/), version header Last modified2026-10-08 | SECTIONS_READ: §§5.1–5.5, особенно 5.3.7–11/5.4 ordering/expiry/discard. Не весь conformance audit; capture `public/tuf-spec-1.0.37.html` |
 | P3 | [RFC9111](https://www.rfc-editor.org/rfc/rfc9111.html), June2022 | SECTIONS_READ: §4.2.3 age formula и §4.3.4 representation selection/304; raw capture `public/rfc9111.txt`. Не origin status publication/time guarantee |
 | P4 | [JavaSE21 CertPathValidator](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/security/cert/CertPathValidator.html#getInstance(java.lang.String)) | SECTIONS_READ: provider architecture, getInstance(String), getInstance(String,Provider), getProvider. Algorithm-only выбирает первый подходящий provider; actual registered providers не читались |
 | P5 | [Android KeyPermanentlyInvalidatedException](https://developer.android.com/reference/android/security/keystore/KeyPermanentlyInvalidatedException), API23 | SECTIONS_READ: class definition/invalidation semantics, не runtime/device proof |
@@ -47,12 +46,12 @@ Captured source commit, не published binary/release identity.
 
 | ID | File / выбранные строки | Read depth |
 |---|---|---|
-| G1 | `src/main/kotlin/GoogleRevocationList.kt`:31–87 | SECTIONS_READ всей рабочей логики fetch/parse/DTO/projection; exact raw повторно получен08:57:20–23Z |
-| G2 | `src/main/kotlin/Verifier.kt`:45–67,149–284,285–359 | SECTIONS_READ result/constructor/verify/async/internalVerify и gates до Success; exact raw получен09:01:36–42Z, archive hash совпал |
-| G3 | `provider/RevocationChecker.kt`:class/init/check | SECTIONS_READ всей логики checker; fresh raw получен09:04Z |
+| G1 | `src/main/kotlin/GoogleRevocationList.kt`:31–87 | SECTIONS_READ всей рабочей логики fetch/parse/DTO/projection; exact raw повторно получен 08:57:20–23Z |
+| G2 | `src/main/kotlin/Verifier.kt`:45–67,149–284,285–359 | SECTIONS_READ result/constructor/verify/async/internalVerify и gates до Success; exact raw получен 09:01:36–42Z, archive hash совпал |
+| G3 | `provider/RevocationChecker.kt`:class/init/check | SECTIONS_READ всей логики checker; fresh raw получен 09:04Z |
 | G4 | `provider/KeyAttestationCertPath.kt`:34–90 | SECTIONS_READ constructor/getCertificates/serialNumbers из имеющегося pinned archive; остальная provisioning parser logic не audited |
 | G5 | `provider/KeyAttestationCertPathValidator.kt`:54–155 | SECTIONS_READ parameter/date/provider/checker loop; BasicChecker/factory/RKP validator целиком не reviewed |
-| G6 | `provider/KeyAttestationProvider.kt`:28–60 | SECTIONS_READ registration/service resolution; fresh raw получен09:04Z |
+| G6 | `provider/KeyAttestationProvider.kt`:28–60 | SECTIONS_READ registration/service resolution; fresh raw получен 09:04Z |
 | G7 | `build.gradle.kts`:repositories/dependencies/java toolchain | SECTIONS_READ: Gson2.11.0, Kotlin2.2.0, Java21; fresh capture09:01Z. Test tasks не запускались |
 | G8 | LICENSE at pin | SECTIONS_READ license identity и redistribution conditions; fresh capture08:59Z, Apache-2.0 |
 
@@ -69,7 +68,7 @@ published binary. G4/G5 дополнительно получены по exact r
 Tag `gson-parent-2.11.0` → tag object
 `3b7c2ad8ce8dd471449ccbaee6d22f64c9816a38` → commit
 **`828a97be0f8d58108b140b77df8dc76b657f4a87`**.
-Tag/ref и target metadata повторно получены09:13:52–09:14:23Z:
+Tag/ref и target metadata повторно получены 09:13:52–09:14:23Z:
 `public/gson-tag.json`, `public/gson-tag-target.json`.
 [Pinned tree](https://github.com/google/gson/tree/828a97be0f8d58108b140b77df8dc76b657f4a87).
 
@@ -84,7 +83,7 @@ Tag/ref и target metadata повторно получены09:13:52–09:14:23Z
 | J7 | `GsonBuilder.java` | 552–568 setStrictness, available since2.11.0; SECTIONS_READ по fresh pin09:22Z, hash совпал с archive; не целый builder audit |
 | J8 | LICENSE | License identity/redistribution, Apache-2.0; exact fresh capture08:59Z |
 
-J1–J6 fresh captures получены08:57–09:13Z. Для J1,J3–J6 свежие hashes совпали
+J1–J6 fresh captures получены 08:57–09:13Z. Для J1,J3–J6 свежие hashes совпали
 с адресно читанным архивом; J2 read напрямую, `archive-identity.json` фиксирует
 проведённые сравнения (не blanket проверку всего archive).
 Raw URL base:
@@ -95,12 +94,12 @@ SDK compilation/JAR/reflection/R8/desugaring и schema fixtures — NOT_RUN.
 
 SDK tag **v2.4.2** → commit
 **`f5edbde31e5507f46db2069402dc38903fe6d9d4`**; fresh tag metadata09:13Z
-`public/tuf-tag.json`. Apache-2.0 LICENSE повторно получен08:59Z.
+`public/tuf-tag.json`. Apache-2.0 LICENSE повторно получен 08:59Z.
 [Pinned tree](https://github.com/theupdateframework/go-tuf/tree/f5edbde31e5507f46db2069402dc38903fe6d9d4).
 
 | ID | Source | Read depth / для какого вывода |
 |---|---|---|
-| T1 | `metadata/trustedmetadata/trustedmetadata.go`:43–56,61–95,103–173,178–261 | SECTIONS_READ fixed RefTime, root checks/workflow guard, assignment timestamp до final expiry; snapshot post-assignment expiry/version checks; raw capture08:57Z, дополнительное чтение09:23Z |
+| T1 | `metadata/trustedmetadata/trustedmetadata.go`:43–56,61–95,103–173,178–261 | SECTIONS_READ fixed RefTime, root checks/workflow guard, assignment timestamp до final expiry; snapshot post-assignment expiry/version checks; raw capture08:57Z, дополнительное чтение 09:23Z |
 | T2 | `metadata/updater/updater.go`:loadTimestamp311–353,loadRoot487–526 | SECTIONS_READ cache load/remote error/step persistence/root chain; current artifact hash совпал с прежним pinned source |
 | T3 | `metadata/metadata.go`:VerifyDelegate248–425, IsExpired | SECTIONS_READ role keys/quorum и выбор конкретных подписей, distinct public-material contribution, expiry equality. Dual-signed model требует только этой логики, не генерации подписей |
 | T4 | `go.mod` | SECTIONS_READ module/go1.25.0/dependencies; no fetch/install/build |
@@ -137,9 +136,9 @@ Current project files прочитаны статически и скопиро�
 - `archive-identity.json`: восемь адресных hash comparisons, все same=true;
   ещё три совпадения в `source-fetch-07.json`; не проверка всего репозитория/всех зависимостей.
 - `local-preimage.json`, `local-supplement.json`: исходные source/doc inputs,
-  копии в `local/`. `preservation-review.json` от09:25Z: все15 current inputs
+  копии в `local/`. `preservation-review.json` от 09:25Z: все 15 current inputs
   и их copies совпали с зафиксированными hashes.
-- `doc-review.json` от09:30Z: все8 локальных links существуют, все26 recorded
+- `doc-review.json` от 09:30Z: все 8 локальных links существуют, все 26 recorded
   source hashes совпали; `public-index.json` перечисляет raw captures с hashes.
   Это статическая сверка собственных документов/source, не product tests.
 - `paired-availability.json`: одно наблюдение отсутствия Z06/Z07 HANDOFF.

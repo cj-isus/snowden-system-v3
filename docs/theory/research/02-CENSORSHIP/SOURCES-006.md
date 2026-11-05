@@ -1,6 +1,6 @@
 # R02-006 — exact source, negative caller и ограничения capture
 
-26 октября2026; `.artifacts/research/theory-02/2026-10-26-r02-006/`.
+26 октября 2026; `.artifacts/research/theory-02/2026-10-26-r02-006/`.
 
 - **sing-shadowtls v0.2.1**, commit `af3279d7446641d5dd2e66cada24ce4597e98d35`:
   [v3_conn.go](https://github.com/SagerNet/sing-shadowtls/blob/af3279d7446641d5dd2e66cada24ce4597e98d35/v3_conn.go)

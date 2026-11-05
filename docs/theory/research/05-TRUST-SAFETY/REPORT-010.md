@@ -60,7 +60,7 @@ Own captures: `.artifacts/research/theory-05/2026-10-27-server-floor-contract-re
 |---|---|---|
 | Root N+1 не проходит подписи старого и нового quorum либо версию N+1 | Сохранить прежний root; отвергнуть offending candidate | Самоподпись кандидата не authority |
 | Root N+1 прошёл old+new threshold и последовательность; следующий root/роль недоступны | TUF5.3.7–8: принять и записать verified root **до** дальнейшего прохода | Полный target/profile ещё не принят |
-| Подписанная последовательная root chain; конечный root expired | TUF5.3.8 предшествует5.3.10: достигнутый root progress уже сохранён; update cycle abort | Expired final root не допускает загрузку нового timestamp/target |
+| Подписанная последовательная root chain; конечный root expired | TUF5.3.8 предшествует 5.3.10: достигнутый root progress уже сохранён; update cycle abort | Expired final root не допускает загрузку нового timestamp/target |
 | Новые timestamp/snapshot ключи после допустимой rotation | TUF5.3.11: dependent timestamp **и** snapshot history инвалидируется в указанной области | Не сбрасывать application epoch/ban/history; новый номер root без key rotation недостаточен |
 | Новый timestamp: подписи/version/reference прошли, expiry не прошёл | TUF5.4.4: discard новый timestamp;5.4.5 persistence не достигается | Мутация `trusted.Timestamp` не создаёт persistable floor |
 | Новый timestamp принят; snapshot/target/application затем отказали | Timestamp — допустимый predecessor; последующий отказ его не отменяет | Progress не является proof приложения |
@@ -258,7 +258,7 @@ t внутри ещё действующего validity interval P0; клиен�
 TUF6.1 прямо допускает withholding new roots: freeze ограничен expiry последнего
 доступного root, не утверждением «ничего новее не существует». Missing N+1/404
 или остановка по MaxRootRotations также не signed proof latest. Это особенно
-видно у project packageFetcher: отсутствие файла пакета имитирует404; package
+видно у project packageFetcher: отсутствие файла пакета имитирует 404; package
 может быть bounded incomplete без нового доверенного утверждения полноты.
 
 ### 3.4. Старый signed floor + fresh consent — контрпример
@@ -384,7 +384,7 @@ custody и ограниченный offline horizon, reconciliation при uncer
 fsync latency/стоимость администратора не измерены. Вечно BLOCKED — допустимое
 отрицательное решение безопасности, но не положительный recovery SLA.
 
-Falsifiers: доказанный non-rollbackable anchor меняет часть3.2; новое доверенное
+Falsifiers: доказанный non-rollbackable anchor меняет часть 3.2; новое доверенное
 external evidence меняет множество миров в3.3; доказанная compiler/OS/platform
 storage модель усиливает durability claims; другое explicit restriction-only
 retention contract может изменить оценку current wrapper, но не нормативный
@@ -421,7 +421,7 @@ retention contract может изменить оценку current wrapper, н�
 `GetTrustedMetadataSet()` отдаёт `Timestamp` и `RefTime`, но не stage outcome.
 Это bounded negative source result по названным файлам, не поиск всех возможных
 расширений go-tuf. Настройки Fetcher дают fetch-delivery, не acceptance;
-лог `Updated timestamp` на151–152 также стоит **до** final check и не receipt.
+лог `Updated timestamp` на 151–152 также стоит **до** final check и не receipt.
 
 Lower `TrustedMetadata.UpdateTimestamp` публично возвращает object+error своего
 вызова, но current full updater этот локальный result наружу не передаёт.
@@ -527,7 +527,7 @@ hash неверен. H1: новый T11 expired и остался pointer. Об�
 тот же version (может даже иной Expires). Local `UpdateTimestamp(B)` держит
 expired pointer, а remote same-version branch возвращает ErrEqualVersionNumber
 **до** assignment/new expiry check. `loadTimestamp` превращает эту ошибку в nil
-на337–340, но дальнейший `UpdateSnapshot` отказывает по expiry B. Поэтому даже
+на 337–340, но дальнейший `UpdateSnapshot` отказывает по expiry B. Поэтому даже
 private `loadTimestamp()==nil` не всегда означает «принят новый fresh timestamp»;
 нужны H/F и происхождение. F(B)=false; H(B) разрешает historical retention,
 не refreshed permit. Равноверсионный rejected candidate не освежает B.

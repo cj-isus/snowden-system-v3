@@ -99,9 +99,9 @@ Rollback завершён только после возврата previous conf
 Kit восстанавливает подготовленные inputs, но не доказывает актуальный отзыв,
 оплату, доступность IP или post-restore protected path.
 
-## 3. Последовательный operational plan
+## 3. Последовательность эксплуатации
 
-### Stage 0 — offline compatibility freeze (P0, infra + Windows/profile owners)
+### Этап 0. Зафиксировать совместимость офлайн (P0, сервер и владельцы профилей)
 
 1. Выбрать exact sing-box server artifact/version, совместимый с pinned client
    `v1.13.19`; зафиксировать hash и license/SBOM boundary.
@@ -121,7 +121,7 @@ Kit восстанавливает подготовленные inputs, но н�
 listener/mux/path/pin/hopping cases. Новый VPS не требуется для Stage0, но
 никакие проверки этим документом не запускались.
 
-### Stage 1 — подготовка одного узла, без публикации трафика (P0, infra)
+### Этап 1. Подготовить один узел (P0, сервер)
 
 Будущие действия после отдельного разрешения:
 
@@ -137,7 +137,7 @@ listener/mux/path/pin/hopping cases. Новый VPS не требуется дл
 **SPOF:** потеря этого узла означает отсутствие VPN server capacity. Offline kit
 может ускорить cold restore, но не даёт warm failover.
 
-### Stage 2 — staging и pre-activation validation (P0)
+### Этап 2. Подготовить и проверить конфигурацию до активации (P0)
 
 1. Безопасно декодировать/render secrets в private staging; не использовать
    `sed` как произвольный JSON encoder и не печатать rendered config.
@@ -149,7 +149,7 @@ listener/mux/path/pin/hopping cases. Новый VPS не требуется дл
 5. До active write создать bounded backup previous config/certs-related metadata
    и manifest. Disk-full/short-write должны завершить операцию до replace.
 
-### Stage 3 — atomic activation и rollback (P0)
+### Этап 3. Атомарная активация и откат (P0)
 
 1. Повторный source/stage digest fence непосредственно перед commit.
 2. Same-filesystem atomic replace active config; записать `committed` отдельно
@@ -166,7 +166,7 @@ Cheapest sufficient change — адаптировать существующий
 создавать оркестратор. Нужны исправленные argv, staging/backup/apply/rollback и
 versioned receipt; новая служба или БД не нужны.
 
-### Stage 4 — активация каналов по одному (P0/P1)
+### Этап 4. Активировать каналы по одному (P0/P1)
 
 1. **WS**: edge443/nginx/9443, path/header/mux/early-data pair; `/ip` current.
 2. **HY2 direct8444**: cert pin/auth/obfs; UDP availability и protected egress.
@@ -179,7 +179,7 @@ versioned receipt; новая служба или БД не нужны.
 Listener/TLS success не повышает status выше своей области; `live-verified`
 требует current tuple и дату.
 
-### Stage 5 — минимальная эксплуатация (P1)
+### Этап 5. Минимальная эксплуатация (P1)
 
 Без нового monitoring stack:
 
@@ -198,7 +198,7 @@ Listener/TLS success не повышает status выше своей облас
 host/IP error dumps сверх необходимого support scope. Автоматическая отправка
 не нужна; support export — явное действие владельца.
 
-### Stage 6 — backup и cold recovery (P1)
+### Этап 6. Резервирование и холодное восстановление (P1)
 
 Разделить три набора:
 
@@ -215,7 +215,7 @@ structural verify → client compatibility → protected path. Restore проц�
 HTTP publication не равен client acceptance. Drill сначала на локальном Linux
 стенде после разрешения OFF-09; затем отдельный VPS drill после покупки.
 
-## 4. Budgets и ownership
+## 4. Бюджеты и владение ресурсами
 
 | Budget | Минимальный contract | Owner |
 |---|---|---|
@@ -227,7 +227,7 @@ HTTP publication не равен client acceptance. Drill сначала на л
 | Operations | one writer/apply lock, generation receipt, explicit rollback owner | infra |
 | Client | pair receipt, current protected probe, old-client unsupported behavior | Windows/Android owners |
 
-## 5. Сильные противоположные guards и зависимости
+## 5. Контрпримеры и зависимости
 
 - Текущие `sing-box check`, manual restart и `verify-server.sh` полезны; план их
   переиспользует, но меняет порядок вокруг active write.
@@ -246,7 +246,7 @@ HTTP publication не равен client acceptance. Drill сначала на л
 - Android source candidate не блокирует Windows/one-VPS rollout, но Android channel
   compatibility остаётся unknown до approved AAR/device gates.
 
-## 6. Future acceptance — всё NOT_RUN
+## 6. Будущая приёмка — всё NOT_RUN
 
 | Gate | Положительный случай | Сильный отрицательный случай |
 |---|---|---|
@@ -299,3 +299,15 @@ HTTP publication не равен client acceptance. Drill сначала на л
 План сохраняет one-VPS SPOF и минимальную инфраструктуру. Production readiness,
 current provider state, costs, restore time, throughput и protected egress этим
 source-only crosscheck не проверялись.
+
+<a id="3-последовательный-operational-plan"></a>
+<a id="stage-0--offline-compatibility-freeze-p0-infra--windowsprofile-owners"></a>
+<a id="stage-1--подготовка-одного-узла-без-публикации-трафика-p0-infra"></a>
+<a id="stage-2--staging-и-pre-activation-validation-p0"></a>
+<a id="stage-3--atomic-activation-и-rollback-p0"></a>
+<a id="stage-4--активация-каналов-по-одному-p0p1"></a>
+<a id="stage-5--минимальная-эксплуатация-p1"></a>
+<a id="stage-6--backup-и-cold-recovery-p1"></a>
+<a id="4-budgets-и-ownership"></a>
+<a id="5-сильные-противоположные-guards-и-зависимости"></a>
+<a id="6-future-acceptance--всё-not_run"></a>

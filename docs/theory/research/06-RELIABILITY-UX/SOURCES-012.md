@@ -282,7 +282,7 @@ wf compose.go remote6fbb…↔cache совпал. Не заявляется по
 - <https://developer.android.com/training/package-visibility?hl=ru>.
 - Название «Фильтрация видимости пакетов на Android»; returned page update
   **2026-10-02 UTC**; дата первой публикации unknown.
-- Прочитано28октября06:44Z: `RELEVANT_SECTIONS_READ` основного текста,
+- Прочитано 28 октября 06:44Z: `RELEVANT_SECTIONS_READ` основного текста,
   capture `package-visibility.ru.html(.txt):579–596`.
 - targetAPI30+ filtering, privacy списка установленных apps, automatic visibility,
   `<queries>` и restricted QUERY_ALL_PACKAGES. Не само доказательство поведения
@@ -293,7 +293,7 @@ wf compose.go remote6fbb…↔cache совпал. Не заявляется по
 
 - <https://developer.android.com/guide/topics/manifest/manifest-element?hl=ru>.
 - Название manifest element; returned update **2026-08-19 UTC**.
-- Прочитано28октября06:45–06:48Z: `RELEVANT_SECTIONS_READ`
+- Прочитано 28 октября 06:45–06:48Z: `RELEVANT_SECTIONS_READ`
   sharedUserId/sharedUserMaxSdkVersion, capture `manifest-element.ru.txt:626–641`.
 - DeprecatedAPI29 не означает исчезновение старых установок; new install
   sharedUserMaxSdkVersion API33 отличается от уже установленного shared group.
@@ -310,7 +310,7 @@ wf compose.go remote6fbb…↔cache совпал. Не заявляется по
   - <https://android.googlesource.com/platform/frameworks/base/+/99b01a65cc4c104933788b3143285ab6bae65827/core/java/android/app/ApplicationPackageManager.java>
   - <https://android.googlesource.com/platform/frameworks/base/+/99b01a65cc4c104933788b3143285ab6bae65827/services/core/java/com/android/server/pm/ComputerEngine.java>
 - Дата source commit: 2025-05-07 (не дата public release или чтения).
-- Прочитано28октября06:40–06:49Z: `RELEVANT_SECTIONS_READ`, не полный аудит
+- Прочитано 28 октября 06:40–06:49Z: `RELEVANT_SECTIONS_READ`, не полный аудит
   скачанных больших файлов:
   - PackageManager:7328–7341 «all packages» JavaDoc;
   - ApplicationPackageManager:1167–1191 delegates cached query to server;
@@ -329,7 +329,7 @@ wf compose.go remote6fbb…↔cache совпал. Не заявляется по
 - Reference <https://developer.android.com/reference/android/os/Process>.
 - Google/AOSP; source commit date как U03. Public APIs **added35** по
   возвращённому API-reference; reference page publication date unknown.
-- Прочитано28октября06:40–06:46Z: source:955–1014, reference
+- Прочитано 28 октября 06:40–06:46Z: source:955–1014, reference
   `process.reference.html.txt:8710–8724,8779–8793,8923–8933`.
 - `isSdkSandboxUid/getAppUidForSdkSandboxUid` publicAPI35; opposite
   `getSdkSandboxUidForAppUid` publicAPI35. Platform `toSdkSandboxUid` помечен
@@ -343,7 +343,7 @@ wf compose.go remote6fbb…↔cache совпал. Не заявляется по
 - URLs:
   - <https://android.googlesource.com/platform/packages/modules/Connectivity/+/627eb3c63e7c7cb3cb9f8ea319e4bb1676079c3a/service/src/com/android/server/ConnectivityService.java>
   - <https://android.googlesource.com/platform/packages/modules/Connectivity/+/627eb3c63e7c7cb3cb9f8ea319e4bb1676079c3a/staticlibs/device/com/android/net/module/util/netlink/InetDiagMessage.java>
-- Прочитано28октября06:42–06:48Z: `RELEVANT_SECTIONS_READ`:
+- Прочитано 28 октября 06:42–06:48Z: `RELEVANT_SECTIONS_READ`:
   ConnectivityService:1535–1537 deps delegation,12933–12959 scope gate;
   InetDiagMessage:202–294 idiag_uid/UDP wildcard/query errors.
 - Captures decoded from official googlesource TEXT base64; tag↔commit equality
@@ -357,10 +357,10 @@ wf compose.go remote6fbb…↔cache совпал. Не заявляется по
 - URL:
   <https://android.googlesource.com/platform/frameworks/base/+/99b01a65cc4c104933788b3143285ab6bae65827/services/core/java/com/android/server/VpnManagerService.java>.
 - AOSP source date/pin как U03; Apache-2.0 header.
-- Прочитано28октября06:40–06:46Z: `RELEVANT_SECTIONS_READ`
+- Прочитано 28 октября 06:40–06:46Z: `RELEVANT_SECTIONS_READ`
   event registration:709–711/755–764, handlers:855–911.
 - `Vpn.immutable.java` **из собственного прежнего capture**, SHA256 seal
-  сохранён: вновь прочитаны1838–1851(getAppsUids),4336–4403(platform app
+  сохранён: вновь прочитаны 1838–1851(getAppsUids),4336–4403(platform app
   exclusions), связка refresh→isIkev2VpnRunner. Это новая интерпретация
   прежних unchanged bytes, не новое device измерение.
 - non-replacing add/remove refresh только platform app exclusion branch;
@@ -368,9 +368,9 @@ wf compose.go remote6fbb…↔cache совпал. Не заявляется по
 
 ### U07 — actual Snowden и pinned sing-box metadata consumer
 
-28октября заново прочитаны20selected source inputs (12repository+8module files)
+28 октября заново прочитаны 20selected source inputs (12repository+8module files)
 и captured в `inputs.json`; перед/copy/после для названных repository paths
-согласованы. На06:47:47Z исторические23inputs27октября не изменились; это
+согласованы. На 06:47:47Z исторические 23inputs27 октября не изменились; это
 проверка named paths, не всего дерева/артефакта.
 
 | Source | Read symbols / роль |

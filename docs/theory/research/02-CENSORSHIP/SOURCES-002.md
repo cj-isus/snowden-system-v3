@@ -59,7 +59,7 @@ release опубликован **2026-10-22**, metadata — `naive-release.json`
 - naive_proxy_delegate.cc — negotiation padding capability, HTTP headers.
 - naive_connection.cc `DoConnectServerComplete` → отдельный `NaivePaddingSocket`
   на stream connection; [naive_padding_socket.cc](https://github.com/klzgrad/naiveproxy/blob/d04efe1ea4477c2db24a7d0e2f068b3bee931e45/src/net/tools/naive/naive_padding_socket.cc)
-  → первые8 frames; naive_padding_framer.{cc,h} → header3, max padding255.
+  → первые 8 frames; naive_padding_framer.{cc,h} → header3, max padding255.
   Небольшие записи одной ветки direction имеют другой random range, чем
   упрощённое uniform описание README; формулы REPORT ограничены явно.
 - Сохранены дополнительные Chromium context файлы; их наличие не означает,

@@ -2,7 +2,7 @@
 
 26 октября 2026 · **READY_FOR_REVIEW**, R02.
 [источники](SOURCES-005.md).
-R02-10 из004 остаётся авторским READY. Здесь исследуется следующий вопрос:
+R02-10 из 004 остаётся авторским READY. Здесь исследуется следующий вопрос:
 **что именно должно быть доказано у готовой замены, чтобы не повторить ошибку
 переноса свойства между разными стадиями/узлами?**
 
@@ -69,7 +69,7 @@ PASS всех режимов/multi-user/UoT/native**.
 - Registry принимает **`method=none`**: один `type=shadowsocks` не гарантирует cipher.
   В protected composition нужен явный allowlist метода и численных/ключевых inputs.
   Это не текущий обход Windows admission: app сейчас SS вообще не допускает.
-- Client требует decoded key ровно16/32 bytes по методу. Legacy server NewService
+- Client требует decoded key ровно 16/32 bytes по методу. Legacy server NewService
   принимает более длинный ключ через собственный Key derivation, а client2 его
   отвергает. Достаточное согласованное условие — canonical exact-length PSK обеим
   сторонам; не копировать все inputs, допустимые только серверу.
@@ -96,7 +96,7 @@ direct leak: высшая failover policy в этом срезе не иссле
 Server Service создаёт `replay.NewSimple(60*time.Second)`. Map и mutex принадлежат
 этому экземпляру; новый Service создаёт новую map. Single-user branch проверяет
 salt, затем AEAD/type/timestamp/variable header перед handler. Timestamp допускает
-окно30s; client response тоже проверяет timestamp и request salt.
+окно 30s; client response тоже проверяет timestamp и request salt.
 
 **Ручной контрпример переносу гарантии:** два независимых Service A/B с одинаковым
 SS key, пустыми caches и валидным request ciphertext R в допустимом времени.
@@ -118,7 +118,7 @@ requests требуют отдельного resource/probing анализа, н
 **PFS witness, без исполнения:** SS session key вычисляется из PSK и видимого salt.
 При последующем раскрытии PSK эти inputs снова доступны для derivation. Donor TLS
 handshake использует другой секрет и не участвует в указанном KDF SS. Поэтому
-замена004 на SS2022 закрывает отсутствие payload cipher при корректной композиции,
+замена 004 на SS2022 закрывает отсутствие payload cipher при корректной композиции,
 но не даёт заявлять PFS за счёт соседнего TLS1.3 donor handshake.
 Спецификация прямо ограничивает это свойство. [SIP022](https://shadowsocks.org/doc/sip022.html).
 
@@ -149,7 +149,7 @@ peer-provided name не становится authority. [RFC9525 §6](https://ww
 |---|---|---|
 | Existing SS2022 AES-GCM codec + ShadowTLS | **Adapt** existing pinned core; отдельный inner key, explicit method/network scope | Оба конца, profile/schema/admission и replay/key scope. PFS отсутствует; никакого «всё защищено» по имени SS |
 | Existing verified inner TLS + VLESS | **Adapt/reference**, если identity/metadata tradeoff приемлемы | TLS server X/certificate delivery/ALPN/проверка имени, ещё один handshake; inner ClientHello visible |
-| Plain VLESS + ShadowTLS | **Reject как confidential candidate**, по004 | Здесь не исправлялось и не принято руководителем |
+| Plain VLESS + ShadowTLS | **Reject как confidential candidate**, по 004 | Здесь не исправлялось и не принято руководителем |
 | Custom cipher / HMAC как encryption / trust по donor cert | **Reject** | Создаёт неподтверждённую криптографию или неверную identity |
 | Глобальное replay/PFS по одному TLS boolean / local cache | **Reject claim** | Нужен явный scope и модель противника |
 
@@ -172,7 +172,7 @@ Native artifact/capability, graph/admission и lifecycle — отдельные 
 2. SS request/response: tamper/reorder/truncation/wrong request-salt, timestamp,
    per-Service restart и два Service с общим key; отдельно outer-credential model.
 3. Inner TLS: wrong name/trust chain, actual TLS version, second SNI/ALPN visibility,
-   no insecure/downgrade, lazy VLESS header не подменяет0-RTT policy.
+   no insecure/downgrade, lazy VLESS header не подменяет 0-RTT policy.
 4. TCP-only/UoT/mux both-end matrix, segmentation/coalescing/partial writes/errors,
    correct queue ownership и protection barrier. Именно codec composition требует
    следующего независимого исследования.

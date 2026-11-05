@@ -10,7 +10,7 @@
 можно, если admission выполняется до существенного allocation/spawn, учитывает
 waiting/in-service/retiring owners и удерживает reservation до фактического
 release/transfer/reap. Дополнительно нужны самостоятельные limits metadata,
-пулов, sessions, callbacks, packet-number span и generations. Очередь32/128/8,
+пулов, sessions, callbacks, packet-number span и generations. Очередь 32/128/8,
 flow-control window и timeout сами такой контракт не замыкают.
 
 **R28-C04-B (source-scoped cancellation seam).** У выбранной пары отдельный
@@ -71,11 +71,11 @@ HY2/Salamander/hopping как options; выбранный installed wrapper/ABI/
 | HY2 fragment list | Descriptors/slice; fragment `buf.As` ссылается на исходный backing | Список очищен после последовательных writePacket; исходный backing один, не F независимых U |
 | Current HY2 pack | Новый buffer с HY2 header+fragment, pool rounding | `writePacket` вернулся и его defer исполнился; это может ждать Add |
 | DATAGRAM pre-enqueue | `SendDatagram` уже создал отдельный `f.Data` copy | Add вернул ошибку либо передал owner очереди; caller original и pack пока могут жить |
-| DATAGRAM queue | До32 frames; ring references | Pop переносит frame в packet/history или отбрасывает; dequeue не возвращает все payload credits |
+| DATAGRAM queue | До 32 frames; ring references | Pop переносит frame в packet/history или отбрасывает; dequeue не возвращает все payload credits |
 | Packer / sent history | Frame.Data прежний, serialized ciphertext — другая allocation | ACK/loss/discard clears/releases references; socket Write не terminal receipt для Frame.Data |
-| sendQueue / in-service | До8 queued ordinary buffers, один извлечённый worker, builder | Успешный Write и Release; error/Close требуют отдельного owner accounting |
+| sendQueue / in-service | До 8 queued ordinary buffers, один извлечённый worker, builder | Успешный Write и Release; error/Close требуют отдельного owner accounting |
 | Scalar Salamander / OS | Отдельный staging payload+8, pinned write storage, kernel socket state | Actual I/O completion; cancel request и peer receipt — другие факты |
-| RX queue → handler | До128 копий; после ReceiveDatagram goroutine удерживает ту же копию | Handler return/transfer, а не dequeue. Decoded payload slice alias whole received backing |
+| RX queue → handler | До 128 копий; после ReceiveDatagram goroutine удерживает ту же копию | Handler return/transfer, а не dequeue. Decoded payload slice alias whole received backing |
 | RX defrag / assembly / ready | Fragments, output overlap, per-session ready64, borrower | Последняя owned reference / корректный eviction / reader return; TTL10 не eager reap |
 | Sampler/history metadata | Packet records, span with holes, backing high water | Present removal не обязательно shrink; отдельный metadata reservation |
 | Retiring generation | Всё ещё живые queues, handlers, sockets, cleanup goroutines | Quiescent join либо подтверждённый owned-process reap; timeout не release |
@@ -133,8 +133,8 @@ Cfrag=1175; U4096 даёт fragments1175/1175/1175/571. Packed lengths:
 1197/1197/1197/593. После создания третьей Frame.Data copy, до возврата третьего
 writePacket, одновременно существуют `original4096 + current pack2048 +
 retained frame copies3591 = 9735` — **9735 byte backing capacity** названных
-объектов. Fragment payload aliases не добавляют ещё3×4096. После четвёртого
-Add frame copies всего4184, но текущий pack округляется до1024. Это наглядно
+объектов. Fragment payload aliases не добавляют ещё 3×4096. После четвёртого
+Add frame copies всего 4184, но текущий pack округляется до 1024. Это наглядно
 опровергает reservation «размер пользовательской датаграммы=весь peak». Здесь
 не учтены descriptor objects, pools, metadata и runtime; не заявлен process
 peak9735, RSS или стоимость реального пакета на wire. Queue32 не исчерпана.
@@ -151,10 +151,10 @@ phases не одновременны; более тесную оценку ра�
 max нужен потому, что готовый single-fragment message может по-прежнему
 держать весь received backing с header, даже при коротком tail payload.
 Необходимы явные Urx и assembly gates: штатный TX4096 не ограничивает decoded
-RX assembly. Ready64 — per-session, поэтому Z_g≤64·S_g, а не общий64.
+RX assembly. Ready64 — per-session, поэтому Z_g≤64·S_g, а не общий 64.
 
 Wire packetID uint16 ограничивает число distinct keys в *одной* defrag map
-65536, fragmentTotal uint8 даёт максимум255 позиций. Это сильный контрпример
+65536, fragmentTotal uint8 даёт максимум 255 позиций. Это сильный контрпример
 слову «математически безграничный cache». Эти widths не являются практической
 quota, не ограничивают все sessions/handlers/borrowers и не задают release time.
 Доклад не выводит remote DoS или фактическую RAM из предельного key space.
@@ -167,7 +167,7 @@ initial capacity C0 и исторического peak used span S* после �
 
 `C_backing ≤ max(C0, 2·S*)` (slots, не bytes).
 
-При одном grow одновременно живут старый C и новый2C backing: transient3C
+При одном grow одновременно живут старый C и новый 2C backing: transient3C
 slots плюс отложенный GC старых allocations. Pop/Clear обнуляют элементы,
 но не уменьшают `len(ring)`. Поэтому даже «present=0, span=0» не даёт
 backing=0. Названный sampler `maxTrackedPackets` найден как поле, а не gate.
@@ -289,8 +289,8 @@ Close187–205 и SetWriteDeadline233–239 сначала берут c.access. 
 уже заблокированного write: она ждёт тот же lock. Требуется отдельный inspected
 socket cancellation owner либо process retirement; blind method reorder недостаточен.
 
-Hopping также добавляет queue1024 buffers по2048, плюс buffers recvLoop,
-prev/current sockets, возможный candidate/old local owner. Эти2MiB — только
+Hopping также добавляет queue1024 buffers по 2048, плюс buffers recvLoop,
+prev/current sockets, возможный candidate/old local owner. Эти 2MiB — только
 queue backing envelope, не heap/profile total. Close не дренирует packetChan и
 не join-ит recvLoop/hopLoop. Поля prev/current не доказывают cap всех retiring
 goroutines. Source обрабатывает doneChan в errChan send — существующий guard

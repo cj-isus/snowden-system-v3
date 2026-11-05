@@ -1,100 +1,120 @@
-<a id="r28-z01--передача-руководителю"></a>
-# R28-Z01 — ECH: binding и retry
+# ECH: связь параметров с выбранным сервером и повтор подключения
 
-28 октября 2026.
+**R28-Z01, срез 28 октября 2026 года. Статус автора — READY_FOR_REVIEW.**
+[Полный аргумент](REPORT.md) · [Источники и версии](SOURCES.md).
 
-status: READY_FOR_REVIEW
+## Краткий вывод
 
-## 1. Scoped verdict
+Правильные TLS-проверки не доказывают, что ECHConfig и адрес сервера выбраны
+из одного Service Binding и одной сетевой эпохи. В рассмотренном будущем
+ECH-пути sing-box1.13.19 такая связанная попытка не установлена:
+socket выбирается отдельно, wrapper берёт первый `ech` из DNS Answer
+и хранит config/TTL/time без полного контекста выбора.
 
-Предлагаю **ACCEPT R28-Z01-A только как source/model finding**:
+**Применимость:** проектирование получения ECH-параметров, выбора endpoint,
+кеша и повторов. **Предел:** условный разбор исходников; Windows VLESS/WS renderer
+на дату среза настоящий ECH не включал. Действующая уязвимость, отказ ECH,
+утечка plaintext, цензура и регрессия установленного клиента не доказаны.
 
-> В рассмотренном sing-box v1.13.19 future-ECH caller нет доказанного
-> endpoint-bound Service Binding plan. Socket выбирается отдельно, затем
-> ECH wrapper берёт первый `ech` из DNS Answer и хранит config/TTL/time без
-> TargetName/port/address/source/network epoch. TLS guards предотвращают silent
-> unauthenticated application success, но не доказывают общее происхождение
-> ECHConfig и endpoint. Network reset очищает DNS/соединения, не wrapper ECH cache.
+## 1. Ограниченное предложение автора
 
-Не принимать это как deployed vulnerability, current ECH failure, plaintext
-application leak, censorship, native regression или product PASS. Current
-Windows VLESS/WS renderer real ECH не включает.
+Предложено рассмотреть **R28-Z01-A** только как факт выбранных исходников
+и условной модели. Это не принятое научное ACCEPTED и не продуктовая приёмка.
 
-## 2. Exact evidence
+ECH acceptance и проверка origin предотвращают свои классы ошибок TLS,
+но не создают отсутствующее отношение между ServiceMode, TargetName, port,
+адресами, источником параметров и сетевой эпохой. Network reset очищает
+DNS/соединения; отдельный ECH cache wrapper этим путём не очищается.
+Для фиксированного endpoint с независимо одобренной конфигурацией нужен
+свой явно заданный контракт; полный универсальный SVCB-selector не обязателен
+для любого варианта использования ECH.
 
-- Manifest: sing-box1.13.19, uTLS1.8.4, sing0.8.13, miekg/dns1.1.72.
-- Actual chain: Snowden preflight IP override → renderer O/Host → sing-box VLESS
-  dialer/WS → socket destination → ECH HTTPS query → first ech config → TLS.
-- RFC9848/9849/9460: service attempt связывает O, selected RR, T, port, ALPN,
-  address set, E, P, source/freshness; preconnect нельзя превратить в
-  ClientHello до consistency result.
-- Remote/cache source equality: four critical immutable files, 4/4.
-- Full trace and locators: [REPORT](REPORT.md), source read-status:
-  [SOURCES](SOURCES.md).
+## 2. Основание
 
-## 3. Strongest counterexample that survives guards
+- Манифест: sing-box1.13.19, uTLS1.8.4, sing0.8.13, miekg/dns1.1.72.
+- Цепочка: Snowden preflight IP override → renderer O/Host → VLESS dialer/WS →
+  socket destination → ECH HTTPS query → первый ech config → TLS.
+- RFC9848/9849/9460 связывают попытку сервиса с O, выбранным RR, T, port,
+  ALPN, адресами, E, P, источником и давностью. Preconnect сам не разрешает
+  отправить ClientHello до нужного результата согласования.
+- Четыре выбранных immutable source-файла совпали с module cache.
+  Это идентичность байтов, не доказательство всего модуля или EXE/AAR.
+- Точные symbols, области и глубина чтения — в REPORT/SOURCES.
 
-G1: wrapper cached E_A with TTL, endpoint pool A. Network handover resets DNS
-cache/connections, but leaves E_A. G2 address lookup selects pool B. B still
-has old ECH key E_A and valid origin O certificate (rollout overlap/shared key).
-ECH acceptance, origin certificate, CertificateVerify and Finished all pass.
+O — ожидаемый origin; P — публичное имя внешнего ECH; E — ECHConfig;
+T — TargetName выбранного Service Binding. Эти роли не взаимозаменяемы.
 
-Thus cryptography correctly authenticates a usable endpoint, yet no existing
-state proves that E_A and B were chosen from the same ServiceMode source or
-network epoch. This is provenance/freshness debt, not authentication bypass.
-If B lacks key, guards fail/recover instead; that opposing case does not close
-source binding.
+## 3. Контрпример, переживающий TLS-проверки
 
-## 4. Guard crosswalk
+В G1 wrapper сохранил E_A с TTL для пула A. Смена сети очистила DNS/соединения,
+но не E_A. В G2 разрешение адреса выбрало пул B. При перекрытии rollout B ещё
+имеет ECH-ключ E_A и действительный сертификат origin O. ECH acceptance,
+сертификат, CertificateVerify и Finished могут успешно пройти.
 
-| Guard | Stops | Does not prove |
+Криптография аутентифицирует пригодный endpoint, но существующее состояние
+не доказывает совместный выбор E_A и B из одного ServiceMode/сетевой эпохи.
+Это пробел происхождения и согласованности, а не обход аутентификации.
+Если у B ключа нет, сработают отказ или восстановление; этот другой случай
+не доказывает связь источников в успешной трассе.
+
+## 4. Что подтверждает каждый guard
+
+| Проверка | Её собственная область | Чего она не устанавливает |
 |---|---|---|
-| ECH acceptance confirmation | False acceptance of arbitrary inner transcript | DNS source/endpoint provenance |
-| Origin O certificate + signature + Finished | Unauthenticated origin/application TLS | Correct ServiceMode RR or network epoch |
-| Rejected outer P authentication | Adoption of unauthenticated retry config | P is checked correctly in uTLS current path; endpoint binding |
-| Error before WS Upgrade | WS/VLESS data on TLS failure | End-to-end VPN confidentiality after CDN terminator |
-| DNS cache reset/connection close | Reuse of stale DNS message/socket | Clearing separate ECH list/TTL state |
-| One bounded stdlib retry | Infinite immediate retry loop | uTLS named-error parity or safe new address selection |
+| ECH acceptance confirmation | Подтверждение принятия inner в выбранной TLS-трассе | Происхождение DNS и совместный выбор endpoint/config |
+| Сертификат O, подпись, Finished | Аутентификация origin в этой TLS-сессии | Нужный ServiceMode RR и сетевую эпоху |
+| Аутентификация внешнего P при отклонении, если она действительно выполнена | Не принимать неподтверждённый retry config | Что P правильно проверен именно текущей uTLS-ветвью; это отдельный открытый вопрос |
+| Ошибка до WS Upgrade | При этом отказе WS/VLESS data не отправлены | Шифрование VPN до собственного endpoint после завершения TLS на CDN |
+| DNS reset и закрытие соединений | Не использовать прежнее DNS-сообщение/socket через эти объекты | Очистку отдельного ECH list/TTL |
+| Один ограниченный stdlib retry | Ограничение этого непосредственного повтора | Совпадение типов ошибок uTLS и допустимость нового выбора адреса |
 
-## 5. Ready reuse / licence / cost
+## 5. Переиспользование, лицензии и цена
 
-- Reuse miekg/dns1.1.72 parser structs (BSD-3), adapt semantic selector.
-- Reuse sing-box DNS/TLS transport and cache primitives (GPL3-or-later + name
-  restriction), but do not call them full SVCB binding.
-- Prefer standard/native ECH verifier/error path where compatibility permits;
-  defer real uTLS ECH until P verification, errors and observation parity proven
-  (uTLS BSD-3).
-- Reject custom HPKE/ECH/DNSSEC implementation.
+- miekg/dns1.1.72: готовые parser structs, BSD-3-Clause. Семантический selector
+  остаётся ответственностью вызывающего кода.
+- sing-box: готовые DNS/TLS/exchange/cache примитивы. В прочитанном LICENSE —
+  GPL-3.0-or-later и ограничение названия/ассоциации. Нельзя назвать их
+  готовым полным SVCB-binding или выводить соответствие всей поставки.
+- Стандартный/native ECH verifier/error path — кандидат при совместимости.
+  Настоящий uTLS ECH отложен до проверки P, ошибок и наблюдаемой паритетности;
+  uTLS BSD-3-Clause.
+- Собственные HPKE/ECH/DNSSEC реализации этим пробелом не обоснованы.
 
-Required cost: immutable attempt plan/source ID/network epoch; bounded alias and
-priority selection; cancellation on handover; one shared timeout/retry budget;
-STD/uTLS parity; extra DNS/latency/energy/privacy. No numeric costs measured.
+Цена выбранного варианта может включать неизменяемую попытку, источник и
+сетевую эпоху, ограниченный Alias/priority выбор, отмену при handover,
+общий timeout/retry budget и STD/uTLS parity. Дополнительные DNS, задержка,
+энергия и приватность не измерены; обязательный общий новый DTO не выведен.
 
-## 6. Platform consequence
+## 6. Применение к платформам
 
-Windows/Android platform owner should own endpoint selection, config-source
-identity, epoch/cancellation and enforcement. Portable policy may consume typed
-facts but must not invent binding from hostname, TTL, HandshakeComplete or
-ECHAccepted=false. Fixed endpoint ECH is a separate contract: signed/owned E
-must explicitly authorize that endpoint/public-name set.
+Владелец платформы сохраняет выбор endpoint, источник config, эпоху, отмену
+и финальный допуск. Переносимая policy получает типизированные факты,
+но не выдумывает связь из hostname, TTL, HandshakeComplete или
+`ECHAccepted=false`. Для фиксированного endpoint одобренный E должен явно
+разрешать его набор endpoint/public-name; подпись без этой семантики недостаточна.
 
-## 7. Open / NOT_RUN
+Основное изложение — [ECH и начальное разрешение](../../../../transports/ECH-DNS-BOOTSTRAP.md).
+Применение: PC-03/05 [плана ПК](../../../../../planning/knowledge-application/PC-PLAN.md)
+и ANDR-03/05 [плана Android](../../../../../planning/knowledge-application/ANDROID-PLAN.md).
+Профиль/доверие и точный артефакт остаются предварительными условиями,
+а не основанием включить новый транспорт автоматически.
 
-- Executed STD/uTLS ECH with P-only/O-only/multi-SAN certificates.
-- Multi-CDN IPv4/IPv6 handover and expired/no-ech response behavior.
-- Native cancellation of late DNS/TLS results and product policy ECH-required.
-- Actual server key overlap, performance, energy and field filtering.
-- Compiled EXE/AAR parity and whole-product licence compliance.
+## 7. Открытые проверки
 
-All NOT_RUN. No source/product changes, tests, profiles or live probes.
+Все исполнения — **NOT_RUN**: STD/uTLS ECH с P-only/O-only/multi-SAN;
+multi-CDN IPv4/IPv6 handover; expired/no-ech responses; native-отмена поздних
+DNS/TLS; собственная policy ECH-required; реальное перекрытие server keys;
+скорость, энергия, полевая фильтрация; EXE/AAR parity и лицензии всей поставки.
 
-## 8. Work stages
+Ручной контрпример не является воспроизведённым отказом или эксплуатацией.
 
-1. Source/pin/caller — completed.
-2. Endpoint/identity/retry attempt trace — completed.
-3. Opposing guards and surviving counterexamples — completed.
-4. Stale cache/handover continuation — completed.
-5. Reuse/licence/cost and handoff — completed.
-
-Задача исчерпана в scoped source/model области; автор останавливается после
-финальной статической сверки своих четырёх файлов.
+<a id="r28-z01--передача-руководителю"></a>
+<a id="r28-z01--ech-binding-и-retry"></a>
+<a id="1-scoped-verdict"></a>
+<a id="2-exact-evidence"></a>
+<a id="3-strongest-counterexample-that-survives-guards"></a>
+<a id="4-guard-crosswalk"></a>
+<a id="5-ready-reuse--licence--cost"></a>
+<a id="6-platform-consequence"></a>
+<a id="7-open--not_run"></a>
+<a id="8-work-stages"></a>

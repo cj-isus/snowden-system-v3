@@ -1,19 +1,16 @@
-# Product crosscheck: полезность, recovery UX и честная готовность
+# Продукт: полезность, восстановление и точная готовность
 
-> **Область и статус: PARTIAL.** Сопоставление использует прочитанные выдержки
-> current Android/Windows UI и product plans, а также ранее разобранный R06/R28
-> baseline. Frozen inventory этой application-фазы проиндексирован, но тела его
-> units адресно не прочитаны и не сверены с прежним baseline. Поэтому 61 ссылка
-> на units учитывается как `indexed/prior-baseline`, а не `reviewed` coverage.
-> Полное применение comfort/UX/Android/recovery корпуса этим документом не закрыто.
->
-> **Applicability cut:** последняя содержательная партия была запрошена до
-> deadline `2026-10-28T12:53:51Z`; возвращённый source-hash capture имеет время
-> `12:57:23Z`. Это поздний capture, не подтверждение соблюдения cutoff всей
-> партией. Последующая hash-only сверка обнаружила изменения `SnowdenApp.kt`,
-> `SystemScreen.kt`, `PLAN.md`, `ANDROID-PLAN.md`, `docs/STATE.md`, `android/STATE.md`.
-> Новые bodies не читались. Ниже — предварительные предложения для review,
-> а не принятие актуального Android/UI/plan состояния.
+**Вывод:** интерфейс должен различать защиту, проверенный путь и завершение
+пользовательской задачи. **Применение:** [ПК, этапы 04–05](../PC-PLAN.md) и
+[Android, этап 06](../ANDROID-PLAN.md).
+
+> **Область и статус: PARTIAL, срез 28 октября.** Разобраны выбранные выдержки
+> UI Android/Windows, планы и прежние материалы R06/R28. Индексация остальных
+> материалов не означает чтение и полную сверку. Последующая проверка хешей
+> обнаружила изменения `SnowdenApp.kt`, `SystemScreen.kt`, `PLAN.md`,
+> `ANDROID-PLAN.md`, `docs/STATE.md` и `android/STATE.md`; их новые тела этим
+> разбором не проверены. Ниже — предложения с ограниченной областью,
+> а не описание актуального продукта или принятие всего UX-корпуса.
 
 ## 1. Фактическое состояние продукта
 
@@ -124,10 +121,10 @@ uncertain`, пока platform receipt не подтвердил effect. Не д�
 
 Для каждого из восьми сценариев владелец заранее фиксирует:
 
-- task endpoint и horizon;
-- protection scope, path receipt и clock scope;
-- manual-unprotected/partial/missing outcomes;
-- expected action и residual resource state.
+- конечный результат задачи и горизонт наблюдения;
+- область защиты, свидетельство пути и область применимости часов;
+- исходы ручного незащищённого режима, неполноты и отсутствующих данных;
+- ожидаемое действие и остаточные удерживаемые ресурсы.
 
 Это кандидаты будущей device/manual acceptance, а не фоновый сбор. Task status
 должен оставаться `unknown`, если достаточный источник исхода не определён;
@@ -233,3 +230,5 @@ Local aggregate default; explicit immutable manual export. Clear не обеща
 state/action/diagnostic компоненты, затем закрыть восемь сценариев future device
 acceptance. Cohort metric и UX-пилот остаются отложенными до явного отдельного
 разрешения и producer contracts.
+
+<a id="product-crosscheck-полезность-recovery-ux-и-честная-готовность"></a>

@@ -244,10 +244,10 @@ purpose limitation и исключение session IDs/tokens/sensitive identifi
 
 ## 5. OSS reference: OONI Probe CLI v3.31.0 — adapt boundary, не код
 
-Exact pin: tag `v3.31.0`, commit
-`1605e00481e2b98488d62cfc2f7ce34ff345eb70`, release 22.10.2026,
-**GPL-3.0** (LICENSE full text captured). Source archive и hashes — собственный
-artifacts-каталог.
+Закреплены tag `v3.31.0`, commit
+`1605e00481e2b98488d62cfc2f7ce34ff345eb70`, release22.10.2026,
+GPL-3.0. Полный LICENSE сохранён и прочитан. Архив исходников и хеши —
+в указанном каталоге копий.
 
 Проверенный pattern:
 

@@ -93,10 +93,10 @@ admission и publication цепочка, не whole-platform audit.
 | T08 | `windows/trust_lifetime.go`: sessionLifetime/checkpointSessionClock; `windows/backend/metadata/clock.go`: ObservedClock | Independent wall/steady logical projection, floor/trust checks. Clock counterexample health не доказывает обход этих gates; сами gates не runtime-tested |
 | T09 | `android/vpn/src/main/kotlin/org/snowden/android/vpn/OsProtection.kt`: read, isFreshOsObservation | Start-dated elapsed observation,5s provisional TTL, не protected egress proof; применимый local reuse |
 | T10 | Тот же Android префикс: `WorkerProcessLink.kt`: Observation/inspect; `WorkerRpcLane.kt`: Call/takeCompleted; `VpnSessionRepository.kt`: pending/completed | ReceivedAt отличается от generation, pending owner переживает observation deadline; нет подтверждённого upper bound Binder actual return |
-| T11 | `docs/CENSORSHIP-THEORY.md` §8/13.6–7/14.5/16.1/17, scoped START/README; `docs/PLAN.md`, `docs/ANDROID-PLAN.md`; R03-001 handoff | Baseline и адреса требований; чужие source/statuses не переписаны |
+| T11 | `docs/CENSORSHIP-THEORY.md` §8/13.6–7/14.5/16.1/17, scoped START/README; `docs/PLAN.md`, `docs/ANDROID-PLAN.md`; R03-001 handoff | Датированное основание и адреса требований; не текущее подтверждение статусов |
 | T12 | `shared/adaptive/{types,health,rank,validation}.go`, README/go.mod, `docs/adaptive/API.md`, PLAN | Поздно найденный API1 baseline: caller supplied Now/time.Time и platform gate, full rank trace; ADP-003 budget effects active/source plan, ADP-004 joins planned. Сам module не UTC-converts inputs и не даёт authority. Consumer parity/FFI не проверялись |
 
-Полные30 captured paths/SHA256/UTC и before/copy/after — `local-inputs.json`.
+Полные 30 captured paths/SHA256/UTC и before/copy/after — `local-inputs.json`.
 Один ранний guessed path `windows/lifecycle_probe.go` не найден и честно записан
 not_found; корректный `windows/backend/core/lifecycle_probe.go` найден по rg и
 сохранён. Это не отсутствующая capability продукта. Внешние manifests содержат
@@ -137,7 +137,7 @@ Android API prose используется как reference, examples не ко�
   adaptive API source reference) и docs/ANDROID-PLAN.md (AND-12-S6 report UI).
   Прочитаны relevant diffs; это не закрытие TH-02/04/06 или AND-07/11/16.
   Параллельные изменения сохранены. После обнаружения adaptive source добавлены
-  ещё8 scoped captures T12. Итог — `final-cut.json`, а не утверждение no drift.
+  ещё 8 scoped captures T12. Итог — `final-cut.json`, а не утверждение no drift.
 
 ## 5. R03-003 — decision-focused измерения
 
@@ -150,7 +150,7 @@ AD-01…06; новый вклад — bounded выбор измерений/пр
 
 | ID | Источник / дата / scope | Что использовано |
 |---|---|---|
-| P11 | Golovin, Krause, Ray, [Near-Optimal Bayesian Active Learning with Noisy Observations, arXiv1010.3091v2](https://arxiv.org/html/1010.3091v2), **2013-12-16**; исходная конференция2010 отдельно; §3 Theorem3, §4 | EC² cross-decision edges, cost-sensitive surrogate, expanded correlated-noise realizations, decision classes/tie. Known joint prior не равен калиброванному VPN prior; гарантия определения класса не arbitrary deadline optimization |
+| P11 | Golovin, Krause, Ray, [Near-Optimal Bayesian Active Learning with Noisy Observations, arXiv1010.3091v2](https://arxiv.org/html/1010.3091v2), **2013-12-16**; исходная конференция 2010 отдельно; §3 Theorem3, §4 | EC² cross-decision edges, cost-sensitive surrogate, expanded correlated-noise realizations, decision classes/tie. Known joint prior не равен калиброванному VPN prior; гарантия определения класса не arbitrary deadline optimization |
 | P12 | Chen, Javdani, Karbasi, Bagnell, Srinivasa, Krause, [Submodular Surrogates for Value of Information, extended author PDF](https://las.inf.ethz.ch/files/chen15submsrgtvoi-long.pdf), AAAI2015; [publication metadata](https://ojs.aaai.org/index.php/AAAI/article/view/9694), DOI10.1609/aaai.v29i1.9694, metadata published2015-03-04; pp2–5/Theorem2 | Decision utility/regret, overlapping decision regions, специальный Noisy-OR из ECD graphs. Не general submodularity raw VoI. Finite known joint model/efficient inference. Noisy-OR название не означает physical independence endpoints |
 | P13 | Chen, Hassani, Krause, [Near-optimal Bayesian Active Learning with Correlated and Noisy Tests, arXiv1605.07334v2](https://arxiv.org/html/1605.07334v2), **2016-07-11**; §2/3/4, Algorithm1/Theorem1 | ECED discount/offset, conditional independence при Θ, known prior/likelihood/unit costs; основная гарантия binary/root-cause-independent noise. AISTATS2017/journal extension не названы прочитанной v2 |
 | P14 | Garivier, Kaufmann, [Optimal Best Arm Identification with Fixed Confidence](https://proceedings.mlr.press/v49/garivier16a.html), COLT **2016-06-23…26**, PMLR49:998–1027; [PDF](https://proceedings.mlr.press/v49/garivier16a.pdf) §1/2/4/5/Theorem14 | Independent fresh fixed-distribution draws, exponential family/unique best; tracking и stopping, fixed-confidence/asymptotic complexity. Не wall-clock/dynamic-network гарантия |
@@ -186,26 +186,27 @@ Relevant groups:
 - Android `OsProtection.kt`, `WorkerRpcLane.kt`: elapsed generation/TTL и pending
   actual return; время не permission. Separate AND-07/11/16 applicability.
 - DEPTH-CYCLE-002/own START/README, THEORY17, platform plans и handoffs001/002
-  задают baseline/ownership/requirement links. Их статусы не переписаны этим чатом.
+  задают датированное основание, владельцев и ссылки на требования.
+  Текущие статусы проверяются в реестрах платформ.
 
-`external-inputs.json` содержит10 captures:4 primary articles, author page,
+`external-inputs.json` содержит 10 captures:4 primary articles, author page,
 5 repo files. `external/bai-commit.json` и `bai-tree.json` дополнительно фиксируют
 GitHub metadata/tree. HEAD был **разрешён один раз**, дальнейшие raw reads только
 по exact commit. Files прочитаны, Julia/Go/Android не запускались.
 
-**Source drift:** `drift-at-review.json` cut2026-10-25T19:02:21Z содержит7 изменений
-из33; прочитаны addressed line differences всех7. `review-local-inputs.json`
-сохраняет7 обновлённых файлов и3 новых: Android VpnSessionRepository/WorkerProcess/
-ADR-039. Итого36 unique local paths,43 captures с сохранённым baseline.
+**Source drift:** `drift-at-review.json` cut2026-10-25T19:02:21Z содержит 7 изменений
+из 33; прочитаны addressed line differences всех 7. `review-local-inputs.json`
+сохраняет 7 обновлённых файлов и 3 новых: Android VpnSessionRepository/WorkerProcess/
+ADR-039. Итого 36 unique local paths,43 captures с сохранённым baseline.
 Latest-decisive join не подменён прежним terminal описанием; административные
 outcomes не отменяют действующий proof и не скрывают failure. Android plan
 перешёл AND-11-S2→S3 source/unverified; actual optional OS caller и guards
 просмотрены, bounded OS runtime не заявлен. Итоговые hashes — `final-cut.json`.
 
-Late cut19:07…19:08Z: ещё4 docs обновлены под `PlanAutomaticBackground`;
+Late cut19:07…19:08Z: ещё 4 docs обновлены под `PlanAutomaticBackground`;
 прочитан actual `shared/adaptive/observer.go`: scalar DTO/constant branches,
 current scope/clock/count/MaxAge, suppression suggestion без admission/wiring.
-`late-local-inputs.json` содержит эти4 docs + source, всего48 local captures/
+`late-local-inputs.json` содержит эти 4 docs + source, всего 48 local captures/
 37 unique paths. Гипотетический split `observer_types.go` не найден — types
 реально в observer.go; это не отсутствие capability. Перед интеграцией учитывать
 последующий drift, а не превращать addressed hash seal в global PASS.
@@ -229,7 +230,7 @@ dependence при target и independence при root cause. Поэтому вы�
 
 ## 6. R03-004 — causal policy evaluation
 
-2026-10-25/26, окно до2026-10-26T06:30:26Z. Новый scope — не общий warning о
+2026-10-25/26. Область — условия, помимо общего предупреждения о
 winner-only logs, а условия определения эффекта полной policy, assignment versus
 admission и fit/propensity/observation contract.
 
@@ -269,7 +270,7 @@ current WorkerRpcLane delivery/ack и AND03-S9 STATE прочитаны;3 refres
 
 ## 7. R03-005 — delayed disclosure / reset-family validity
 
-2026-10-26; начало до06:30:26Z, scientific plan-only.
+2026-10-26; анализ источников и модели, без исполнения.
 
 | ID | Exact primary/source | Прочитанный scope / reuse |
 |---|---|---|
@@ -322,16 +323,16 @@ Paper/date/caller scopes в REPORT15; no private owner data. Ошибочная 
 envelope, quadratic exposure integral, finite endpoint/stationary extrema,
 law-of-total-expectation complete-trial bound, B1…B5 и bounded contingent regret
 comparison. Это conditional model, не experiment/новые published guarantees.
-Физические L/b/H/C/p values неизвестны; все14 future P cases NOT_RUN.
+Физические L/b/H/C/p values неизвестны; все 14 future P cases NOT_RUN.
 
 ## 9. R03-007 — conditional staged risk / cost tail
 
-2026-10-26; source/web reads09:18…09:23Z, новый срез начат до10:03:26Z cutoff.
+2026-10-26; чтение источников 09:18…09:23 UTC.
 
 | ID | Exact primary / scope | Применение и reuse decision |
 |---|---|---|
 | P26 | [NIST/SEMATECH Series model §8.1.8.2](https://www.itl.nist.gov/div898/handbook/apr/section1/apr182.htm), official HTML read/capture2026-10-26 | Marginal component product требует independence/first-failure lifetime assumptions. Reference; не перенос independent component model на VPN stages |
-| P27 | [NIST exact binomial CI §7.2.4.1](https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm), official HTML read/capture2026-10-26; [Dataplot exact-binomial docs](https://itl.nist.gov/div898/software/dataplot/refman2/auxillar/exacbici.htm), doc date2010-10-05 | Binomial inversion/one versus two-sided limits. Reference/manual zero-failure derivation; fixed-sampling assumptions, software/examples не выполнялись/не audited. Dataplot date не новая публикация2026 |
+| P27 | [NIST exact binomial CI §7.2.4.1](https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm), official HTML read/capture2026-10-26; [Dataplot exact-binomial docs](https://itl.nist.gov/div898/software/dataplot/refman2/auxillar/exacbici.htm), doc date2010-10-05 | Binomial inversion/one versus two-sided limits. Reference/manual zero-failure derivation; fixed-sampling assumptions, software/examples не выполнялись/не audited. Dataplot date не новая публикация 2026 |
 | P28 | [OpenTelemetry Tracing API SetStatus/End](https://opentelemetry.io/docs/specs/otel/trace/api/), official web read2026-10-26 | Unset/Ok/Error и End без завершения children. Vocabulary reference, **не** owner/custody/task outcome protocol. SDK/version/license/import/export не выбраны |
 | L-reuse | Existing API1 budget_types/failover_budget/evidence_types, Windows failover/observer_failover, Android WorkerRpcLane | Exact source branches/typed receipts/actual return/delivery ack reused, source unverified; не новый ledger/controller/telemetry system |
 
@@ -362,16 +363,17 @@ binary identification из R03-007 или delayed-prefix результата R0
 
 | ID | Primary source / exact version | Прочитанная область и предел |
 |---|---|---|
-| P29 | [Waudby-Smith/Ramdas2010.09686v7](https://arxiv.org/html/2010.09686v7),25августа2022; journal[DOI10.1093/jrsssb/qkad009](https://doi.org/10.1093/jrsssb/qkad009),2024 issue | §2,Prop1,Thm2/3,constant conditional mean/predictable bets. v5 прочитан сначала, final assumptions сверены по v7; не считать2024paper новым2026result. Journal page fetch redirect blocked, arXiv primary HTML доступен/captured |
+| P29 | [Waudby-Smith/Ramdas2010.09686v7](https://arxiv.org/html/2010.09686v7),25августа2022; journal[DOI10.1093/jrsssb/qkad009](https://doi.org/10.1093/jrsssb/qkad009),2024 issue | §2,Prop1,Thm2/3,constant conditional mean/predictable bets. v5 прочитан сначала, final assumptions сверены по v7; не считать 2024paper новым 2026result. Journal page fetch redirect blocked, arXiv primary HTML доступен/captured |
 | P30 | [Wang/Ramdas AISTATS2023/PMLR206:9662–9679](https://proceedings.mlr.press/v206/wang23p.html),[PDF](https://proceedings.mlr.press/v206/wang23p/wang23p.pdf) | Lemma3/Thm1, after-Lemma conditional-Q relaxation, §4.1 TV versus replacement. Supplied clean moment/TV ball не arbitrary false-label budget и не unknown drift.18-page primary PDF captured; no examples executed |
 | P20-reuse | [Howard etal1810.08240v9](https://arxiv.org/html/1810.08240v9),6августа2022 | Thm4 avg conditional expectation/bounded support/predictable prediction. Previously005; new17.4 is own elementary conditional-MGF+union-bound envelope, не borrowed optimality claim |
 | C29 | [confseq pin5ffe733ca2447a2e28c2c91f3b00086173f2ab2c](https://github.com/gostevehoward/confseq/tree/5ffe733ca2447a2e28c2c91f3b00086173f2ab2c),setup0.0.11,MIT2021confseq developers | New deeper read predmix.py/betting_strategies.py/misc.py/setup.py/LICENSE. Caller twosided→lower→generic weighted accumulation, α/2; lagged EmpBernλ. Not runtime/C++core/ABI/parity audit, direct adapter absent |
 | C30 | [HJ-Wg/catoni-confseq pin381d7fb17d2af5f4cc78d422c92900f2b1d5d1c4](https://github.com/HJ-Wg/catoni-confseq/tree/381d7fb17d2af5f4cc78d422c92900f2b1d5d1c4),untagged, GPL-3.0 | repo currentOid resolved11:17:32Z; demo→RCS_Generator→observe→find_zero_decreasing→get_CS. Constructor side normalization95/effective_alpha115 and per-tail roots165…175 reviewed. Source split mismatch only, no empirical miscoverage/security claim. Growing arrays/history/root work, no client runtime import |
 
-Cycle008 artifacts:17local captures before/copy/after consistent;5confseq files,
-5catoni files, root HTML/currentOid,2primary paper captures. `local-inputs.json`,
-`external-inputs.json`, `catoni-pin.json`, `catoni-inputs.json`, `paper-inputs.json`
-carry paths/UTC/SHA256. READMEs/docstrings were evidence, no command execution.
+В cycle008 сохранены 17 локальных входов с совпавшими хешами до/копии/после,
+пять confseq и пять catoni файлов, корневая HTML/currentOid и две первичные
+статьи. Пути, UTC и SHA256 — в `local-inputs.json`, `external-inputs.json`,
+`catoni-pin.json`, `catoni-inputs.json`, `paper-inputs.json`. README/docstrings
+использованы как документы, команды не исполнялись.
 
 Manual U1…U7: interval/corruption width; selection; common latent factor;
 indistinguishable probe/target worlds; measurement interference; invalid moving-

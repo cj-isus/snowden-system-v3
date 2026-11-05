@@ -1584,5 +1584,12 @@
     "sourceArchive": "Exact preserved authored archive; sourceBytes/sourceSha256 identify its bytes.",
     "coverage": "sourceStart/sourceEnd are UTF-16 JavaScript string offsets in the archived UTF-8 decoded text; sourceSha256 hashes the UTF-8 encoding of that slice. bodySha256 records the split-time body, not current page identity.",
     "relocated": "originalSha256/migratedSha256 are historical migration observations. Current reader edits do not rewrite acquisition lineage."
+  },
+  "provenanceSemantics": {
+    "sourceArchive": "Preserved authored original; sourceBytes/sourceSha256 identify its UTF-8 bytes.",
+    "sourceStartEnd": "UTF-16 string offsets [start,end) in the decoded authored archive, not byte offsets in edited chapters.",
+    "sourceSha256": "SHA256 of that original decoded range encoded as UTF-8.",
+    "bodySha256": "Historical split-body observation, not a hash assertion for the current editorial chapter.",
+    "fileAnchor": "Current reader destination preserving the original anchor; editorial changes do not rewrite original source identities."
   }
 }

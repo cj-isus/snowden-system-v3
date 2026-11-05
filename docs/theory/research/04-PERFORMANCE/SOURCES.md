@@ -140,7 +140,7 @@ transitive graph ещё не поставленного Android whole AAR. Share
 Capture root: `.artifacts/research/theory-04/2026-10-25-hy2-scheduler-v2/`.
 `source-manifest.json`:45 записей =31 module source/license +11 project inputs
 +3 preserved prior documents. `upstream-comparison.json`:17 совпадений raw/cache
-bytes, включая все четыре LICENSE. Не все31 module files отдельно fetched:
+bytes, включая все четыре LICENSE. Не все 31 module files отдельно fetched:
 список raw comparisons точный, без подразумеваемой проверки всего module.
 
 ### 7.2. Actual service/ownership pointers
@@ -155,7 +155,7 @@ bytes, включая все четыре LICENSE. Не все31 module files о
 | D2-U06 | [send_queue.go](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/send_queue.go), Send/Run/SendProbe/Close; [buffer_pool.go](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/buffer_pool.go); [protocol.go](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/internal/protocol/protocol.go) |8 queued entries, buffer capacities1452/20KiB, actual Write/Release; GSO entry не один packet |
 | D2-U07 | [HY2 client_packet.go](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/client_packet.go), loopMessages→handleMessage→handleUDPMessage→inputPacket | Реальная concurrent client ветвь и fatal handle error для всего carrier |
 | D2-U08 | [HY2 service_packet.go](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/service_packet.go), loopMessages→handleMessage, new session handler; [service.go](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/service.go) | Serial per-connection server receive, session fanout, declared stream ceiling2^60 |
-| D2-U09 | [HY2 packet.go](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/packet.go), headerSize/fragUDPMessage/writePacket/inputPacket/feed/newUDPDefragger/releaseMessage/Close | Вся source цепь от legal1175 payload к1197 message и от async feed к eviction/ready64 |
+| D2-U09 | [HY2 packet.go](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/packet.go), headerSize/fragUDPMessage/writePacket/inputPacket/feed/newUDPDefragger/releaseMessage/Close | Вся source цепь от legal1175 payload к 1197 message и от async feed к eviction/ready64 |
 | D2-U10 | [LRU](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/common/cache/lrucache.go), LoadOrStore→maybeDeleteOldest→deleteElement→onEvict | Cache mutex и synchronous eviction callback; item.access не приобретается библиотекой |
 | D2-U11 | [buf.Buffer](https://github.com/SagerNet/sing/blob/7c349dacf402256d3a7029746073b05d2ead584a/common/buf/buffer.go), Release/Len | Unmanaged Release может ничего не делать; logical message reset устанавливается отдельно HY2 release |
 | D2-U12 | [Weighted semaphore](https://github.com/golang/sync/blob/ec11c4a93de22cde2abe2bf74d70791033c2464c/semaphore/semaphore.go), TryAcquire/Release | Ready nonblocking admission building block; отсутствие автоматической передачи credit в retained cache |
@@ -169,11 +169,11 @@ base/connection flow controllers, mtu_discoverer, HY2 client/protocol/packet_wai
 
 | ID / дата документа | Прямой источник | Что применено / предел |
 |---|---|---|
-| D2-N01 / март2022 | [RFC9221 §5](https://www.rfc-editor.org/rfc/rfc9221.html#section-5) | DATAGRAM shared CC, отсутствие stream FC и application receipt из transport ACK |
-| D2-N02 / июнь1996 | [Shreedhar/Varghese, IEEE/ACM TON4(3),375–385](https://web.stanford.edu/class/ee384x/EE384X/papers/DRR.pdf) | DRR byte deficit/throughput fairness; базовый алгоритм не обещает latency bound. Не путать journal paper1996 с technical report1994 |
-| D2-N03 / январь2018 | [RFC8290](https://www.rfc-editor.org/rfc/rfc8290.html), особенно §6.2 | Experimental FQ-CoDel, modified DRR/sparse queues; opaque encapsulation collapse внутренние flows |
-| D2-N04 / январь2018 | [RFC8289 §4.3](https://www.rfc-editor.org/rfc/rfc8289.html#section-4.3) | Experimental CoDel persistent-sojourn control; TARGET не hard worst-case bound и не универсальная настройка нашей QUIC queue |
-| D2-N05 / сентябрь1997 | [RFC2212](https://www.rfc-editor.org/rfc/rfc2212.html) | Для delay guarantee нужны полисируемый arrival/service contract; его IntServ model не принят как существующая поддержка VPS/оператора |
+| D2-N01 / март 2022 | [RFC9221 §5](https://www.rfc-editor.org/rfc/rfc9221.html#section-5) | DATAGRAM shared CC, отсутствие stream FC и application receipt из transport ACK |
+| D2-N02 / июнь 1996 | [Shreedhar/Varghese, IEEE/ACM TON4(3),375–385](https://web.stanford.edu/class/ee384x/EE384X/papers/DRR.pdf) | DRR byte deficit/throughput fairness; базовый алгоритм не обещает latency bound. Не путать journal paper1996 с technical report1994 |
+| D2-N03 / январь 2018 | [RFC8290](https://www.rfc-editor.org/rfc/rfc8290.html), особенно §6.2 | Experimental FQ-CoDel, modified DRR/sparse queues; opaque encapsulation collapse внутренние flows |
+| D2-N04 / январь 2018 | [RFC8289 §4.3](https://www.rfc-editor.org/rfc/rfc8289.html#section-4.3) | Experimental CoDel persistent-sojourn control; TARGET не hard worst-case bound и не универсальная настройка нашей QUIC queue |
+| D2-N05 / сентябрь 1997 | [RFC2212](https://www.rfc-editor.org/rfc/rfc2212.html) | Для delay guarantee нужны полисируемый arrival/service contract; его IntServ model не принят как существующая поддержка VPS/оператора |
 | D2-N06 / original LNCS2050; current author edition accessed2026-10-25 | [Le Boudec/Thiran author page](https://leboudec.github.io/netcal/), [author source repository](https://github.com/leboudec/netcal/) | Arrival/service curves как метод; формулы REPORT10.6 выведены там вручную под явными упрощёнными условиями |
 
 У DRR статья и алгоритм не являются готовой лицензией на заимствование любой
@@ -202,8 +202,8 @@ CONTROL/RETIREMENT по одному executor; NativeCallbackGate32 — отде
 Смена STATE/платформенного source других owners — dated drift, не разрешение
 переписать их файлы и не скрытый native PASS.
 
-Финальная сверка: из42 текущих выбранных inputs изменился только Android STATE
-S2→S3; все45 captures и3 original document prefixes сохранены. Relevant transport
+Финальная сверка: из 42 текущих выбранных inputs изменился только Android STATE
+S2→S3; все 45 captures и 3 original document prefixes сохранены. Relevant transport
 code и перечисленные Android bridge/RPC files совпадают с captures. Свежий S3
 снимок прочитан как context, его новые OS-observer файлы полностью не reviewed.
 Windows фактически captured V2-162, хотя начальное знакомство ещё видело V2-161.
@@ -224,7 +224,7 @@ Windows фактически captured V2-162, хотя начальное зна
 
 ## 8. R04-003 — clocks, local keepalive, energy attribution
 
-Просмотр2026-10-25/26. Пакет [REPORT §11](REPORT.md#r04-003),
+Просмотр 2026-10-25/26. Пакет [REPORT §11](REPORT.md#r04-003),
 captures `.artifacts/research/theory-04/2026-10-25-clock-energy-v3/`.
 
 ### 8.1. Версии и лицензии
@@ -270,7 +270,7 @@ lock и отсутствующие approved AAR/Go digest сохранены, Wi
 | D3-P04 | [Go build constraints](https://pkg.go.dev/cmd/go#hdr-Build_constraints) | Android дополнительно совпадает с Linux tags/files; tool не запускался |
 | D3-P05 | [RFC4787 §4.3](https://www.rfc-editor.org/rfc/rfc4787.html#section-4.3) | NAT outbound/inbound refresh requirements; не measured Russian CGNAT lifetime |
 | D3-P06 | [RFC8085 §3.5](https://www.rfc-editor.org/rfc/rfc8085.html#section-3.5) | No arbitrary middlebox timeout, recovery, middlebox keepalive pacing; не автоматическое нарушение QUIC10s |
-| D3-P07 | [Optimize network access](https://developer.android.com/develop/connectivity/network-ops/network-access-optimization) | Radio/tail/batching context. Пример3G, не LTE/5G benchmark и не mAh estimate |
+| D3-P07 | [Optimize network access](https://developer.android.com/develop/connectivity/network-ops/network-access-optimization) | Radio/tail/batching context. Пример 3G, не LTE/5G benchmark и не mAh estimate |
 | D3-P08 | [Doze and App Standby](https://developer.android.com/training/monitoring-device-state/doze-standby) | Deferred resources/exemptions, не тождество deep sleep и Doze; adb examples не выполнялись |
 | D3-P09 | [ConnectivityManager createSocketKeepalive](https://developer.android.com/reference/android/net/ConnectivityManager), [SocketKeepalive](https://developer.android.com/reference/android/net/SocketKeepalive) | Public IPsec NAT-T API/async lifecycle; не произвольный encrypted QUIC PING offload |
 
@@ -281,7 +281,7 @@ Go tag response и gVisor Origin сохранены отдельно. `reused-up
 7 current hashes совпадают с ранее проверенными upstream bytes; это reuse доказательств
 при identical hash, не повторный network fetch. `upstream-comparison.json`:3 свежих
 raw/cache совпадения (gLazyConn, gVisor connect.go, Apache LICENSE);2 fetch timeouts
-не выданы за source equality. Не все19 module files независимо сравнивались с raw.
+не выданы за source equality. Не все 19 module files независимо сравнивались с raw.
 
 Неудачная догадка `runtime/time_linux_arm64.s` дала timeout/NOT_FOUND; до включения
 terminating errors возник пустой staging file. Он **не source**, excluded из
@@ -298,7 +298,7 @@ authoritative manifest, запись `sourcing-failures.json`. Затем фак
 
 ## 9. R04-004 — HY2/BBR clocks и extended feedback
 
-Проверка2026-10-26. Canonical path после migration — docs/theory/research/04-PERFORMANCE/;
+Проверка 2026-10-26. Canonical path после migration — docs/theory/research/04-PERFORMANCE/;
 новые отчёты в старом THEORY-LAB не записывались. [REPORT §12](REPORT.md#r04-004).
 Capture root `.artifacts/research/theory-04/2026-10-26-bbr-clock-v4/`.
 
@@ -319,7 +319,7 @@ sent_packet_handler, Brutal, BBR sender, meta2 pacer. Их SHA256 и URLs сох
 remote verified.4 Origin records повторно **не** запрашивались — reused prior
 module-metadata с теми же pins, с hashes в отдельном inventory.
 
-Go spec взят по exact1.26 commit, не с текущей страницы go.dev (она уже1.27).
+Go spec взят по exact1.26 commit, не с текущей страницы go.dev (она уже 1.27).
 time.go/LICENSE reuse из R04-003 совпадают по прежним hashes; reference manifest
 не утверждает real compiler EXE/APK. Никакой go list/mod download/resolve не было.
 
@@ -357,9 +357,9 @@ Hand traces: rejected NTP→BBR deadline dependency; method-set/base-vs-Ex dispa
 
 ## 10. R04-005 — timestamp placement, queue/GSO и PMTU loss
 
-2026-10-26. [REPORT13](REPORT.md#r04-005), capture root
+26 октября 2026. [Аргумент R04-005](REPORT.md#r04-005), копии:
 `.artifacts/research/theory-04/2026-10-26-queue-pmtu-v5/`.
-Те же exact pins: quic-go `ccd46abedd39c6f8384b1df8daf42008724958f5`
+Те же закреплённые версии: quic-go `ccd46abedd39c6f8384b1df8daf42008724958f5`
 (v0.59.0-sing-box-mod.4, MIT), sing-quic
 `d83826c306d7c008cafb3fd6d8ee07cbcfd656ed`
 (v0.6.4-0.20260803041914-d83826c306d7, GPL-3.0-or-later).
@@ -384,8 +384,8 @@ Hand traces: rejected NTP→BBR deadline dependency; method-set/base-vs-Ex dispa
 |---|---|---|
 | D5-P01 | [RFC9000 §14.4](https://www.rfc-editor.org/rfc/rfc9000.html#section-14.4), May2021,2026-10-26 | PMTU probe ack-eliciting/window usage; loss SHOULD NOT cause congestion reaction. Не blanket conformance assertion |
 | D5-P02 | [RFC9002 §5.1/7.7](https://www.rfc-editor.org/rfc/rfc9002.html), May2021,2026-10-26 | Sample/ACK-delay и pacing architecture; local timestamp model выведена отдельно по source |
-| D5-P03 | [Linux segmentation offloads](https://docs.kernel.org/networking/segmentation-offloads.html), docs просмотр2026-10-26 | Segmentation/GSO concepts, не proof real socket/Android capability |
-| D5-P04 | [BBR authors publication](https://research.google/pubs/bbr-congestion-based-congestion-control/), Cardwell et al., CACM60/2017 | Primary model context, не подтверждение характеристик нашего port. ACM Queue direct link вернул403; его full text не считается прочитанным |
+| D5-P03 | [Linux segmentation offloads](https://docs.kernel.org/networking/segmentation-offloads.html), docs просмотр 2026-10-26 | Segmentation/GSO concepts, не proof real socket/Android capability |
+| D5-P04 | [BBR authors publication](https://research.google/pubs/bbr-congestion-based-congestion-control/), Cardwell et al., CACM60/2017 | Primary model context, не подтверждение характеристик нашего port. ACM Queue direct link вернул 403; его full text не считается прочитанным |
 
 ### 10.3. Provenance и область manual review
 
@@ -401,7 +401,7 @@ captured; whole AAR/EXE/runtime/profiles не прочитаны/не verified. 
 Ранее сохранённые own reports/handoff004 сохраняются полными prefixes.
 
 Manual evidence: R_raw decomposition, byte-service bound, batch CPU model,
-PMTU-only Ex event recovery arithmetic и9 opposing claims. Все future cases
+PMTU-only Ex event recovery arithmetic и 9 opposing claims. Все future cases
 REPORT13.8 NOT_RUN. Нет tests/fixtures/parser/compiler/simulation/benchmark/native/
 live/OS-network execution. Использование source SHA256 — только provenance.
 
@@ -409,10 +409,11 @@ live/OS-network execution. Использование source SHA256 — толь
 
 ## 11. R04-006 — semantic flight count contract
 
-2026-10-26, [REPORT14](REPORT.md#r04-006). Capture root
-`.artifacts/research/theory-04/2026-10-26-flight-contract-v6/`:
-13 files=7 module source/license +2 project manifests +4 prior own docs.
-Pins/licenses — те же quic-go mod.4 MIT / sing-quic d83826c GPL-3.0-or-later.
+26 октября 2026, [аргумент R04-006](REPORT.md#r04-006). Копии:
+`.artifacts/research/theory-04/2026-10-26-flight-contract-v6/`.
+Тринадцать файлов: семь module source/license, два project manifests
+и четыре прежних собственных документа. Версии и лицензии те же:
+quic-go mod.4 MIT / sing-quic d83826c GPL-3.0-or-later.
 
 | Primary exact source | Symbol / проверка |
 |---|---|
@@ -432,7 +433,7 @@ Manual F=0,L=1200→post1200/snapshot2400 и four future cases NOT_RUN.
 
 ## 12. R04-007 — upstream remediation и semantic compatibility
 
-Просмотр2026-10-26,10:58–11:29Z. [Handoff007](handoffs/R04-007.md),
+Просмотр 2026-10-26,10:58–11:29Z. [Handoff007](handoffs/R04-007.md),
 [REPORT15](REPORT.md#r04-007). Capture root
 `.artifacts/research/theory-04/2026-10-26-callback-remediation-v7/`.
 
@@ -445,7 +446,7 @@ Manual F=0,L=1200→post1200/snapshot2400 и four future cases NOT_RUN.
 | Same sing-quic pin | [BBR sender](https://github.com/SagerNet/sing-quic/blob/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1/congestion_meta2/bbr_sender.go): NewBbrSenderWithProfile/OnPacketSent/OnPacketNeutered/OnPacketsLost; [sampler](https://github.com/SagerNet/sing-quic/blob/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1/congestion_meta2/bandwidth_sampler.go); [pacer](https://github.com/SagerNet/sing-quic/blob/4ab2eceaac81e073f53b22ec72ff56aaea89a3d1/congestion_meta2/pacer.go) | Clock dependency removed, retirement callback forwarding. Not proof all discard paths bounded; sampler still adds packet bytes to expected prior-flight |
 | quic-go v0.61.0-sing-box-mod.6, `f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80` | [Interface](https://github.com/SagerNet/quic-go/blob/f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80/congestion/interface.go): documented prior-flight/global congestion PN/OnPacketNeutered; [handler](https://github.com/SagerNet/quic-go/blob/f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80/internal/ackhandler/sent_packet_handler.go): SentPacket/SetCongestionControl/reports/neuterPacket/notifyLeastUnacked/detectLostPackets | Paired engine semantics. MIT captured; Go proxy Origin archived. reports(p) checks install boundary, not PMTU flag; Ex loss append remains outside PMTU guard |
 | Same quic pin | [ccAdapterEx](https://github.com/SagerNet/quic-go/blob/f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80/internal/ackhandler/cc_adapter_ex.go), [go.mod](https://github.com/SagerNet/quic-go/blob/f7b7e9c4c6f6ec45e4ab2b4788eca63192975d80/go.mod) | Forwarding new terminal callback, dependency cost. No binary compatibility assertion |
-| Hysteria core/v2.13.0, `ca8fbd874fd6ca82413948de6dc5924405e103e1`,5окт2026 | [Brutal](https://github.com/apernet/hysteria/blob/ca8fbd874fd6ca82413948de6dc5924405e103e1/core/internal/congestion/brutal/brutal.go): disableLossCompensation/min cwnd/monotime; [core go.mod](https://github.com/apernet/hysteria/blob/ca8fbd874fd6ca82413948de6dc5924405e103e1/core/go.mod), [MIT license](https://github.com/apernet/hysteria/blob/ca8fbd874fd6ca82413948de6dc5924405e103e1/LICENSE.md) | Reference/adapt algorithm/option; not a drop-in SagerNet API or Snowden config field. App release tag and core tag separated in metadata |
+| Hysteria core/v2.13.0, `ca8fbd874fd6ca82413948de6dc5924405e103e1`,5 окт 2026 | [Brutal](https://github.com/apernet/hysteria/blob/ca8fbd874fd6ca82413948de6dc5924405e103e1/core/internal/congestion/brutal/brutal.go): disableLossCompensation/min cwnd/monotime; [core go.mod](https://github.com/apernet/hysteria/blob/ca8fbd874fd6ca82413948de6dc5924405e103e1/core/go.mod), [MIT license](https://github.com/apernet/hysteria/blob/ca8fbd874fd6ca82413948de6dc5924405e103e1/LICENSE.md) | Reference/adapt algorithm/option; not a drop-in SagerNet API or Snowden config field. App release tag and core tag separated in metadata |
 | Apernet/quic-go v0.63.1-0.20261004180939-a10df75c260c, `a10df75c260cee8161f3261d63a37bd125a6bb2a` | [Interface](https://github.com/apernet/quic-go/blob/a10df75c260cee8161f3261d63a37bd125a6bb2a/congestion/interface.go), full Origin archived | Ex requires batch only above base, unlike SagerNet lifecycle set; package types differ. Interface source archived, no whole runtime/license closure review |
 
 ### 12.2. Current inputs и provenance
@@ -453,7 +454,7 @@ Manual F=0,L=1200→post1200/snapshot2400 и four future cases NOT_RUN.
 Current pinned source: sing-quic d83826c306d7c008cafb3fd6d8ee07cbcfd656ed
 (GPL-3.0-or-later), quic-go ccd46abedd39c6f8384b1df8daf42008724958f5(MIT).
 source-manifest21=10 pinned source/license+7 project inputs+4 prior docs.
-Current upstream equality переиспользована только для5 identical source hashes;
+Current upstream equality переиспользована только для 5 identical source hashes;
 остальные current source captures не объявлены freshly remote compared.
 
 Remote source sets:8 sing-quic v0.7.0 +5 paired quic +3 Hysteria reference +1
@@ -463,7 +464,7 @@ Origin/tag/commit/release JSON metadata сохранены как lookup provena
 Current HEAD получен только для discovery; выводы используют immutable commits.
 API request full fix commit и HEAD Hysteria timed out; raw source и versioned
 Go proxy metadata использованы вместо недоступного full diff/HEAD. Они не стали
-доказательством чтения всех37 changed files или всех возможностей новых версий.
+доказательством чтения всех 37 changed files или всех возможностей новых версий.
 
 Windows V2-171 / Android AND-11-S5 — captured context, Android whole AAR не
 approved. Current root go.mod/source-lock, review2H-HB02-R04-10, CLAIM-FORMAT и
@@ -472,7 +473,7 @@ window instructions captured. Secrets/env/real profiles/runtime logs не чит
 
 ## 13. R04-008 — retention sources
 
-Срез26октября2026. Чтения — local module cache exact go.mod pins;
+Срез 26 октября 2026. Чтения — local module cache exact go.mod pins;
 хэши процитированных файлов:
 `.artifacts/research/theory-04/2026-10-26-retention-v8/local-inputs-sha256.txt`.
 
@@ -498,6 +499,6 @@ window instructions captured. Secrets/env/real profiles/runtime logs не чит
 | Hock, Bless, Zitterbart — Experimental Evaluation of BBR (ICNP 2017, [IEEE 8116707](https://ieeexplore.ieee.org/document/8116707)) | RTT-нечестность/задержко-нечувствительность BBRv1 |
 | sing-quic pin (module cache) | congestion_meta2/bbr2_sender.go (auto-ветка); hysteria2/service.go — per-user bandwidth/obfs/udp, отсутствие conn-cap |
 
-Срез26октября2026: web-страницы прочитаны; PDF Wang et al. —
+Срез 26 октября 2026: web-страницы прочитаны; PDF Wang et al. —
 по аннотации/цитатам каталога (full-text NOT_RUN). Никаких симуляций/замеров.
 Все future cases NOT_RUN.

@@ -25,7 +25,7 @@ attestation. Реальные saved states, SDK execution и пользоват�
 | S1 | The Update Framework Authors, **TUF Specification1.0.36**; Last modified **2026-08-05** (header сам документ) | [versioned spec](https://theupdateframework.github.io/specification/v1.0.36/), §§2.1.1,5.1–5.6,6.1 | FULL_TEXT_READ выбранных нормативных разделов,27.10.2026 ~13:18–13:33; raw HTML248581bytes. Root persistence before final expiry; incoming expired T/S discard; role-key rotation reset; withholding/freeze. Полный conformance audit не заявлен |
 | S2 | The Update Framework Authors, **TUF Specification1.0.37**; Last modified **2026-10-08** | [versioned spec](https://theupdateframework.github.io/specification/v1.0.37/), §§5.3–5.6 | FULL_TEXT_READ critical corresponding paragraphs,27.10.2026 ~13:33. Порядок persist/root expiry и discard T/S совпадает в прочитанных passages; остальные изменения editions не audited |
 | S3 | B. Laurie, E. Messeri, R. Stradling / IETF, **Certificate Transparency Version2.0**, RFC9162, **December2021**, Experimental | [RFC Editor TXT](https://www.rfc-editor.org/rfc/rfc9162.txt), §§2.1.4,4.9–4.11,11/11.3 | FULL_TEXT_READ указанных разделов,27.10.2026 ~13:24–13:27; header прочитан. Append-only proof between heads; STH timestamp/tree_size/root_hash; gossip не определяется этим RFC. Не TUF implementation и не новое авторизационное полномочие |
-| S4 | H. Birkholz, D. Thaler, M. Richardson, N. Smith, W. Pan / IETF, **Remote ATtestation procedureS (RATS) Architecture**, RFC9334, **January2023**, Informational | [RFC Editor TXT](https://www.rfc-editor.org/rfc/rfc9334.txt), §10.1–10.4 с introductory caveats §10 | FULL_TEXT_READ раздела10,27.10.2026 ~13:26–13:27. Trusted clocks/nonces/epoch IDs; свежая подпись не делает старые actual claim values свежими; изменение policy после подписи возможно |
+| S4 | H. Birkholz, D. Thaler, M. Richardson, N. Smith, W. Pan / IETF, **Remote ATtestation procedureS (RATS) Architecture**, RFC9334, **January2023**, Informational | [RFC Editor TXT](https://www.rfc-editor.org/rfc/rfc9334.txt), §10.1–10.4 с introductory caveats §10 | FULL_TEXT_READ раздела 10,27.10.2026 ~13:26–13:27. Trusted clocks/nonces/epoch IDs; свежая подпись не делает старые actual claim values свежими; изменение policy после подписи возможно |
 | S5 | Microsoft, **Функция FlushFileBuffers (fileapi.h)**; page metadata `ms.date=2018-12-05` (не дата каждого исправления перевода) | [фактически ru-RU](https://learn.microsoft.com/ru-ru/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers), Parameters/Return value/Remarks | FULL_TEXT_READ названных разделов,27.10.2026 ~13:37–13:39. HTML `lang=ru-ru` и русское тело прочитаны; это не предположение по замене locale в URL. WriteFile может буферизовать, FlushFileBuffers пишет buffered data. Не аттестация Go/FS durability и не просьба flush/admin сейчас |
 
 Для TUF state/progress не обнаружен **прочитанный и подтверждённый** русский
@@ -79,7 +79,7 @@ Source чтение не является разрешением выполни�
 | windows/backend/delivery/client.go | packageFetcher:21–62; Prepare→PrepareArtifacts:68–218; finalPolicy:221–270 |
 | windows/backend/delivery/model.go | State/cache bounds:54–155; Progress accessors:382–421; package/request shape навигация |
 | windows/backend/delivery/policy.go | rootPolicy69–101; guardMetadataShape169–225; metadataReferences231–241; Enroll245–261 |
-| windows/backend/delivery/retained_state.go | весь файл16–117: current pointer/byte binding, reset/cache, complete proof checks |
+| windows/backend/delivery/retained_state.go | весь файл 16–117: current pointer/byte binding, reset/cache, complete proof checks |
 | windows/backend/delivery/retained_inputs.go | весь файл: matchesMetadata17–23; boundMetadata27–55; retainedRoot61–99 |
 | windows/backend/delivery/retained_policy.go | весь файл: timestamp/snapshot continuity, не final expiry admission |
 | windows/update_delivery.go | prepareVerifiedUpdate36–135; read/clock/SDK/progress/retain/error/proof; source final proof path навигация |
@@ -165,7 +165,7 @@ snapshot (там есть дополнительный final version predicate).
 `fup-7-02/before/` сохраняет полные ранее сданные REPORT/SOURCES/handoff:
 новое дополнение append-only, hashes/prefix preservation в final review D.
 `fup-7-02/inputs-start.json` —8 selected product-source snapshots и SHA256
-ранее полученных5 upstream files. Fresh SDK/network/latest attestation не
+ранее полученных 5 upstream files. Fresh SDK/network/latest attestation не
 объявляется. Новые D1–D6 **NOT_RUN**, нет fixtures/SDK/state/OS выполнения.
 
 Собственное логическое основание D: точный source-order плюс observed

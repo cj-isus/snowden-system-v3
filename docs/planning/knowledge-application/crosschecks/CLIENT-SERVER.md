@@ -141,12 +141,12 @@ flow/endpoint facts; user/system traffic остаётся blocked. Это platfo
 В существующих seams `metadata.Channel` → `ValidateChannel` → `RenderFrom` →
 `ClientConfig` добавить/вывести immutable pair requirements, не новый transport:
 
-- client/server core protocol revision и feature bits;
-- listener/front relation, transport, WS path/early-data/mux;
-- TLS role: origin name, donor name, pin policy, REALITY key/short-id;
-- HY2 obfs/auth, hopping/DNAT receipt, CC mode;
-- confidentiality/disclosure class и разрешённые first-write fields;
-- probe contract revision/host/expected egress.
+- версии протокола ядра клиента/сервера и признаки поддерживаемых возможностей;
+- связь listener/front, транспорт, WS path/early-data/mux;
+- роль TLS: имя origin, имя донора, pin-policy, ключ/short-id REALITY;
+- obfs/auth HY2, свидетельство hopping/DNAT и режим CC;
+- класс конфиденциальности/раскрытия и допустимые поля первой записи;
+- версия контракта пробы, её host и ожидаемый egress.
 
 Signed profile/source и server manifest должны дать один compatibility verdict.
 `configured` channel остаётся explicit-only; `live-verified` не принимается без
@@ -234,12 +234,12 @@ Late network/profile/receipt change отзывает plan; следующий St
 
 Сохранять раздельно:
 
-- pair compatibility (pre-start, static/authorized);
-- TLS/transport establishment;
-- endpoint/egress observation;
-- direct-leak evidence scope;
-- resolver observation;
-- application/user-traffic admission.
+- совместимость пары до запуска: статический анализ и отдельно разрешённая проверка;
+- установление TLS/транспорта;
+- наблюдение endpoint/egress;
+- область свидетельства о прямой утечке;
+- наблюдение резолвера;
+- допуск приложения/пользовательского трафика.
 
 `AllPassed` не становится доказательством hidden transport confidentiality,
 server-template version или отсутствия всех leaks.

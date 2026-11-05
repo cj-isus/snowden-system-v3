@@ -94,7 +94,7 @@ Exact baseline до дополнения: ignored `cycle-002/baseline-R06-001-RE
 
 | ID | Первичный источник / область чтения | Основание и предел |
 |---|---|---|
-| E20 | [Dechter/Meiri/Pearl, Temporal constraint networks, AI49,1991, DOI10.1016/0004-3702(91)90006-6](https://www.sciencedirect.com/science/article/pii/0004370291900066), publisher abstract/metadata | Интервальные constraints/simple-general distinction. Полный35-page paper не audited: university PDF fetch timed out. Наши inequalities/units — ограниченный собственный derivation, не реализация алгоритма статьи |
+| E20 | [Dechter/Meiri/Pearl, Temporal constraint networks, AI49,1991, DOI10.1016/0004-3702(91)90006-6](https://www.sciencedirect.com/science/article/pii/0004370291900066), publisher abstract/metadata | Интервальные constraints/simple-general distinction. Полный 35-page paper не audited: university PDF fetch timed out. Наши inequalities/units — ограниченный собственный derivation, не реализация алгоритма статьи |
 | E21 | [Vidal, A unified dynamic approach for dealing with Temporal Uncertainty and Conditional Planning, AIPS2000](https://cdn.aaai.org/AIPS/2000/AIPS00-044.pdf), abstract/background/temporal-contingency definitions | Consistency не тождественна online реакции на уже наблюдённые contingent durations. Не переносить controllability proof на наш AND/OR/security state model; solver/production API не выбран |
 | E22 | [TUF Specification1.0.37](https://theupdateframework.github.io/specification/v1.0.37/index.html), modified **2026-10-08**, §5.1/5.2, expiry workflow/§7.1 | Fixed update-start, out-of-band trusted root; expired root может участвовать в root-update chain с последующим workflow expiry gate. Не trusted UTC/application-expiry waiver и не реализованный bogus-clock mode из future-work heading |
 | E23 | [Restic v0.19.1 immutable tree](https://github.com/restic/restic/tree/6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf), exact files ниже | CLI restore→OpenRepository/password/key→lock writes→restore/optional verify. BSD2-Clause; go1.25.8/toolchain1.25.10. Candidate external CLI/operator reuse, не embedded SDK/APK; полный security/crypto/backend audit не выполнен |
@@ -124,7 +124,7 @@ release. GPG/signature validation не выполнялась.
 | `cmd/restic/cmd_restore.go`: `newRestoreCommand/runRestore` | RunE caller, target, openWithReadLock, snapshot selection, NewRestorer, RestoreTo, conditional VerifyFiles |
 | `cmd/restic/lock.go`: `openWithReadLock/internalOpenWithLocked` | OpenRepository → repository.Lock; noLock branch, unlock; read lock не значит отсутствие metadata mutations |
 | `internal/global/global.go`: `OpenRepository/decryptRepository` | Backend/config access, password acquisition, Repository.SearchKey, bounded tries/errors; не env/credentials пользователя |
-| `internal/repository/repository.go`: `(*Repository).SearchKey`, около853 | Реальный receiver → package SearchKey → key installation/LoadConfig/error restoration |
+| `internal/repository/repository.go`: `(*Repository).SearchKey`, около 853 | Реальный receiver → package SearchKey → key installation/LoadConfig/error restoration |
 | `internal/repository/key.go`: `SearchKey/OpenKey/LoadKey` | Bounded key attempts и backend dependency; только чтение, без KDF/decrypt computations |
 | `internal/repository/lock.go`: `Lock` | restic.NewLock, retry/ownership context; не latency bound backend |
 | `internal/restic/lock.go`: `NewLock/createLock/Unlock` | SaveJSONUnpacked(LockFile) и RemoveUnpacked — обоснование write/remove prerequisite |
@@ -142,8 +142,8 @@ CLI/Go/backup/restore/check не запускались. File/license scope не
 ### 4.2. Local inputs и узкий review source drift
 
 В ignored cycle-002: `inputs-start.json` (18 путей), `inputs-extra.json`
-(ещё4), `inputs-reread.json` (2 targeted rereads и2 новых caller/consumer),
-`inputs-end.json` (сравнение первоначальных22); финальная актуальность — STATE.
+(ещё 4), `inputs-reread.json` (2 targeted rereads и 2 новых caller/consumer),
+`inputs-end.json` (сравнение первоначальных 22); финальная актуальность — STATE.
 24 уникальных selected inputs, не snapshot всей codebase/ОС.
 
 Windows: ApplyProfileRecovery → import/authority → prepareProfileRecovery →
@@ -210,7 +210,7 @@ Commit установлен из release link, затем подтвержден
 ### 5.2. Локальные inputs и актуальность
 
 19 selected local paths: `inputs-start.json`15 + `inputs-extra.json`4.
-`inputs-end.json` повторяет15 стартовых fingerprints; на срезе 06:11UTC drift
+`inputs-end.json` повторяет 15 стартовых fingerprints; на срезе 06:11UTC drift
 среди них не обнаружен. Extra4 прочитаны/закреплены позднее; дальнейшая
 актуальность после capture не обещается. Baseline REPORT/SOURCES cycle-002
 сохранены в cycle-003 до дополнений; прежние пакеты и handoffs не удалялись.
@@ -232,21 +232,22 @@ owner fence или иной specialized handler способен изменит�
 
 | ID | Первичный источник / просмотренный предмет | Предел использования |
 |---|---|---|
-| E35 | [Kotlin StateFlow API](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-state-flow/), web API1.11.0; [release1.10.2](https://github.com/Kotlin/kotlinx.coroutines/releases/tag/1.10.2) → [5f8900478a8e20c073145b1608fbc71fe3d7378b](https://github.com/Kotlin/kotlinx.coroutines/commit/5f8900478a8e20c073145b1608fbc71fe3d7378b) | Reference conflation/equality/current snapshot semantics. Проект android/vpn/build.gradle.kts использует1.10.2; version mismatch явно открыт. Raw StateFlow.kt/LICENSE.txt не скачались по timeout; никакого verified immutable file/license capture или internals1.10.2 claim нет |
+| E35 | [Kotlin StateFlow API](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-state-flow/), web API1.11.0; [release1.10.2](https://github.com/Kotlin/kotlinx.coroutines/releases/tag/1.10.2) → [5f8900478a8e20c073145b1608fbc71fe3d7378b](https://github.com/Kotlin/kotlinx.coroutines/commit/5f8900478a8e20c073145b1608fbc71fe3d7378b) | Reference conflation/equality/current snapshot semantics. Проект android/vpn/build.gradle.kts использует 1.10.2; version mismatch явно открыт. Raw StateFlow.kt/LICENSE.txt не скачались по timeout; никакого verified immutable file/license capture или internals1.10.2 claim нет |
 | E36 | [Lamport, Time, Clocks, and the Ordering of Events in a Distributed System](https://lamport.azurewebsites.net/pubs/time-clocks.pdf), Communications of ACM21(7),July1978; определение partial happens-before/Clock Condition и отсутствие converse | Reference reasoning о порядке/causality, не внедрённый distributed-clock algorithm. Parent journal sequence не объявлен Lamport clock; физическая причина сбоя не выводится из total ordering |
 | E37 | [OpenTelemetry Logs Data Model](https://opentelemetry.io/docs/specs/otel/logs/data-model/), Stable, Timestamp/ObservedTimestamp/optional trace context | Vocabulary reference. Местные elapsed ages не OTLP UNIX timestamps; trace context не подпись. SDK/collector/dependency/license integration не выбирались |
 
-Собственный source review: `SessionJournal.kt` → `VpnSessionRepository.kt`
+Прочитанный путь исходников: `SessionJournal.kt` → `VpnSessionRepository.kt`
 retainObservation/emit/command admission; `WorkerProcessLink.kt` identify/inspect
-identity и retained actual-return observations; `WorkerBinding.kt` local opaque
-journalContext; app `ControllerReport.kt` producer → `ControllerReportStore.kt`
-frozen draft/edit/share revision checks → `ControllerReportScreen.kt` preview
-и callback. System recipient/onShare downstream/native flow целиком не audited.
+и сохранённые actual-return observations; `WorkerBinding.kt` с локальным
+непрозрачным journalContext; `ControllerReport.kt` → `ControllerReportStore.kt`
+с frozen draft/edit/share revision checks → `ControllerReportScreen.kt`
+preview/callback. Получатель системы, downstream onShare и весь native flow
+не проверены этим адресным чтением.
 
-`.artifacts/research/theory-06/cycle-004/inputs-start.json` содержит8 paths:
-6 selected source files и2плана. Изначально предполагаемый versions.toml не
+`.artifacts/research/theory-06/cycle-004/inputs-start.json` содержит 8 paths:
+6 selected source files и 2 плана. Изначально предполагаемый versions.toml не
 существует, он не записан как input; фактический `android/vpn/build.gradle.kts`
-и WorkerBinding.kt добавлены metadata2, всего10selected local paths.
+и WorkerBinding.kt добавлены metadata2, всего 10selected local paths.
 `kotlinx-captures.json` сохраняет **оба timeout**, не successful source pin.
 
 Итоговый metadata review: изменились VpnSessionRepository и PLAN. Relevant
@@ -266,7 +267,7 @@ caller/source R06-003 относятся к ранее закреплённым 
 
 ## 7. R06-006 — corporate proxy/authority/settings ownership
 
-Исследовано26октября2026 в новом окне08:03:26Z–10:03:26Z; retrieval date,
+Исследовано 26 октября 2026 в новом окне 08:03:26Z–10:03:26Z; retrieval date,
 не дата фактического runtime измерения. REPORT §25…30, handoffR06-006.
 
 | ID | Primary URL/version/caller | Что обосновывает / предел |
@@ -325,7 +326,7 @@ client помечен cache-source scoped. Нужны независимый fil
 
 ## 8. R06-007 — IPv6-only/NAT64 bootstrap и path identity
 
-Просмотрено26октября2026 в новом2h окне. Источники ниже — published primary
+Просмотрено 26 октября 2026 в новом 2h окне. Источники ниже — published primary
 references/actual code, не утверждение о текущей мобильной сети владельца.
 
 | ID | Primary URL / dated version | Просмотренный предмет и предел |

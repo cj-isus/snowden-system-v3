@@ -1,6 +1,6 @@
 # R03-001 — прослеживаемость адаптивного решения и пределы его оценки
 
-**2026-10-25 · READY_FOR_REVIEW · Теория 3.**
+**2026-10-25 · READY_FOR_REVIEW.**
 Метод: source /
 literature / ручной математический анализ, не реализация policy, эксперимент,
 результат тестов или доказательство работы VPN. Источники: [SOURCES](SOURCES.md).
@@ -50,14 +50,14 @@ Bandit/RL/change detector не добавлены: сначала надо оп�
 
 Важные исключения: `tryPreferredChannelOnNetworkChange` выбирает transport
 preference другим правилом; ручной выбор/Start и legacy no-report branch имеют
-свои последствия. Единой формулой из пункта3 весь controller не описывается.
+свои последствия. Единой формулой из пункта 3 весь controller не описывается.
 Текущие guards уже существуют — предлагать второй owner вместо них нельзя.
 
 ### Android
 
 `ConnectionState` и `PhysicalNetworkState` содержат intent/issue/OS context,
 не protected user readiness. `VpnSessionRepository.completed` различает typed
-RPC result; `WorkerRpcLane` удерживает pending Call до actual result. Его10s
+RPC result; `WorkerRpcLane` удерживает pending Call до actual result. Его 10s
 порог — предел ожидания наблюдателя, не подтверждение возврата Binder/producer.
 `SessionJournal` хранит commands/state pairs в ring128 с dedup/eviction;
 по нему нельзя восстановить все trials, причины неприменения или task completion.
@@ -120,7 +120,7 @@ recent старшим ключом, оставляя предыдущий пор
 **Важное ограничение:** current `ClassifyFailure` делегирует typed
 `classifyObservedFailure`. Четыре special класса (`silent_freeze`,
 `tls_policing_443`, `port_blackholed`, `reset_injected`) обычная прочитанная
-typed цепочка не производит; для остальных `countermeasureTier` возвращает0.
+typed цепочка не производит; для остальных `countermeasureTier` возвращает 0.
 Поэтому второй контрпример описывает callable ordering/helper и риск будущего
 producer, **не доказанную текущую авто-реакцию на timeout**. В ordinary typed
 branch effective class key вырожден: остаётся recent → C2. Иные callers требуют
@@ -244,7 +244,7 @@ bounded outcome и статистическую uncertainty. Эта работа
 
 `s/N ≤ mean(Y) ≤ (s+u)/N`, ширина envelope `u/N`.
 
-Доказательство: сумма неизвестных binary исходов лежит от0 доu; прибавить s и
+Доказательство: сумма неизвестных binary исходов лежит от 0 доu; прибавить s и
 разделить на N. Обе крайние точки достижимы заполнением всех unknown нулями или
 единицами без дополнительных ограничений. Возможные конечные средние дискретны;
 интервал — tight envelope, не утверждение о непрерывном множестве всех значений.
@@ -256,7 +256,7 @@ bounded outcome и статистическую uncertainty. Эта работа
 для A/B, envelopes `[L_A,U_A]`, `[L_B,U_B]` дают
 `mean(Y_B)-mean(Y_A) ∈ [L_B-U_A, U_B-L_A]`.
 
-Пример **арифметики, не данные продукта**: из100 эпизодов у A50 успехов и50
+Пример **арифметики, не данные продукта**: из 100 эпизодов у A50 успехов и 50
 unknown, у B80 успехов/20 неуспехов. Complete-case A=100%, B=80% ложно выглядит
 однозначным преимуществом A. Envelopes A=[.5,1], B=[.8,.8], разность B−A
 лежит в[−.2,.3]: знак не установлен. Больше повторов при неизменной доле missing
@@ -273,8 +273,8 @@ unknown, у B80 успехов/20 неуспехов. Complete-case A=100%, B=80
 ### Что является unknown, а что уже определено целью
 
 Timeout времени чтения — не известный полный RTT. Но если известно, что полезная
-задача не завершилась к её D, её binary deadline outcome уже0, не unknown.
-Budget rejection реальной принятой задачи может означать0 в end-to-end policy
+задача не завершилась к её D, её binary deadline outcome уже 0, не unknown.
+Budget rejection реальной принятой задачи может означать 0 в end-to-end policy
 оценке, но **не** отрицательный факт о remote channel. Неисполненный optional
 probe не является принятой пользовательской задачей. User cancel/supersession
 требуют заранее объявленного estimand/stratum; нельзя постфактум исключить только
@@ -284,7 +284,7 @@ probe не является принятой пользовательской з
 `(S+u·a)/N ≤ mean(Z) ≤ (S+u·b)/N`. Единицы a,b,S одинаковы.
 Если cost не ограничен сверху, такой конечной верхней границы нет. Ограниченный
 `min(recovery_time,D)` — отдельная метрика; она не доказывает, что recovery либо
-cleanup действительно завершились за D. Нельзя выдать resource tail за0 из-за
+cleanup действительно завершились за D. Нельзя выдать resource tail за 0 из-за
 observer deadline. Safety нельзя нормировать в этот bounded performance cost.
 
 **Решение:** сначала accounting R03-02, затем finite coverage/envelopes в offline
@@ -413,12 +413,12 @@ Source facts нового cut, не результаты запуска:
   `time.Since(started)`. `ProtectedProbe.Run` ждёт parallel egress/control/DNS,
   а DNS fallback делит оставшийся срок между sources.
 - `publishObservationLocked` пишет health timestamp из report.CompletedAt;
-  `healthState.verdict(now)` считает positive freshness от LastOKAt, максимум2min.
+  `healthState.verdict(now)` считает positive freshness от LastOKAt, максимум 2min.
   **Это age завершённого агрегата**, не автоматически возраст каждого sub-fact.
   `GetChannelHealth` и C2 используют этот health verdict.
 - Watchdog period30s; два fast reprobes с gap5s; outer context15s, default
   `newAppProbe.Timeout=10s`. Admission protected lane:2 active whole operations,
-  120 reserved requests и1MiB reserved body bytes на rolling60s. Внутри одного
+  120 reserved requests и 1MiB reserved body bytes на rolling60s. Внутри одного
   operation есть fanout;2 — не предел всех sockets/HTTP requests приложения.
 - Запрос резервирует `q = len(Targets)+len(resolverTargets)+control`, control=1
   при обязательном direct-control step. Все потенциальные DNS attempts charged
@@ -457,8 +457,8 @@ scope факт получен в неизвестный момент `g_k∈[s_k
 момент наблюдения состояния, поэтому начало — консервативная граница, а не
 вымышленный точный remote timestamp. DNS cached data freshness — отдельная OP-01.
 
-**Контрпример, не измерение:** egress fact в[0,.1]s, DNS заканчивается в10s,
-весь report публикуется в10s. Report age0s, возраст egress от9.9 до10s.
+**Контрпример, не измерение:** egress fact в[0,.1]s, DNS заканчивается в 10s,
+весь report публикуется в 10s. Report age0s, возраст egress от 9.9 до 10s.
 TTL5s для этого egress уже истёк на публикации, хотя агрегат только завершён.
 Если семантика поля именно «когда завершён report», timestamp корректен;
 ошибка возникает при его повышении до freshness всех более ранних фактов.
@@ -480,7 +480,7 @@ Pinned Go1.26.0 `Time.UTC` снимает monotonic component; сравнени�
 report не является steady elapsed age. [Go source](https://github.com/golang/go/blob/d90b98e65320778f3b1f99a6951ab20f04d218b3/src/time/time.go).
 
 Ручной counterexample функции verdict: последний успешный wall timestamp1000s;
-steady прошло130s, wall скорректирован назад на60s. nowWall=1070s: positive age70s
+steady прошло 130s, wall скорректирован назад на 60s. nowWall=1070s: positive age70s
 ≤120s, хотя elapsed age130s. При wall step за последнюю отметку existing guard
 now.Before(LastOKAt) возвращает no_data; приведённый пример эту ветку не включает.
 Это ограничение age для ranking/UI, **не воспроизведённый обход trust protection**.
@@ -528,15 +528,15 @@ request reservation q_i и body reservation b_i. Если обещано рег�
 не sufficiency theorem. Одно измерение, покрывающее несколько requirements,
 считается один раз; неизвестный reuse не выдумывается.
 
-Пример арифметики: q=6, P30s, cap120/60s допускает по среднему не более10 таких
+Пример арифметики: q=6, P30s, cap120/60s допускает по среднему не более 10 таких
 потоков. Это не утверждение о текущем числе каналов и не рекомендация опрашивать
 их все; byte limit,2 slots, competing protected work и неуспехи ещё не учтены.
 Частые повторы одного failure также расходуют эти charges без нового success.
 
 Средний load может укладываться, но одновременные deadlines и retained owners
 сделают задачу невыполнимой. **Контрпример:**2 non-preemptible slots,3 jobs,
-каждый занимает ровно3s, общий release0/deadline5s. Total work9slot·s≤10slot·s,
-но каждый slot успевает только один job: два подряд требуют6s. Хотя агрегатная
+каждый занимает ровно 3s, общий release0/deadline5s. Total work9slot·s≤10slot·s,
+но каждый slot успевает только один job: два подряд требуют 6s. Хотя агрегатная
 capacity inequality выполнена, один deadline обязательно пропущен. Никакого
 алгоритма/стенда для этого counting proof не запускалось.
 
@@ -551,7 +551,7 @@ periodic independent constant-runtime модели. В нашем сетевом
 
 Текущий protected pool не занимает новый slot при отказе в admission и не
 возвращает charges после admitted error. Это полезные защитные свойства.
-Но2 occupied operations могут оставаться occupied, пока underlying calls реально
+Но 2 occupied operations могут оставаться occupied, пока underlying calls реально
 не вернулись; consumer timeout не даёт права обнулить active. Android lane явно
 удерживает один pending Call. Значит, обещание нового наблюдения к E требует
 либо доказанной доступности slot/возврата, либо честного «гарантия отсутствует».
@@ -574,14 +574,14 @@ Required positive proof может не обновиться даже при и�
 Pinned Go ticker может корректировать интервал/пропускать ticks при медленном
 receiver. [Go1.26.0 tick.go](https://github.com/golang/go/blob/d90b98e65320778f3b1f99a6951ab20f04d218b3/src/time/tick.go).
 Наш loop также пропускает ticks при startBusy/noncurrent/nonrunning и выполняет
-confirmation последовательно. Поэтому30s — configured opportunity cadence.
+confirmation последовательно. Поэтому 30s — configured opportunity cadence.
 
 В идеализированной модели fault сразу после завершённой последней проверки,
-свободный observer, следующий tick≤P, каждая из3 проверок возвращается за C,
+свободный observer, следующий tick≤P, каждая из 3 проверок возвращается за C,
 2 gaps≤g, без дополнительного ожидания: `T_confirm≤P+3C+2g`.
-Подстановка30/15/5 даёт85s **только если C действительно ограничен15s** и gaps/tick
-укладываются. Код задаёт15s context, default HTTP timeout10s, но не доказывает
-верхнюю границу всей publication/lock/producer chain. Поэтому85s не SLO и не
+Подстановка 30/15/5 даёт 85s **только если C действительно ограничен 15s** и gaps/tick
+укладываются. Код задаёт 15s context, default HTTP timeout10s, но не доказывает
+верхнюю границу всей publication/lock/producer chain. Поэтому 85s не SLO и не
 измеренный recovery. Длительный sleep/занятый owner разрушает предпосылки модели.
 
 Собственный предел: если хотя бы один обязательный этап допускает произвольно
@@ -630,16 +630,16 @@ hard invariants R05. Это не исследование нового transport
 |---|---|---|
 | F01 | Один sub-fact рано, другой завершает report поздно | Отдельный fact age/граница, publication не renew прежний scope |
 | F02 | Только общий start известен | Консервативная age bound либо unknown; не invented precise generation |
-| F03 | Steady130s, wall−60s, TTL120s | Age не становится70s из-за wall correction; UI projection не readiness authority |
+| F03 | Steady130s, wall−60s, TTL120s | Age не становится 70s из-за wall correction; UI projection не readiness authority |
 | F04 | Serialize/parse `.UTC()` или process/boot replacement | Monotonic identity не выдумана; старый elapsed context непереносим |
 | F05 | Sleep дольше age deadline, callbacks доставлены после resume | Freshness пересмотрена до применения; late callback не продлевает proof |
-| F06 | Average request budget подходит, simultaneous3×3s jobs/2slots/D5s | Deadline feasibility не объявлена по9≤10; admission/unknown сохраняется |
+| F06 | Average request budget подходит, simultaneous3×3s jobs/2slots/D5s | Deadline feasibility не объявлена по 9≤10; admission/unknown сохраняется |
 | F07 | Σq/P превышает cap либо исчерпан byte reservation | Обещание частоты отвергается; rejection не remote failure |
 | F08 | Оба protected slots удержаны после consumer timeout | No replacement/phantom release; no guaranteed fresh outcome без реального возврата |
 | F09 | Optional flood и обязательное обновление proof | Existing lane isolation плюс явная политика criticality, без бесконечного fanout |
 | F10 | Частые admitted failures/ранний DNS success | Charges не возвращаются ради новой попытки; все admitted costs учтены |
 | F11 | Coalescing разных scope / unsafe event среди positive facts | Отвергнуть unsafe coalescing; hard revoke/positive unsafe evidence не теряются |
-| F12 | Подтверждение из3 probes, пропущенные ticks/slow producer | Показаны actual start/return и duration,30s/15s не обещают bound85s |
+| F12 | Подтверждение из 3 probes, пропущенные ticks/slow producer | Показаны actual start/return и duration,30s/15s не обещают bound85s |
 | F13 | Scheduler успевает, но endpoint действительно не отвечает | Known negative/unknown не заменён fresh positive capability |
 | F14 | Deadline и trust expiry истекают во время очереди | Повторная platform проверка, no authority extension от планировщика |
 
@@ -681,9 +681,9 @@ bounded Windows/Android native completion. Не обнаружен/не дока
 bypass по clock counterexample.
 
 **Input drift при завершении:** cut14:22:08Z выявил изменения только двух из
-первоначальных22 captured файлов: общий PLAN (Windows V2-158/source SDK request)
+первоначальных 22 captured файлов: общий PLAN (Windows V2-158/source SDK request)
 и ANDROID-PLAN (AND-12-S6 controller report UI). Их source-only updates просмотрены;
-адресные TH-02/04/06 и AND-07/11/16 критерии не закрыты. Поздно найденные8
+адресные TH-02/04/06 и AND-07/11/16 критерии не закрыты. Поздно найденные 8
 adaptive source/docs закреплены отдельным capture временем в том же manifest.
 Исследованные probe/clock/limiter/owner source и R03-001 handoff на этом cut не
 изменились. Точный следующий seal — final-cut.json; это не атомарность дерева.
@@ -711,15 +711,15 @@ THEORY17 уже разделяет hard admissibility/optional gain, описы�
 | `shared/adaptive/evidence.go`: `ComposeEvidence`, API1 ADP-004 | Exact identity/capability/window join, latest **decisive measurement/status** sequence, typed incomplete/unsafe; `RequiresPlatformGate=true`. Rejection/cancel/unknown сохранены в trace, не заменяют/не продлевают prior measurement. `DependencyRef` не создаёт independence | Не Bayesian inference, не authenticity/protected Ready. Scoped non-test `.go/.kt` search в windows/android/shared нашёл только definitions новых pure APIs, не platform consumers |
 | `shared/adaptive/{failover_budget,retry_budget}.go`, ADP-003 | Pure plan/settlement arithmetic и typed outcome effects уже source implemented, unverified; Expected/live owner recheck остаётся platform obligation | Не объявлять этот код отсутствующим, проверенным, reservation или готовым portable JNI DTO |
 | `android/.../OsProtection.kt`: `read → observedAt elapsed → isFresh`; `WorkerRpcLane.kt`: `submit/pending/takeCompleted` | Начальная elapsed дата OS observation; late call удерживается до actual return | Нельзя сделать повторный Binder call/освободить slot по истечению observation deadline; OS observation не egress measurement |
-| `docs/adaptive/ADP-005-DESIGN.md`, late `shared/adaptive/observer.go` | На initial cut дизайн; к19:08Z есть unconnected source prototype `PlanAutomaticBackground`, scoped count/clock/MaxAge advice. Producer/consumer отсутствуют, fairness/mark-done требуют owner решения | Не внедрённая VoI-policy и не повод расширять объём ADP-005 без owner review |
+| `docs/adaptive/ADP-005-DESIGN.md`, late `shared/adaptive/observer.go` | На initial cut дизайн; к 19:08Z есть unconnected source prototype `PlanAutomaticBackground`, scoped count/clock/MaxAge advice. Producer/consumer отсутствуют, fairness/mark-done требуют owner решения | Не внедрённая VoI-policy и не повод расширять объём ADP-005 без owner review |
 
-Зафиксированы33 scoped local inputs, включая оба прежних handoff, и10 primary/
+Зафиксированы 33 scoped local inputs, включая оба прежних handoff, и 10 primary/
 author-code external captures. Exact UTC/SHA256/before-copy-after — manifest в
 `.artifacts/research/theory-03/cycle-003/`. Это адресный capture, не atomic tree.
 Неиспользованный UI/OS runtime, raw logs и secrets не читались. Отсутствие
 проверенной likelihood matrix относится к изученным contracts, не ко всему миру.
 
-На review cut19:02:21Z обнаружен drift7 из33 inputs: ANDROID-PLAN, adaptive
+На review cut19:02:21Z обнаружен drift7 из 33 inputs: ANDROID-PLAN, adaptive
 API/EVIDENCE/README и evidence_types/validation/join. Relevant differences
 прочитаны: latest-terminal заменён latest-decisive; administrative outcomes
 не заменяют/не обновляют старое measurement, trace включает state/origin/censoring.
@@ -729,15 +729,15 @@ source admission/dispatch isolation прочитан по плану/ADR-039 и 
 с local phase/original authority guards; uncertain dispatch удерживает admission.
 `VpnSessionRepository` loop принимает `rpc/retirementRpc.takeCompleted → completed`,
 не освобождает pending по одному observation deadline. Это source review,
-не OS-cancellation/latency/device proof. Captured ещё10 review inputs:
-7 обновлённых и3 новых paths, всего36 уникальных. Прежний capture сохранён.
+не OS-cancellation/latency/device proof. Captured ещё 10 review inputs:
+7 обновлённых и 3 новых paths, всего 36 уникальных. Прежний capture сохранён.
 
-Late review19:07…19:08Z выявил ещё4 doc changes: ADP-005 теперь **unconnected
+Late review19:07…19:08Z выявил ещё 4 doc changes: ADP-005 теперь **unconnected
 source prototype**, не только design. Прочитаны actual `observer.go` DTO/branch:
 known current protected count>0 → suppression suggestion; context/clock mismatch,
 unknown/future/stale → no admission grant; MaxAge0…1min structural bound, не SLO.
 `Expected` требует owner recheck; no resource mutations. Новых platform callers
-в рассмотренной цепочке нет. Ещё5 late captures (4 docs + observer.go), итого
+в рассмотренной цепочке нет. Ещё 5 late captures (4 docs + observer.go), итого
 37 unique local paths/48 captures; все ранние версии сохранены. Это source-only
 изменение другого владельца, не наш выполненный эффект и не acceptance.
 
@@ -760,16 +760,16 @@ information `EVSI(q)=R(p)−E_y[min_a E(L(a,W)|Yq=y)]`. Это определе�
 эти условия нужно обосновать. Неизвестный p или likelihood не заменять 0.5.
 
 **Ручной пример D1 — entropy не равна пользе.** Только в иллюстративной модели:
-W — fair bit, Z — четыре независимых nuisance bits, L ошибки действия10 units.
+W — fair bit, Z — четыре независимых nuisance bits, L ошибки действия 10 units.
 qN раскрывает Z (4bits), qD раскрывает W (1bit). Без проверок risk5; после qN
-он5, после qD —0. При одинаковой условной цене1 net gain соответственно−1/+4.
+он 5, после qD —0. При одинаковой условной цене 1 net gain соответственно−1/+4.
 Числа не относятся к VPN и не задают preset. Обновление деталей fingerprint,
 которые не меняют ни hard gate, ни выбор действия, может быть бесполезным для
 текущего решения даже при большом information gain.
 
 **Ручной пример D2 — zero one-step value не доказывает бесполезность.** W есть
 X1 XOR X2; X1/X2 независимые fair bits; доступны отдельные измерения каждого.
-Ошибка действия стоит10, каждое измерение1. Одно измерение оставляет risk5,
+Ошибка действия стоит 10, каждое измерение 1. Одно измерение оставляет risk5,
 gross EVSI0. Два вместе дают risk0, total cost2, net gain3 относительно stop.
 Условная ценность второго возрастает после первого: у этой raw VoI нет общего
 adaptive diminishing-returns свойства. Правило «не брать ничего с EVSI≤0 на
@@ -848,7 +848,7 @@ execution/queue/publication как C−, J−, G−, верхние C+, J+, G+; 
   не universal cutoff возможного результата. Platform policy решает, допустим
   ли bounded best-effort optional trial; authority expiry остаётся hard.
 
-**D4:** E=10,t=8,C∈[1,4],J=G=M=0. Finish возможен в9, worst case12.
+**D4:** E=10,t=8,C∈[1,4],J=G=M=0. Finish возможен в 9, worst case12.
 Отказ гарантировать не означает «заведомо опоздает». При t=9 и C−=1 каждый
 finish≥10 уже не входит в exclusive window. Это ручные условные units, не SLO.
 Если остаётся занятый owner с неизвестным actual-return bound, свободный slot
@@ -875,7 +875,7 @@ THEORY17 о произвольном неизвестном будущем. От
 может разрушить эквивалентность; score/ML не создаёт отсутствующий контроль.
 
 **D6 — арифметика зависимости.** В условной модели только общий outage с p=0.1,
-оба endpoint-fails совпадают: P(F1∩F2)=0.1, не0.01. Два разных ref/host/порт
+оба endpoint-fails совпадают: P(F1∩F2)=0.1, не 0.01. Два разных ref/host/порт
 не дают произведение вероятностей. Но correlation не запрещает все готовые
 active methods: при известной совместной latent модели зависимость учитывается.
 EC² допускает correlated noise в расширенном joint space; ECED предполагает
@@ -1102,8 +1102,8 @@ R03-06/07 требуют отдельного scoped решения; автор�
 
 ## 13. R03-004 — как идентифицировать эффект новой policy
 
-2026-10-25/26 · **READY_FOR_REVIEW**. Работа в окне TEN-HOUR-WINDOW до
-2026-10-26T06:30:26Z. Это отдельный срез после003, не принятие прежних результатов.
+2026-10-25/26 · **READY_FOR_REVIEW**. Это отдельный срез после 003,
+не принятие прежних результатов.
 Реальные пользовательские логи/трафик не читались, эксперименты не выполнялись.
 
 ### 13.1. Новый вопрос и source-to-outcome
@@ -1146,7 +1146,7 @@ Origin/Censoring/Sequence и opaque load/warmth. Это полезные reused 
 Review cut2026-10-26T06:03:30Z:18/21 совпали, изменились только Android
 VpnSessionRepository/WorkerRpcLane/STATE. Relevant current source и STATE
 прочитаны: AND-03-S9 sticky failure/retained delivery до exact Call acknowledge,
-no replacement owner/authority renewal. Добавлены3 review captures; это source
+no replacement owner/authority renewal. Добавлены 3 review captures; это source
 не runtime proof и не assignment/measurement producer. Основная Windows/shared
 selection-to-outcome цепочка и прежние handoffs на cut не изменились.
 
@@ -1165,10 +1165,10 @@ queue и stop/recovery transitions. Поэтому `d_b` не обязано с�
 Выше — определения, не доказательство stationarity/MDP для VPN.
 
 **E1, собственный контрпример:** history имеет состояние ready/depleted.
-В готовом состоянии A даёт1 и оставляет ready; B даёт1 и делает depleted.
+В готовом состоянии A даёт 1 и оставляет ready; B даёт 1 и делает depleted.
 В depleted никакое действие не даёт reward и состояние сохраняется.
 Поведение всегда A, поэтому на каждом наблюдаемом history ready. Даже если
-one-step reward B в ready **известен oracle**, оценка B на d_b равна1, тогда как
+one-step reward B в ready **известен oracle**, оценка B на d_b равна 1, тогда как
 два последовательных B дают total1/2=0.5 против A=1. Это не только отсутствие
 support: знание one-step responses само по себе не восстанавливает occupancy
 целевой policy. В VPN это допустимая аналогия истощения ресурса, не найденный
@@ -1182,7 +1182,7 @@ evaluation. [Jiang–Li2016, §3–4](https://proceedings.mlr.press/v48/jiang16.
 score. Product state не признан Markov только из наличия epoch.
 
 **E2:** если на каждом из L шагов target выбирает действие, имеющее у behavior
-вероятность1/2, совпадающая полная sequence имеет вероятность2^(−L), вес2^L.
+вероятность 1/2, совпадающая полная sequence имеет вероятность 2^(−L), вес 2^L.
 Это ручная conditional model, не measured VPN distribution. Более сложный
 sequential estimator может уменьшить variance, но не создаёт support для
 невозможной sequence. Need per-decision full history/state/transition assumptions;
@@ -1225,8 +1225,8 @@ support/consistency/observation assumptions. При estimated e обещание
 finite unbiasedness нельзя переносить без анализа ошибок/fit procedure.
 
 **E3, same-row leakage:** два actions всегда дают reward1, e=π=(1/2,1/2).
-После наблюдения выбрать m(выбранный)=1,m(невыбранный)=0. Residual равен0,
-DR score равен1/2 вместо true1, хотя e известен точно. Ошибка — m зависит от
+После наблюдения выбрать m(выбранный)=1,m(невыбранный)=0. Residual равен 0,
+DR score равен 1/2 вместо true1, хотя e известен точно. Ошибка — m зависит от
 current assignment/outcome; previous conditional cancellation недействительна.
 Это собственный отрицательный пример, не обвинение конкретной library.
 Стратифицированный temporal/block fit plan нужен до переноса DR в проект.
@@ -1238,7 +1238,7 @@ current assignment/outcome; previous conditional cancellation недействи
 bound. Пусть веса контекстов v_x заданы, Σv=1, `m0=Σ_x v_x Σ_{a:e=0}π(a|x)`;
 `Vs=Σ_x v_x Σ_{a:e>0}π(a|x)μ(x,a)`. Тогда bounded reward даёт
 `V(π)∈[Vs,Vs+m0]`, tight без дополнительных ограничений на unseen rewards.
-Proof: неподдержанная contribution находится между0 и m0, extremes достижимы.
+Proof: неподдержанная contribution находится между 0 и m0, extremes достижимы.
 μ/v в практике ещё оцениваются; interval — **identification**, не confidence.
 Например supported mass0.7 с μ=0.6 даёт [0.42,0.72], не point0.6.
 
@@ -1259,8 +1259,8 @@ incident/session/task на ограниченном горизонте, не т�
 оставить closed state. Это часть end-to-end эффекта assignment, а не повод
 удалить unit. Эксперимент не даёт исключения из platform safety gates.
 
-**E6, admission denominator:** из50 assigned A допустила40, завершила32;
-из50 assigned B допустила20, завершила18. Среди admitted B=90% против A=80%;
+**E6, admission denominator:** из 50 assigned A допустила 40, завершила 32;
+из 50 assigned B допустила 20, завершила 18. Среди admitted B=90% против A=80%;
 среди assigned useful completion B=36% против A=64%. Это конечный пример
 разворота ranking, не causal significance или ожидаемые проценты продукта.
 Нельзя считать observed/accepted success rate целью общей безотказности.
@@ -1276,7 +1276,7 @@ propensity исполненного action не обязана равнятьс�
 | Population / precheck | Unit ID, policy/contract version, заранее заданный task/горизонт, pre-assignment eligibility и причины exclusion | Начинать denominator с successful receipts; выбирать «удобные» incidents после outcomes |
 | Assignment | Policy arm/version Z, actual e(Z|prehistory) и allowed assignment set до draw; frozen target/model/split reference | Считать deterministic score вероятностью; восстанавливать e из доли observed winners; писать seed/секреты |
 | Advice / admission / execution | Existing decision/attempt refs; timestamps, refusal stage/origin, applied vs rollback/current/superseded, actual resource custody | Приравнять Z, proposed candidate и реально применённый transport; drop failed admission |
-| Task outcome | Y definition, D, observation status/follow-up, competing user cancel/epoch change и typed reason | Protected health success автоматически Y=1; missing автоматически0 или completed RTT |
+| Task outcome | Y definition, D, observation status/follow-up, competing user cancel/epoch change и typed reason | Protected health success автоматически Y=1; missing автоматически 0 или completed RTT |
 | Resources / measurement | Declared reservation и observed physical quantities раздельно; observer workload, retained pending и exposure/load/warmth strata | Expiry=resource return; неизвестные bytes/energy=0; concurrency interference отсутствует по умолчанию |
 | Data lineage / privacy | Bounded opaque refs, model/estimator/fit/split IDs, counts lost records, retention/export decision | URLs/секреты/traffic/app history ради богатого H без отдельной необходимости/согласования |
 
@@ -1301,7 +1301,7 @@ Epoch — provenance token, не experimental washout и не IID certificate.
 потенциальные outcomes зависят от assignment path; formal design опирается на
 non-anticipation и заданный finite carryover order m. Их optimal schedule не
 становится нашим расписанием без обоснованного m и нужного estimand. Arbitrary
-«подождать30s» не доказывает исчезновение carryover у pending native call.
+«подождать 30s» не доказывает исчезновение carryover у pending native call.
 
 Практическая последовательность future design, **не выполнение**:
 
@@ -1432,9 +1432,8 @@ acceptance отдельны. Ни один platform PLAN пункт этим п�
 > validity assumptions. Никакая statistical confidence не разрешает опасный
 > action, не продлевает authority и не освобождает pending owner.
 
-Пакет READY. Общий THEORY/PLAN, product/registry/чужие STATE не изменены.
-Следующая граница R03: что именно можно утверждать при дрейфе качества, повторных
-looks/reset и delayed observations, не расходуя один error budget многократно.
+Продолжение о дрейфе, повторных проверках и отложенных исходах находится
+в §14–15. Авторская готовность не является научным принятием.
 
 ## 14. R03-005 — порядок раскрытия исходов и статистика после resets
 
@@ -1463,9 +1462,9 @@ Lifecycle `failoverPolicy.hardReset` — существующий control-state 
 ### 14.2. R03-10 — disclosure process входит в measurement model
 
 **F1, finite counterexample:** до запуска назначены N задач с независимыми
-Y_i∼Bernoulli(1/2). При Y=1 ответ приходит через1 unit, при Y=0 — через100.
-После1 unit все завершившиеся исходы равны1. При наличии хотя бы одного ответа
-completed-only среднее1, хотя mean назначенных задач1/2. Event непустого completed
+Y_i∼Bernoulli(1/2). При Y=1 ответ приходит через 1 unit, при Y=0 — через 100.
+После 1 unit все завершившиеся исходы равны 1. При наличии хотя бы одного ответа
+completed-only среднее 1, хотя mean назначенных задач 1/2. Event непустого completed
 набора имеет probability `1−2^(−N)`. Сортировка этих **только completed** по
 Sequence не возвращает пропущенные failures. Anytime method не исправляет
 нарушенный conditional-mean/selection model. Это собственная модель, не измерение
@@ -1514,10 +1513,10 @@ IPCW/другую correction нельзя включить без модели o
 В [Howard v9 §4.1/Theorem4](https://arxiv.org/html/1810.08240v9) bounded adapted
 X_t и predictable predictions дают interval для
 `μ_t = (1/t)Σ_{i≤t} E[X_i|F_(i−1)]`, average conditional expectation.
-One-sided crossing α даёт в указанной two-sided формуле1−2α; support scale и
+One-sided crossing α даёт в указанной two-sided формуле 1−2α; support scale и
 prediction условия обязательны. Это не current/future conditional mean.
 
-**F3:** первые99 conditional means равны1, сотый и все следующие0. На t=100
+**F3:** первые 99 conditional means равны 1, сотый и все следующие 0. На t=100
 историческая μ_t=.99, current mean0. Достоверный interval для μ_t вправе
 оставаться высоким; это не нарушение theorem и не доказательство текущего
 хорошего пути. Time-average reward и current-path proof должны иметь разные
@@ -1553,7 +1552,7 @@ channels/contrasts i, episodes r и variants k получают заранее w
 `P(∪_irk E_irk) ≤ Σ_irk P(E_irk) ≤ Σ_irk δ_irk ≤ δ`.
 
 Независимость между comparisons/эпохами не нужна; conditional validity каждого
-restart нужна. Для счётного r≥1 вариант `v_r=1/[r(r+1)]` суммируется в1
+restart нужна. Для счётного r≥1 вариант `v_r=1/[r(r+1)]` суммируется в 1
 телескопически. Это **иллюстрация учета**, не подобранная продуктовая allocation
 и не maximum-power method. Бесконечный tiny budget теряет мощность; численная
 underflow/неподдержаннаяδ должны дать unsupported, не ноль или новый полныйδ.
@@ -1567,7 +1566,7 @@ conditional restart, честный вывод — неизвестная validi
 
 **F5, число сторон:** для two-sided family budget δ_irk в Theorem4 boundary
 crossing probability задают δ_irk/2. Нельзя передать полныйδ в each side и
-заявить1−δ. Конкретная library может уже выполнять деление внутри API; прежде
+заявить 1−δ. Конкретная library может уже выполнять деление внутри API; прежде
 caller надо сверить semantics, чтобы не путать alpha_tuning с coverage_alpha.
 
 ### 14.5. Ready reuse: actual caller и честная граница чтения
@@ -1642,7 +1641,7 @@ receipt не новый protected permit; device/field acceptance остаётс
 > guarantee бесплатно. Учет multiple claims не заменяет conditional validity
 > каждого анализа и не является полномочием safety controller.
 
-Scientific claims R03-10/11 — READY, не ACCEPTED. Все12 execution cases NOT RUN.
+Scientific claims R03-10/11 — READY, не ACCEPTED. Все 12 execution cases NOT RUN.
 
 ## 15. R03-006 — решение с горизонтом, дрейфом и ценой перехода
 
@@ -1680,8 +1679,9 @@ retained RPC custody и будущие AND-07 protected-task receipts. Полн�
 этих rates/transition risks пока нет. OS VALIDATED/полоса/health score не заменят
 требуемые входы. Ни одна платформа не объявлена уже подключённой к этому advisor.
 
-23 scoped local inputs captured before/copy/after. Exact source и River pin —
-cycle-006 manifests; чтение source не compilation/runtime validation.
+Для 23 выбранных локальных входов сохранены хеши до/копии/после. Точные
+исходники и версия River указаны в cycle-006 manifests. Чтение исходника
+не подтверждает компиляцию или работу runtime.
 
 ### 15.2. Кандидат: консервативный выбор для двух путей и одного измерения
 
@@ -1714,14 +1714,14 @@ envelope. Нельзя незаметно сменить mean certificate на h
 | Measurement opportunity | Не более одного q: exact allowed capability, total cost/delay/actual-return envelope, bounded joint outcome/world cells, terminal rules | Gray region остаётся unknown; не бесконечный probe/search |
 
 Collection maxima задаются и валидируются owner contract до обхода. Безопасный
-первый design ограничен2paths/1measurement/1transition; конечные scenario/outcome
+первый design ограничен 2paths/1measurement/1transition; конечные scenario/outcome
 arrays имеют явные structural caps, unknown/overflow отвергаются без truncation.
 Численные cap values ещё не утверждены и не выдаются за измеренный optimum.
 
 ### 15.3. Локализация среднего и старение: размерности и вывод
 
 Пусть generation anchor g_p, наблюдения в валидном declared window имеют
-неотрицательные веса w_i с суммой1, а `d_p=Σ_i w_i(g_p−s_i)` — их средний возраст
+неотрицательные веса w_i с суммой 1, а `d_p=Σ_i w_i(g_p−s_i)` — их средний возраст
 относительно anchor. **При допущении** `|j_p(v)−j_p(u)|≤L_p|v−u|` на нужном
 интервале weighted population mean отличается от j_p(g_p) не более L_p d_p:
 это следует из triangle inequality и суммы весов. Интервал [l_p,u_p] обязан
@@ -1838,7 +1838,7 @@ Startup/manual/hard recovery не ждут этого расчёта. Model alar
 TUN/DNS/OS epoch changes и не сбрасывает retry/statistical budgets.
 
 **B4, measurement может и не помочь:** два joint worlds имеют G_now=+6/−6.
-Keep worst regret6. Perfect q ценой1; после его delay good switch gain5 даёт
+Keep worst regret6. Perfect q ценой 1; после его delay good switch gain5 даёт
 plan net4, bad outcome keep даёт−1: regrets2/1, worst2<6. Если разрешён q-timeout,
 сохраняющий оба мира, good-world timeout+keep даёт−1 и regret7: worst-case q
 теперь хуже keep. Нельзя исключить censored outcome ради measure. Это показывает
@@ -1929,7 +1929,7 @@ network preference; current required proof и существующий switch ow
 elapsed/JNI/retained custody и radio/cost bounds; OS hints/батарея не rate evidence.
 R02 даёт threat/change mechanisms, R04 — cost/time/interference, R05 — hard gates,
 R06 — task/loss/horizon; результаты за них не выдуманы. Full experiment/device/
-field execution не разрешён и все14 cases **NOT_RUN**.
+field execution не разрешён и все 14 cases **NOT_RUN**.
 
 > Предлагаемое уточнение adaptation chapter: optional switch
 > сравнивается по полезной экспозиции после actual transition delay и полной цене
@@ -1945,7 +1945,7 @@ R03-12 готов к независимому review; это один канди
 
 ## 16. R03-007 — полный риск попытки из этапов и частичных исходов
 
-2026-10-26 · **READY_FOR_REVIEW**. Начат09:17Z, до10:03:26Z cutoff нового окна.
+2026-10-26 · **READY_FOR_REVIEW**.
 Продолжает конкретный advisor006: откуда взять пригодные pmax/Fmax, а не ещё
 один score. Новые предложения **R03-13** (coherent conditional trial risk) и
 **R03-14** (deadline success не mean resource-cost bound). Никакого исполнения.
@@ -1994,7 +1994,7 @@ counter или доля «успешных» current reports. Все private/raw
 
 **Independence не требуется**, потому что вероятности условные. При zero-mass
 prefix дальнейшая conditional probability не определена; не подставлять «100%
-из0». Prefix success уже0, либо uncertainty сохраняется явно. Когда q_i имеют
+из 0». Prefix success уже 0, либо uncertainty сохраняется явно. Когда q_i имеют
 одновременно valid bounds [l_i,u_i], monotonicity даёт success interval
 `[∏l_i,∏u_i]`, failure upper `1−∏l_i`. Это conditional **model** interval, а не
 confidence из одних конечных counts. Validity event отдельных bounds объединяется
@@ -2005,7 +2005,7 @@ pass72/fail8. Conditional empirical rates .8 и .9 дают .72=72/N. В общ�
 полном nested roster `n_(i+1)=passes_i` произведение `∏n_(i+1)/n_i`
 телескопируется в final_success/N. Это полезный accounting check, **не новая
 информация/не дополнительная statistical power** по сравнению с final counter.
-Если использовать72/N как stage2 conditional rate, ещё умножить на.8 — получится
+Если использовать 72/N как stage2 conditional rate, ещё умножить на.8 — получится
 .576, ошибка denominator. Ни одна из этих цифр не measured Snowden probability.
 
 Два других вида входов требуют другой операции:
@@ -2063,9 +2063,9 @@ incomplete/unknown, а не «достраивает» этап из generic Ok.
 достигнутому prefix и своему stratum; same function name/SDK version не доказывают
 invariance после смены transport/load/network или новой policy.
 
-**C4, missing:** из100 assigned известно80 goal success,10 non-success,10 unknown.
+**C4, missing:** из 100 assigned известно 80 goal success,10 non-success,10 unknown.
 Finite success fraction находится в [.8,.9], failure fraction [.1,.2]. Это не
-future pmax=.2 и не1−δ confidence interval. Для будущей вероятности нужны
+future pmax=.2 и не 1−δ confidence interval. Для будущей вероятности нужны
 sampling/stability/model assumptions. Если receipt отсутствует из-за owner stop,
 точный goal может быть known0 для A(D), но U(D)/R(D) оставаться unknown.
 Если user изменил intent, original estimand/competing event сохраняются по
@@ -2081,14 +2081,14 @@ provenance/локализации пробела, но несколько мал
 
 При **fixed n**, полных independent Bernoulli trials с одной failure probability
 p, observed0failures, one-sided binomial inversion даёт
-`p_upper=1−δ^(1/n)` для confidence1−δ. Вывод вручную: вероятность увидеть0
+`p_upper=1−δ^(1/n)` для confidence1−δ. Вывод вручную: вероятность увидеть 0
 failures равна (1−p)^n; при p=p_upper онаδ. Это частный случай exact-binomial
 подхода [NIST](https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm),
 не выполненный solver/Dataplot command. n=0 → no information, не division/zero risk.
 
-В006 при S−>0 и Fmax≥0 условный risk threshold `r=S−/(S−+Fmax)`.
+В 006 при S−>0 и Fmax≥0 условный risk threshold `r=S−/(S−+Fmax)`.
 Даже в этом простом zero-failure model, чтобы p_upper<r, требуется
-`n>log(δ)/log(1−r)` при0<r<1. Это planning inequality, не назначенное число
+`n>log(δ)/log(1−r)` при 0<r<1. Это planning inequality, не назначенное число
 live trials. Она показывает измерительную цену высокой цели; requests/time/
 energy/admission caps проверяет owner/R04, испытания этим срезом не разрешены.
 
@@ -2103,7 +2103,7 @@ confidence levels из числа разных producer refs.
 ### 16.5. R03-14 — deadline probability и хвост cost/retirement различны
 
 **C5, own heavy-tail counterexample:** T принимает2^k time-units с probability
-2^(−k), k≥1. Масса суммируется в1. Для D=2^m вероятность T>D равна2^(−m),
+2^(−k), k≥1. Масса суммируется в1. Для D=2^m вероятность T>D равна 2^(−m),
 сколь угодно мала при большом m, но `E[T]=Σ_k 2^k·2^(−k)=∞`.
 При positive held-resource cost rate r expected cost rE[T] также не ограничен.
 Это математическая модель, не измеренное распределение Go/Binder/VPS.
@@ -2146,7 +2146,7 @@ API read/capture date2026-10-26, не pinned implementation audit. OTel SDK/expo
 
 13local source/doc captures, NIST2 successful captures; OTel filesystem request
 timeout, официальный текст прочитан web. Exact URLs/UTC/hashes/errors в cycle007.
-Для006 upstream River license/pin/code review сохранён; новым007 внешнего code
+Для 006 upstream River license/pin/code review сохранён; новым 007 внешнего code
 не копирует. No tests/fixtures/build/simulation/native/crypto/security scans/live.
 
 ### 16.7. Оппонент и конечные будущие случаи NOT_RUN
@@ -2163,7 +2163,7 @@ runtime: фактический хвост может быть bounded, но е�
 | R01 | A(D),U(D),R(D) и interval kind не смешиваются; rollback не applied B/не fake user success |
 | R02 | C1 conditional denominators telescoping совпадают с полным final count; wrong denominator rejected |
 | R03 | Conditional chain, disjoint first-failure sum и overlapping symptoms имеют разные algebra/contracts |
-| R04 | C2 common cause не превращён в independence/product; нулевая reached population не100% |
+| R04 | C2 common cause не превращён в independence/product; нулевая reached population не 100% |
 | R05 | Selector/Reload/rollback/cancel branches partition complete; retry attempts не новые incident units |
 | R06 | C3 conditional retry bound не подменён marginal, no extra retry/refund permission |
 | R07 | C4 unknown branch сохраняет bounds; parent deadline/observer loss/user intent имеют точные semantics |
@@ -2200,7 +2200,7 @@ Source-срез от 26 октября 2026 года.
 
 ### 17.1. Что уже есть и чего нельзя получить из existing API
 
-Scoped source capture17файлов сделан11:13…11:14Z; before/copy/after совпали.
+Scoped source capture17 файлов сделан 11:13…11:14Z; before/copy/after совпали.
 `shared/adaptive/evidence_types.go:Observation/EvidenceReceipt` уже дают exact
 identity, start-order Sequence, state/origin/censoring, partial follow-up, bounded
 payload, pressure и independent custody. `ComposeEvidence` решает coverage/latest
@@ -2260,7 +2260,7 @@ confidence interval; statistical miscoverage α и operational failure risk p �
 5. **Отдельный** error envelope Γ_n(s) с producer/model provenance: на каждом
    используемом snapshot истинная сумма S_n удовлетворяет
    `Σa_i−Γ_n ≤ S_n ≤ Σb_i+Γ_n`. Например, не более k неверных bounded labels
-   дают Γ_n=k; если k неизвестно, разрешён conservative Γ_n=n, не0.
+   дают Γ_n=k; если k неизвестно, разрешён conservative Γ_n=n, не 0.
    Это предпосылка с указанным владельцем, не оценка из числа красивых ответов.
 6. Для statistical mode — `AnalysisOrderRef/FiltrationRef`, bounded Y_i,
    alpha-family/stream allocation и mature-prefix identity. Минимальный достаточный
@@ -2314,8 +2314,8 @@ Y_i∈[0,1], adapted к объявленному G_i, `μ_i=E[Y_i|G_(i−1)]`,
 `r_(j,n)=sqrt(log(2 n(n+1)/α_j)/(2n))`.
 
 Поскольку `Σ_n 1/[n(n+1)]=1`, union bound одновременно по n/streams даёт
-coverage не ниже1−α_total для **среднего A_n/n**. Независимость streams не нужна.
-На этом event подстановка любого pathwise-valid interval envelope из17.3
+coverage не ниже 1−α_total для **среднего A_n/n**. Независимость streams не нужна.
+На этом event подстановка любого pathwise-valid interval envelope из 17.3
 сохраняет coverage при любом числе чтений/поздних refinements. Missingness может
 зависеть от Y: она уже оплачена шириной intervals. Даже отсутствие complete
 prefix telemetry не требует притворяться MCAR. Сам underlying mature prefix и
@@ -2347,12 +2347,12 @@ target T не связан с P проверяемой моделью, два м
 
 Primary сравнение (version-specific, reference, не own theorem):
 
-- [Waudby-Smith/Ramdas arXiv2010.09686v7,25августа2022](https://arxiv.org/html/2010.09686v7),
+- [Waudby-Smith/Ramdas arXiv2010.09686v7,25 августа 2022](https://arxiv.org/html/2010.09686v7),
   §2/Proposition1/Theorem2/3: bounded[0,1], **constant conditional mean**, predictable
   bets. «Не iid» не означает unknown changing mean. Journal DOI
   [10.1093/jrsssb/qkad009](https://doi.org/10.1093/jrsssb/qkad009),2024 issue,
   не дата v7. Howardv9 Theorem4 допускает changing average conditional expectation;
-  это другой estimand, уже рассмотренный005, не новый прогноз.
+  это другой estimand, уже рассмотренный 005, не новый прогноз.
 - [Wang/Ramdas AISTATS2023, Lemma3/Theorem1](https://proceedings.mlr.press/v206/wang23p/wang23p.pdf):
   supplied TV contamination radius around one clean P и known clean moment bound.
   После Lemma3 разрешены history-adapted conditional Q_i в том же TV ball;
@@ -2366,7 +2366,7 @@ Primary сравнение (version-specific, reference, не own theorem):
 получают alpha/2; weighted cumulative center/λ²/8 margin, optional running
 intersection. EmpBern→`lambda_predmix_eb`, lagged mean/variance arrays. Source
 defaults/fake observations — регуляризация betting strategy, **не physical priors**
-Snowden. Такой wrapper не реализует17.3: input validation/censoring/Γ/goal/order/
+Snowden. Такой wrapper не реализует 17.3: input validation/censoring/Γ/goal/order/
 bridge отсутствуют, а changing target и weighted/unweighted mean требуют нового
 доказательства. Reference/offline comparison; не готовый Go/Kotlin adapter.
 NumPy/SciPy/multiprocess + package build/pybind11 dependencies и batch arrays дают
@@ -2383,7 +2383,7 @@ root evaluation суммирует всю историю: не bounded online st
 `robustconfseq.py:95` нормализует numeric side2 в string'2'; `:115` выбирает
 alpha/2 по сравнению с numeric2. Для default string'2' и normalized numeric2
 ветка split не выполняется. `observe:165…175` использует effective alpha в каждом
-tail root. Теорема1 использует log(2/α). Прочитанный caller этого split не добавляет.
+tail root. Теорема 1 использует log(2/α). Прочитанный caller этого split не добавляет.
 Доступное per-tail доказательство здесь даёт union budget2α, **не** объявленный
 α; это не доказательство фактического miscoverage>α и не результат запуска.
 Брать repository как nominal two-sided α implementation нельзя без repair и
@@ -2400,7 +2400,7 @@ label-error budget Γ=.2 interval расширяется до[.175,.575]; statis
 нельзя. Увеличение n с тем же missing/error fraction не устраняет этот floor.
 
 **U2 selection despite valid arm-specific inference.** Good/bad strata имеют
-losses A=.1/.9, B=0/.8. A наблюдался90/10раз→mean.18, B10/90→.72; выбор по этим
+losses A=.1/.9, B=0/.8. A наблюдался 90/10 раз→mean.18, B10/90→.72; выбор по этим
 средним предпочитает A, хотя B лучше в обоих strata. Balanced target means A.5,
 B.4. Узкая CS respective sampled populations не создаёт target causal contrast.
 
@@ -2418,7 +2418,7 @@ Histories/receipt signature одинаковы, target losses0/1. Никакой
 конкретный protected probe/сервер.
 
 **U5 probe вмешивается в сравнение.** В условных единицах A имеет capacity10,
-но concurrent measurement отбирает9; B имеет capacity6 без этой нагрузки. Оценка
+но concurrent measurement отбирает 9; B имеет capacity6 без этой нагрузки. Оценка
 A1 versus B6 не отвечает задаче no-probe A10 versus B6. Учёт consumed bytes
 полезен, но сам по себе не восстанавливает counterfactual interference effect.
 ProtocolRef/episode definition либо causal model нужны отдельно.
@@ -2441,7 +2441,7 @@ constant-parameter postprocessing не переносится на changing μ_n
 | M02 | Полные bounded point labels | Finite bounds сходятся в observed mean, CS radius отдельно |
 | M03 | Outcome-dependent missingness | Denominator сохранён, interval width, без MCAR imputation |
 | M04 | Right-censored capped latency | Valid follow-up interval, не RTT completion |
-| M05 | Supplied Γ versus unknown Γ | Widen by Γ; unknown→conservative/trivial, не0 |
+| M05 | Supplied Γ versus unknown Γ | Widen by Γ; unknown→conservative/trivial, не 0 |
 | M06 | Unknown total cost support | No clipped→total conversion, cost certificate absent |
 | M07 | Late refinement fixed n/out-of-order delivery | Same unit; only pathwise-valid bounds refine, не extra sample |
 | M08 | Overlapping units без analysis-order model | Finite envelope only; statistical mode abstains |
@@ -2458,7 +2458,7 @@ constant-parameter postprocessing не переносится на changing μ_n
 
 **Сильная альтернатива:** отказаться от probabilistic mode до появления meaningful
 producer и использовать bounded finite intervals/typed reasons. Это часто дешевле
-и честнее сложного CS wrapper. Формальный алгоритм17.3 полезен как contract;
+и честнее сложного CS wrapper. Формальный алгоритм 17.3 полезен как contract;
 ненулевые physical drift/bias/corruption caps он не изобретает. По настоящей
 стационарной полной выборке может быть выгоднее repaired/pinned mature CS; это
 отдельная numerical/adapter/model работа, не перенос всего Python research stack.

@@ -1,87 +1,116 @@
-# R28-Z05 — finite handoff
+# Android: приостановка, таймеры HY2 и восстановление
 
-**READY_FOR_REVIEW**, 2026-10-28. Пакет: [REPORT](REPORT.md), [SOURCES](SOURCES.md).
+**Срез 28 октября 2026 года. Статус автора — READY_FOR_REVIEW.**
+[Полный аргумент](REPORT.md) · [Источники и версии](SOURCES.md).
 
-## R28-Z05-A — конкретный ready callback не достигает HY2 timer
+## Краткий вывод
 
-**Claim (source-scoped negative):** SFA `ACTION_DEVICE_IDLE_MODE_CHANGED` →
-`CommandServer.pause/wake` достигает общего `pause.defaultManager`, но в exact
-pins HY2/quic-go не регистрирует callback, не ждёт `WaitActive` и не читает
-PauseManager. Manager оповещает только opt-in consumers; доказаны NTP/URL-test
-Ticker и WireGuard paths. Therefore ready callback already suppresses neither
-HY2 PING/PTO/idle timer nor UDP write.
+Наличие общего механизма `pause/wake` не означает, что таймеры HY2 его
+используют. В рассмотренных версиях путь SFA достигает PauseManager,
+но подписчик HY2/QUIC не найден. Из этого нельзя вывести экономию энергии,
+сохранность NAT или обязательность переподключения после каждого пробуждения.
 
-Evidence: SFA `bc73504f…`, sing-box1.13.19/b5ebaa…, sing0.8.13/7c349d…,
-sing-quic d838…, quic-go mod.4/ccd46…; negative search restricted to named
-non-test roots/tokens. No whole-ecosystem/future impossibility claim.
+**Применимость:** проверка вызывающего пути, поддержанных подписчиков и
+решения о восстановлении после сна. **Предел:** это чтение исходников,
+а не наблюдение поставленного AAR, радиомодуля, устройства или трафика.
 
-**Strongest opposition:** one manager is constructed before outbounds and
-available through context. Rejected as sufficient: availability is not a
-consumer edge; RemoteRuleSet even stores manager without using it. quic-go owns
-an independent `time.NewTimer` run loop.
+## R28-Z05-A — готовый обратный вызов не достигает таймеров HY2
 
-**Proposed verdict:** `ACCEPT_SOURCE_SCOPED_NEGATIVE` — subject to independent
-lead review and unchanged pins. Not product/native proof.
+Прочитанная цепочка: SFA `ACTION_DEVICE_IDLE_MODE_CHANGED` →
+`CommandServer.pause/wake` → общий `pause.defaultManager`.
+В выбранных исходниках HY2/quic-go не регистрирует соответствующий callback,
+не ожидает `WaitActive` и не читает PauseManager. Общий менеджер оповещает
+только подключившихся потребителей. В этом срезе подтверждены пути NTP,
+URL-test Ticker и WireGuard; переносить их свойства на HY2 нельзя.
+Найденный callback сам по себе не подавляет HY2 PING/PTO/idle timer и UDP write.
 
-## R28-Z05-B — допустимое решение без wake/radio/NAT outcome
+Версии: SFA `bc73504f…`, sing-box1.13.19/b5ebaa…,
+sing0.8.13/7c349d…, sing-quic d838…, quic-go mod.4/ccd46….
+Отрицательный поиск ограничен названными корнями и токенами вне тестов.
+Это не утверждение о невозможности такой интеграции во всей экосистеме
+или в будущей версии.
 
-**Conditional model claim:** use observation/classification, not an assumed
-energy optimization:
+**Сильное возражение:** менеджер создаётся до outbound и доступен через context.
+Этого недостаточно: доступность объекта не создаёт вызывающего ребра.
+RemoteRuleSet даже сохраняет менеджер без использования; quic-go владеет
+отдельным циклом `time.NewTimer`.
 
-1. authority invalid or owned physical context blocked/lost/changed → fail-closed
-   retirement/replacement;
-2. same context + authority valid + no actual carrier failure → keep carrier;
-3. typed carrier failure or accepted path invalidation → reuse existing HY2
-   `InterfaceUpdated/CloseWithError → lazy one-pending offer` recovery;
-4. pause only exact optional subscribers already known (URL-test/NTP); do not
-   generalize PauseManager to HY2;
-5. energy/NAT value remains `unknown/abstain` until wake→due→queue→socket→peer and
-   useful recovery costs are measured.
+**Предложение автора:** `ACCEPT_SOURCE_SCOPED_NEGATIVE` после независимой
+проверки области и неизменности версий. Это предложение, а не принятый verdict
+и не проверка продукта или native-исполнения.
 
-No auto battery exemption, broad WakeLock, extra ping, blanket close-on-wake or
-new core timer seam follows from source alone.
+## R28-Z05-B — решение без выдуманного результата для энергии и NAT
 
-**Strongest opposing trace:** FGS may remain foreground/network-allowed while CPU
-is suspended, so no PING executes. On resume `elapsedRealtime` authority may be
-expired while native transport clock/timer did not age. Java watchdog/gates retire,
-but native quic socket writes do not cross those gates per packet; strict zero
-post-expiry write ordering is not source-proven. Keepalive never renews authority.
-Reboot creates new process/boot domain; old authority deadline must not restore.
+Условная модель различает наблюдение и доказанную оптимизацию:
 
-**Proposed verdict:** `ACCEPT_MODEL_SCOPED` for a minimal owner-controlled seam;
-strict packet barrier and energy benefit remain future platform evidence.
+1. Недействительные полномочия либо потерянный, заблокированный или изменившийся
+   принадлежащий операции физический контекст требуют защищённого завершения
+   прежнего владельца и допустимой замены.
+2. Тот же контекст, действительные полномочия и отсутствие фактического отказа
+   соединения сами по себе не требуют его уничтожения.
+3. Типизированный отказ соединения или принятое изменение пути позволяют
+   рассматривать существующее восстановление HY2:
+   `InterfaceUpdated/CloseWithError → lazy one-pending offer`.
+4. Приостановка относится только к установленным необязательным подписчикам
+   URL-test/NTP; PauseManager не становится общим выключателем HY2.
+5. Польза для энергии и NAT остаётся `unknown/abstain`, пока не определены
+   стадии wake → due → queue → socket → peer и стоимость полезного восстановления.
 
-## Reuse / licence / cost
+Из исходников не следуют автоматическое исключение из энергосбережения,
+широкий WakeLock, дополнительный ping, обязательное закрытие при пробуждении
+или новый интерфейс управления таймером ядра.
 
-- SFA caller `bc73504f…`: **REFERENCE/ADAPT** only; GPL-3.0-or-later plus clause
-  against derivative app name/association; whole service incompatible with
-  Snowden owner/safety. No code copied.
-- sing pause manager/ticker v0.8.13: **REUSE** for matching optional subscribers;
-  GPL-3.0-or-later. Synchronous callbacks under manager mutex add reentrancy/
-  latency cost. Adding HY2 subscriber is a reviewed core lifecycle change.
-- HY2 interface-update recovery: **REUSE CONDITIONALLY** after path invalidation
-  or typed carrier failure; reconnect handshake/CPU/radio/latency cost unknown.
-- quic-go timer ccd46…: **REUSE unchanged**, MIT. No pause hook proven.
-- Current physical-context/authority guards: **ADAPT as decision inputs**, but
-  callback delivery is not atomic with in-flight native packet writes.
+**Контрпример сильному обещанию:** FGS может сохранять foreground/network-допуск,
+пока CPU приостановлен и PING не исполняется. После возобновления полномочие
+по `elapsedRealtime` может истечь, хотя нативный таймер стареет иначе.
+Java watchdog и guards начинают завершение, но каждая нативная отправка QUIC
+не проходит через них. Строгий порядок «ни одной отправки после истечения»
+из этого пути не доказан. Keepalive не продлевает полномочия.
+Перезагрузка создаёт новый процесс и домен загрузки; старый deadline нельзя
+восстанавливать как вновь выданный.
 
-## Work stages completed
+**Предложение автора:** `ACCEPT_MODEL_SCOPED` для минимального решения у владельца.
+Пакетный барьер и энергетический выигрыш остаются предметом отдельной приёмки.
 
-1. Source/pin/artifact/caller availability — complete; shipped AAR still unknown.
-2. Android receiver→JNI→shared manager trace — complete.
-3. Exact subscribers + bounded HY2 negative search — complete.
-4. Awake/Doze/AppStandby/LPS/blocked/suspend/resume/reboot table — complete.
-5. Opposing FGS-suspended, network-exempt/no-timer, authority ordering — complete.
-6. Reuse/licence/cost + paired C04 scoped read — complete.
-7. Future distinguishing observations — finite and all NOT_RUN.
+## Переиспользование, лицензии и цена
 
-## Open / future evidence (NOT_RUN)
+| Основа | Что допустимо взять | Ограничение и цена |
+|---|---|---|
+| SFA `bc73504f…` | Ориентир для вызывающего пути | GPL-3.0-or-later и отдельное условие о названии/ассоциации производного приложения. Полный service не совместим автоматически с владельцем и защитой Snowden; код не копировался |
+| sing PauseManager/Ticker v0.8.13 | Готовый механизм для действительно подключённых необязательных потребителей | GPL-3.0-or-later. Синхронные callbacks под mutex создают риск повторного входа и задержки; подписка HY2 меняет lifecycle ядра и требует отдельного рассмотрения |
+| HY2 interface-update recovery | Условное восстановление при недействительности пути или типизированном отказе | Стоимость рукопожатия, CPU, радиомодуля и задержки не измерена |
+| quic-go timer ccd46… | Существующий таймер без предположения о pause hook | MIT; найденный путь его приостановки не установлен |
+| Текущие guards контекста и полномочий | Входы платформенного решения | Доставка callback не атомарна с уже начатой нативной отправкой |
 
-Exact accepted artifact; callback latency before suspend; transport due/queue/
-socket stages; peer/NAT state; same-path conditional reuse vs blanket reconnect;
-changed-path no-old-write barrier; authority expiry/reboot and in-flight kernel
-boundary; device/OEM/RAT/energy/recovery outcomes. No numeric savings or timeout
-is inferred.
+Применение: сохранить владельца Android и его контроль actual return/death;
+согласовать ANDR-04/07/08 [плана Android](../../../../../planning/knowledge-application/ANDROID-PLAN.md).
+Для PC-05/06/07 [плана ПК](../../../../../planning/knowledge-application/PC-PLAN.md)
+переносится различие часов, подписки и фактического эффекта; Android broadcast
+не является Windows API. Новый scheduler, второй владелец и массовое обновление
+ядра этим пакетом не обоснованы.
 
-Lead should compare C04's lifetime/cancellation contract with this packet's
-pause-edge negative; agreement is not independent runtime evidence.
+## Прочитанная область
+
+Сопоставлены версии и доступность исходников; Android receiver → JNI → общий
+менеджер; конкретные подписчики и ограниченный отрицательный поиск HY2;
+состояния Awake/Doze/AppStandby/LPS/blocked/suspend/resume/reboot;
+возражения о FGS, доступе к сети и порядке истечения полномочий; условия
+переиспользования и выбранная часть C04. Поставленный AAR здесь не установлен.
+Совпадение выводов C04 и этого пакета не создаёт независимого runtime-доказательства.
+
+## Открытые вопросы и будущие данные
+
+Все исполнения — **NOT_RUN**. Не установлены: точный принятый артефакт;
+задержка callback перед сном; стадии transport due/queue/socket; состояние
+peer/NAT; эффект сохранения соединения по тому же пути по сравнению с
+безусловным переподключением; барьер старых отправок при смене пути;
+истечение полномочий, перезагрузка и граница уже начатого kernel I/O;
+поведение разных устройств/OEM/RAT, энергия и полезное восстановление.
+Численная экономия или гарантированный timeout не выводятся.
+
+<a id="r28-z05--finite-handoff"></a>
+<a id="r28-z05-a--конкретный-ready-callback-не-достигает-hy2-timer"></a>
+<a id="r28-z05-b--допустимое-решение-без-wakeradionat-outcome"></a>
+<a id="reuse--licence--cost"></a>
+<a id="work-stages-completed"></a>
+<a id="open--future-evidence-not_run"></a>

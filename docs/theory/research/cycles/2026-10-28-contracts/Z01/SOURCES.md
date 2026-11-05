@@ -1,129 +1,145 @@
-# R28-Z01 — источники и provenance
+# R28-Z01 — источники ECH и границы проверки
 
-Чтение: 28 октября 2026. Статусы FULL_TEXT_READ/SECTIONS_READ/SOURCE_READ разделяются. Public source fetch — не VPN probe; tests/build/crypto/native/live NOT_RUN.
+Дата исходного чтения — **28 октября 2026 года**. Различаются FULL_TEXT_READ,
+SECTIONS_READ и SOURCE_READ. Публичное получение текста не было пробой VPN;
+тесты, сборка, crypto/native/live не выполнялись.
+
+## Краткий вывод
+
+Реестр поддерживает разбор связи Service Binding, endpoint, ECH-параметров
+и повторов в названных исходниках. Он не удостоверяет установленный артефакт
+или работающий ECH-путь Snowden. Полные предпосылки и рекомендации —
+в [аргументе](REPORT.md) и [сводке применения](HANDOFF.md).
 
 ## 1. Нормативные первоисточники
 
 ### S1 — RFC 9848
 
 B. Schwartz, M. Bishop, E. Nygren. *Bootstrapping TLS Encrypted ClientHello
-with DNS Service Bindings*. RFC 9848, March 2026, IETF Standards Track,
+with DNS Service Bindings*. RFC9848, March2026, IETF Standards Track,
 Proposed Standard. <https://www.rfc-editor.org/rfc/rfc9848.txt>.
 
-**FULL_TEXT_READ ранее baseline; для R28 повторно SECTIONS_READ:** §§3–6, §8.
-Получен заново 08:59Z, capture `rfc9848.txt`.
-Использование: `ech` принадлежит alternative endpoint; все адреса TargetName
-должны иметь key либо authority P; ClientHello ждёт SVCB resolution;
-all-ech SVCB-reliant; mixed-list downgrade; Alt-Svc consistency.
+В прежнем основании FULL_TEXT_READ; в R28 повторно **SECTIONS_READ** §§3–6, §8.
+Исходное получение 08:59Z, `rfc9848.txt`.
+Использованы принадлежность `ech` альтернативному endpoint, ключ либо
+полномочия P для адресов TargetName, ожидание SVCB до ClientHello,
+all-ech SVCB-reliant, смешанные списки и согласованность Alt-Svc.
+Это нормативные условия, не доказательство их реализации клиентом.
 
 ### S2 — RFC 9849
 
 E. Rescorla, K. Oku, N. Sullivan, C. A. Wood. *TLS Encrypted Client Hello*.
-RFC 9849, March 2026, IETF Standards Track, Proposed Standard.
+RFC9849, March2026, IETF Standards Track, Proposed Standard.
 <https://www.rfc-editor.org/rfc/rfc9849.txt>.
 
-**SECTIONS_READ:** §§4.1–5.2, 6.1.4–6.1.8, 6.2, 8.1, 10.1–10.4.
-Получен заново 08:59Z, capture `rfc9849.txt`.
-Использование: O/P identities, authenticated rejection, retry-address warning,
-source-bound persisted state, network-change mitigation and tracking.
+**SECTIONS_READ:** §§4.1–5.2,6.1.4–6.1.8,6.2,8.1,10.1–10.4.
+Исходное получение 08:59Z, `rfc9849.txt`.
+Использованы разные идентичности O/P, аутентифицированное отклонение,
+предупреждение о выборе адреса при retry, привязка сохраняемого состояния
+к источнику, смена сети и tracking. Прочитанные разделы не равны всему аудиту TLS.
 
 ### S3 — RFC 9460
 
 B. Schwartz, M. Bishop, E. Nygren. *Service Binding and Parameter Specification
-via the DNS (SVCB and HTTPS Resource Records)*. RFC 9460, November 2023,
+via the DNS (SVCB and HTTPS Resource Records)*. RFC9460, November2023,
 IETF Standards Track, Proposed Standard.
 <https://www.rfc-editor.org/rfc/rfc9460.txt>.
 
-**SECTIONS_READ:** §§2.3–3.2, 5.1–5.2, 7.1–8, 9.1–9.4, 12–13.
-Получен заново 08:59Z, capture `rfc9460.txt`.
-Использование: RR atomicity/priority/mandatory; preconnect consistency; address
-hints vs A/AAAA; TargetName/port/ALPN; proxy behavior; cache/network partition.
+**SECTIONS_READ:** §§2.3–3.2,5.1–5.2,7.1–8,9.1–9.4,12–13.
+Исходное получение 08:59Z, `rfc9460.txt`.
+Использованы целостность RR, priority/mandatory, согласованность preconnect,
+различие address hints и A/AAAA, TargetName/port/ALPN, прокси и разделение кеша
+по сетевому контексту. Готовой реализации selector документ не предоставляет.
 
-## 2. Actual manifest/source pins
+## 2. Манифест и вызывающие пути на дату среза
 
-| Input | Pin / area | Read depth and exact purpose |
+| Вход | Версия / область | Прочитанный предмет и предел |
 |---|---|---|
-| `windows/go.mod`, `go.sum` | Go1.26; sing-box1.13.19; uTLS1.8.4; sing0.8.13; miekg/dns1.1.72 | SOURCE_READ version selection; not compiled artifact provenance |
-| Snowden `corebridge.go` | renderAndPrepareContext:106–184 | SOURCE_READ preflight→override ownership |
-| Snowden `backend/core/preflight.go` | Resolve:79–149, A/JSON DoH:151–189, cache:231–267 | SOURCE_READ first-success IP and 7-day host cache |
-| Snowden `backend/render/render.go` | DNS:565–587, VLESS/WS:732–774, tunnelHostnames:1012–1021 | SOURCE_READ separate bootstrap DNS and current no-ECH renderer |
-| Snowden `backend/core/engine.go` / worker | newSingBox:404–414; worker NewEngine route | SOURCE_READ actual embedded/worker box construction; no runtime |
-| sing-box `box.go` | managers and dns.Router registration | SOURCE_READ concrete DNSRouter implementation |
-| sing-box `common/tls/ech.go` | parse:27–55; ECHClientConfig/fetch/cache/Clone:109–189 | SOURCE_READ config state and refresh gap |
-| sing-box `common/tls/client.go` | New client:52–69; dial/retry:117–134 | SOURCE_READ dial-before-handshake and stdlib typed retry |
-| sing-box STD/uTLS clients | ConfigList setters, Client/Clone, NewClient ECH branch | SOURCE_READ state projection and cloning |
-| sing-box VLESS/WS | VLESS NewOutbound/Dial:46–99,151–170; WS client dial:36–108; early conn:136–238 | SOURCE_READ app data only after TLS/upgrade, object lifecycle |
-| sing-box DNS router/client/transports | Router Exchange/Reset; Client Exchange/cache/Lookup; DoH/DoT/TCP transport | SOURCE_READ Msg vs address API and reset behavior |
-| sing-box network manager | ResetNetwork:457–484, notifications | SOURCE_READ DNS/connection reset but no TLS ECH reset |
-| sing-box dialer resolve/default | Domain→A/AAAA→address, socket dial | SOURCE_READ endpoint selection separately from HTTPS RR |
-| uTLS `u_handshake_client.go` | O initial state, E parsing, outer P assignment, TLS handshake | SOURCE_READ real ECH identity transitions |
-| uTLS `handshake_client*.go` | acceptance, rejection, certificate/Finished guards | SOURCE_READ authenticated/error path |
-| uTLS `u_tls_extensions.go` | SNI guard :201–208 | SOURCE_READ config O preserved under real ECH |
-| uTLS ECH/parser/connection | public_name config, native ECHAccepted, error type | SOURCE_READ no product execution |
-| miekg/dns `svcb.go` | HTTPS/SVCB structs, mandatory/alpn/port/hints/ech | SOURCE_READ ready parser primitives; semantic validation remains caller responsibility |
-| local Go1.26.7 crypto/tls/errors | stdlib ECH contract/type and errors.As semantics | SOURCE_READ reference; whole EXE compiler attestation NOT_RUN |
+| `windows/go.mod`, `go.sum` | Go1.26, sing-box1.13.19, uTLS1.8.4, sing0.8.13, miekg/dns1.1.72 | SOURCE_READ выбора версий; не происхождение собранного артефакта |
+| Snowden `corebridge.go` | renderAndPrepareContext:106–184 | SOURCE_READ preflight→override и владение |
+| `backend/core/preflight.go` | Resolve:79–149, A/JSON DoH:151–189, cache:231–267 | SOURCE_READ first-success IP и host cache на 7 дней |
+| `backend/render/render.go` | DNS:565–587, VLESS/WS:732–774, tunnelHostnames:1012–1021 | SOURCE_READ отдельного bootstrap DNS; настоящий ECH в renderer отсутствовал |
+| `backend/core/engine.go` и worker | newSingBox:404–414, worker NewEngine | SOURCE_READ создания embedded/worker Box; без runtime |
+| sing-box `box.go` | Менеджеры и регистрация dns.Router | SOURCE_READ конкретного DNSRouter |
+| `common/tls/ech.go` | parse:27–55, ECHClientConfig/fetch/cache/Clone:109–189 | SOURCE_READ состояния config и границы обновления |
+| `common/tls/client.go` | New:52–69, dial/retry:117–134 | SOURCE_READ socket до handshake и typed retry stdlib |
+| STD/uTLS clients | ConfigList setters, Client/Clone, NewClient ECH | SOURCE_READ проекции состояния и клонирования |
+| VLESS/WS | NewOutbound/Dial:46–99,151–170; WS dial:36–108, early conn:136–238 | SOURCE_READ порядка app data после TLS/Upgrade и времени жизни объектов |
+| DNS router/client/transports | Exchange/Reset, cache/Lookup, DoH/DoT/TCP | SOURCE_READ различий Msg/address API и reset |
+| Network manager | ResetNetwork:457–484, notifications | SOURCE_READ DNS/connection reset без найденного сброса TLS ECH wrapper |
+| Dialer resolve/default | Domain→A/AAAA→address, socket dial | SOURCE_READ выбора endpoint отдельно от HTTPS RR |
+| uTLS `u_handshake_client.go` | O, разбор E, внешнее P, handshake | SOURCE_READ переходов идентичности настоящего ECH |
+| `handshake_client*.go` | Acceptance/rejection, certificate/Finished | SOURCE_READ проверки и ошибок выбранных ветвей |
+| `u_tls_extensions.go` | SNI:201–208 | SOURCE_READ сохранения O при настоящем ECH |
+| uTLS ECH/parser/connection | public_name, native ECHAccepted, тип ошибки | SOURCE_READ; без исполнения продукта |
+| miekg/dns `svcb.go` | HTTPS/SVCB, mandatory/alpn/port/hints/ech | SOURCE_READ готовых parser structs; смысловая проверка у caller |
+| Go1.26.7 crypto/tls/errors | ECH contract/type и errors.As | SOURCE_READ справочной реализации, не аттестация compiler EXE |
 
-Initial source capture: `.artifacts/research/r28-contracts/Z01/source-initial.json`,
-37 files at about 08:57Z. Extra captures: `source-extra.json` (19 files),
-`source-composition.json` (3 files), and selected paired/API captures. Serial
-copies, not atomic repository snapshots.
+Начальная копия: `.artifacts/research/r28-contracts/Z01/source-initial.json`,
+37 файлов около 08:57Z. Добавления — `source-extra.json` (19),
+`source-composition.json` (3) и выбранные paired/API-входы.
+Копирование последовательное, не атомарный снимок всего репозитория.
 
-## 3. Independent byte equality
+## 3. Сопоставление байтов
 
-Immutable raw URLs read 09:18Z:
+В исходном срезе 09:18Z прочитаны immutable raw-пути:
 
-- MetaCubeX/uTLS commit `cf49b0864331e156689feec6363ef9bf518a5ac7`:
+- MetaCubeX/uTLS `cf49b0864331e156689feec6363ef9bf518a5ac7`:
   `u_tls_extensions.go`, `handshake_client.go`.
-- SagerNet/sing-box commit `b5ebaa1fc0f2b94256180b95468e73ef53caa27d`:
+- SagerNet/sing-box `b5ebaa1fc0f2b94256180b95468e73ef53caa27d`:
   `common/tls/ech.go`, `route/network.go`.
 
-Remote/local module cache SHA-256 equality: **4/4**, exact records in
-`remote-equality.json`. This proves named bytes only, not full module/artifact
-attestation or dependency integrity.
+Четыре пары совпали с module cache; записи — `remote-equality.json`.
+Это идентичность выбранных байтов, не всего модуля, зависимостей или артефакта.
 
-## 4. Reuse/licences
+## 4. Переиспользование и лицензии
 
-- sing-box root LICENSE: **GPL-3.0-or-later** plus name/association restriction;
-  SOURCE_READ. Whole-product compliance not determined.
-- MetaCubeX/uTLS root LICENSE: **BSD-3-Clause**; SOURCE_READ.
-- miekg/dns root LICENSE: **BSD-3-Clause**; SOURCE_READ.
-- Go standard library LICENSE: BSD-style; captured; complete distribution
-  obligations outside this research scope.
-- RFCs: IETF Trust legal notices; specifications, not drop-in software.
+- sing-box root LICENSE: SOURCE_READ, GPL-3.0-or-later и условие о
+  названии/ассоциации. Соответствие всей поставки не установлено.
+- MetaCubeX/uTLS и miekg/dns: root LICENSE, SOURCE_READ, BSD-3-Clause.
+- Go standard library: сохранён BSD-style LICENSE; полный состав поставки
+  за пределами этого разбора.
+- RFC: уведомления IETF Trust; это спецификации, не готовый программный компонент.
 
-Recommendation is reuse/adapt existing parser/TLS/exchange primitives; no own
-HPKE/ECH/DNSSEC implementation.
+Брать существующие parser/TLS/exchange primitives и адаптировать нужный контекст;
+новые собственные HPKE/ECH/DNSSEC реализации не обоснованы.
 
-## 5. Paired independent input
+## 5. Сопоставление с C02
 
-C02/HANDOFF became available during review and was read once, not polled.
-Captured in `source-review-extra.json` with sing-box `ech_shared.go`.
-Relevant strongest claims:
+C02/HANDOFF стал доступен при исходном review и прочитан адресно;
+копия вместе с `ech_shared.go` записана в `source-review-extra.json`.
 
-- R28-C02-B: DNS/CloseAll/mux reset does not imply ECH wrapper reset;
-  stale config and handover need separate admission.
-- R28-C02-C: uTLS default rejection verifier may verify O rather than P.
-- R28-C02-A: fixed endpoint/shared key is strong positive control; missing
-  generic SVCB semantics is not blanket unsafe.
+- C02-B: DNS/CloseAll/mux reset не означает очистку ECH wrapper.
+- C02-C: uTLS default rejection verifier может проверять O вместо P
+  в названной ветви; это нельзя скрывать общей фразой «P аутентифицирован».
+- C02-A: фиксированный endpoint с общим одобренным ключом — положительный
+  контроль; отсутствие универсальной SVCB-семантики не делает любой ECH небезопасным.
 
-Z01 independently traced source and agrees within named scope. Model agreement
-is not independent field evidence or scientific acceptance.
+Z01 проследил названный source-путь отдельно. Совпадение моделей не является
+независимым полевым доказательством или автоматическим научным принятием.
 
-## 6. Read/fetch status
+## 6. Статус чтения и получения
 
-- RFC 9848/9849/9460: **SECTIONS_READ**, official RFC Editor TXT, successful.
-- GitHub immutable raw critical source: **SOURCE_READ**, successful 4/4.
-- Module cache source: **SOURCE_READ** selected symbols; full repository not audited.
-- No external papers/field reports required by this narrow contract package.
-- No failed source fetch relevant to final argument.
-- No private endpoints, profiles, logs, vault, credentials, DNS or TLS probes.
+RFC9848/9849/9460 — SECTIONS_READ официального RFC Editor TXT;
+четыре критичных immutable raw-файла — SOURCE_READ;
+module cache — SOURCE_READ выбранных symbols, не весь репозиторий.
+Внешние статьи и полевые сообщения для этого узкого вывода не использовались.
+Неудачного получения, от которого зависел бы финальный аргумент, не осталось.
+Частные endpoints, профили, логи, vault, credentials и DNS/TLS-пробы не использовались.
 
-## 7. Evidence boundaries and future NOT_RUN
+## 7. Предел доказательства
 
-No tests/fixtures/build/vet/doctor/simulation/benchmarks/crypto execution/security
-scans/native/device/live/admin/install/VPS/SSH/deploy/OS network. Handwritten
-counterexamples are models, not reproduced failures. Current Windows renderer
-does not include ECH; deployed severity/frequency unknown.
+Ручные контрпримеры — модели, не воспроизведённые отказы.
+Настоящий ECH не входил в renderer исходного среза; серьёзность и частота
+ошибки развёрнутого продукта не установлены. Все будущие случаи REPORT §8 —
+NOT_RUN: тесты, fixtures, сборка, симуляции, benchmarks, crypto/native/device/live,
+административные и серверные действия, изменения сети не выполнялись.
+Применение требует платформенного решения и собственной приёмки.
 
-Future cases in REPORT §8 are all NOT_RUN. Platform consequence requires owner
-review; this author does not modify product source/plans/dependencies/roles.
+<a id="r28-z01--источники-и-provenance"></a>
+<a id="2-actual-manifestsource-pins"></a>
+<a id="3-independent-byte-equality"></a>
+<a id="4-reuselicences"></a>
+<a id="5-paired-independent-input"></a>
+<a id="6-readfetch-status"></a>
+<a id="7-evidence-boundaries-and-future-not_run"></a>

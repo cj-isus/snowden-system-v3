@@ -48,14 +48,14 @@ export и recovery не получают единого взаимозаменя
 
 ### 3.1 Profile import и explicit recovery — Windows
 
-`ApplyPublicProfileSource(token, approvedTarget, confirm)` consumes pending token
-once (`onboarding_source.go:208–238`) → exact preview/expiry/mode binding →
-`importPreparedProfilePayload` → `captureProfileImportSource` из coherent
-TrustSnapshot → owned delivery verification **вне** journal/native scope →
-separate eligible prefix retention → `bundleAuthorityInput.prepare` под source
-scope → descriptors/credentials → retire previous session → synced fixed4
-stage → `sourceFenceInScope` + vault final CAS в `Store.BeforeCommit` → commit →
-separate lifecycle restart/publication.
+`ApplyPublicProfileSource(token, approvedTarget, confirm)` однократно потребляет
+pending token (`onboarding_source.go:208–238`) → связывает точные preview/expiry/mode →
+`importPreparedProfilePayload` → `captureProfileImportSource` из согласованного
+TrustSnapshot → проверяет принадлежащую вызову поставку **вне** journal/native scope →
+отдельно удерживает допустимый prefix → `bundleAuthorityInput.prepare` в исходном scope →
+дескрипторы/учётные данные → завершение прежней сессии → синхронизированный fixed4 stage →
+`sourceFenceInScope` и финальный vault CAS в `Store.BeforeCommit` → commit →
+отдельные перезапуск lifecycle и публикация.
 
 Действующие guards:
 
@@ -81,12 +81,12 @@ syscall или исполнение новой VPN session.
 
 ### 3.2 Export и чистый получатель — Windows
 
-`ExportPublicProfileSource` consumes export token → installed profile/current
-active signer proof → required cumulative pin policy и fresh delivery package →
-source-side acceptance → `rebaseExportProfile` из **NextState.Root** → full
-verification rebased package → record actual renderer-requested SecretIDs →
-Seal вне App/journal/vault/native locks → final public source/encrypted vault/
-clock/proof/deadline comparison → return ciphertext.
+`ExportPublicProfileSource` потребляет export token → проверяет установленный профиль
+и действующего подписанта → требует накопительную pin-policy и свежий delivery package →
+принимает источник → выполняет `rebaseExportProfile` от **NextState.Root** → полностью
+проверяет rebased package → записывает фактически запрошенные renderer SecretIDs →
+выполняет Seal вне блокировок App/journal/vault/native → финально сравнивает public source,
+encrypted vault, часы, proof и deadline → возвращает ciphertext.
 
 `prepareEnrolledExport:68–73` запрещает recovery/secret-bearing publisher package;
 `:92–102` связывает incoming profile с installed canonical identity/current
@@ -198,11 +198,11 @@ Source filetxn commit point — removal recovery barrier, `completed=true`.
 Postcommit resource Close/debris failures видны через Check/CleanupError и
 не отменяют returned completed commit. Поэтому consumers обязаны различить:
 
-- no-op (same state, coherent fence checked, no commit callback);
-- prefix committed / profile or policy committed;
-- commit unknown / recovery pending;
-- cleanup/retirement unconfirmed;
-- new process launch requested / adopted / protected-path proven.
+- no-op: состояние прежнее, согласованный fence проверен, commit callback не вызывался;
+- prefix сохранён / профиль или политика сохранены;
+- результат commit неизвестен / требуется восстановление;
+- очистка или завершение прежнего владения не подтверждены;
+- новый процесс: запуск запрошен / экземпляр принят / защищённый путь подтверждён.
 
 Late source **уже** добавляет `retainDeliveryProgressWithOutcome` и переводит
 export/urgent-pin prefix flags на actual callback outcome. Stable `TrustPolicy.Digest`

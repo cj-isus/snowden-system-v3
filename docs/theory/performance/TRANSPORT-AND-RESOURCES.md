@@ -1,37 +1,29 @@
 # Скорость, восстановление и ресурсы
 
-[Оглавление теории](../README.md).
+[Оглавление](../README.md) · [Термины](../GLOSSARY.md) · [Учёт QUIC/HY2](QUIC-ACCOUNTING-AND-LIMITS.md)
 
-Углубление 2026-10-28: [QUIC accounting, HY2 limits и peer timers](QUIC-ACCOUNTING-AND-LIMITS.md).
-R04-13 принят только как source-contract mismatch; R04-14 требует уточнённого
-compatibility/semantic oracle, а не необоснованного upgrade.
+## Краткий вывод
 
-Разделы перенесены из авторского сборника с сохранением исходной нумерации, дат и границ доказательства. Исторический статус не является текущим product PASS.
+Скорость определяется узким местом всего пути и полезным завершением задачи.
+Увеличение окон, mux, offload и частые повторы помогают лишь при подходящих
+условиях, добавляя собственные очереди и ресурсы. Сначала прослеживают
+реальный метод, сокет и владельца данных, затем меняют одно ограничение.
 
-- [§9 — 9. Скорость: физические ограничения и полезные оптимизации](#source-9)
-- [§9.1 — 9.1. Модель затрат](#source-9-1)
-- [§9.2 — 9.2. Где искать выигрыш](#source-9-2)
-- [§9.3 — 9.3. Что разумно заимствовать и когда](#source-9-3)
-- [§13 — 13. Надёжность и полезная скорость: детали обеих платформ](#source-13)
-- [§13.1 — 13.1. Что означает «быстрее и стабильнее»](#source-13-1)
-- [§13.2 — 13.2. Закреплённый код важнее названия оптимизации](#source-13-2)
-- [§13.3 — 13.3. PMTU, IPv6, фрагментация и offload](#source-13-3)
-- [§13.4 — 13.4. Окна, congestion control, очереди и мультиплексирование](#source-13-4)
-- [§13.10 — 13.10. Память, маленький VPS и операционная устойчивость](#source-13-10)
-- [§14 — 14. Реальный путь пакета и восстановление: уточнение RQ-01/02](#source-14)
-- [§14.1 — 14.1. Уточнение Salamander: дефект выражения и вызываемый метод](#source-14-1)
-- [§14.2 — 14.2. Готовая QUIC-миграция есть ниже публичного HY2 API](#source-14-2)
-- [§14.3 — 14.3. PMTU: declared capability не равно наблюдаемому свойству сокета](#source-14-3)
-- [§14.4 — 14.4. UDP очередь ограничена по count, но запись может ждать](#source-14-4)
-- [§14.5 — 14.5. Таймер ядра, admission и полезное восстановление](#source-14-5)
-- [§14.6 — 14.6. Что переносить и в каком порядке](#source-14-6)
-- [§14.7 — 14.7. Первичные документы](#source-14-7)
-- [§18 — 18. Рецензированный вывод: cache eviction и время жизни заимствованного сообщения](#source-18)
-- [§18.1 — 18.1. Что проверено](#source-18-1)
-- [§18.2 — 18.2. Следствие для ограничений ресурсов](#source-18-2)
-- [§18.3 — 18.3. Передача в разработку и предел знания](#source-18-3)
+**Когда применять.** При выборе оптимизации, ограничении памяти и очередей,
+подготовке миграции пути и оценке маленького VPS или батареи телефона.
 
----
+**Граница знания.** Исследованные исходники и снимки относятся к 23–28 октября 2026 года.
+Размеры, окна и примеры ниже — параметры тех версий либо условные расчёты,
+не нынешняя настройка приложения и не измеренный выигрыш.
+R04-13 принят в области несовпадения контрактов; R04-14 требует уточнения
+критериев совместимости. [Точная область решений](../research/reviews/2026-10-28-DEEP-REVIEW.md).
+Подробный разбор счётчиков, HY2-сборки и времени другой стороны находится
+в [основном дополнении QUIC](QUIC-ACCOUNTING-AND-LIMITS.md).
+
+В этой главе: [модель затрат](#source-9-1), [выбор мер](#source-9-2),
+[готовые решения](#source-9-3), [MTU и очереди](#source-13-3),
+[фактические вызовы](#source-14), [жизненный цикл заимствованных данных](#source-18),
+[передача событий контроллеру](#reviewed-brutal-dispatch).
 
 <!-- source-unit: 9 -->
 <a id="source-9"></a>
@@ -96,16 +88,16 @@ QUIC connection migration [S23] может сохранять сессию пр�
 <a id="source-9-3"></a>
 ### 9.3. Что разумно заимствовать и когда
 
-Это shortlist для оценки, **ничего автоматически не устанавливается**.
-Latest docs содержат возможности вне нашего pin; фиксировать tag/commit,
+Это список кандидатов для оценки, **ничего автоматически не устанавливается**.
+Меняющаяся документация содержит возможности вне исследованного пина; фиксировать tag/commit,
 лицензию зависимостей, wire compatibility и rollback до любой интеграции.
 
 | Источник | Что брать | Ограничение / решение |
 |---|---|---|
-| NaiveProxy [S14][S15] | Реальный Chromium network stack, padding negotiation, управление carrier lifetime; release v147.0.7727.49-3 добавляет realistic preambles | Это prerelease reference, не выбранная поставка. Принципы → отдельный compatibility spike: pin, packaging, child process/kill-switch, server capability. Root BSD-style license не отменяет third-party notices |
+| NaiveProxy [S14] [S15] | Сетевой стек Chromium, согласование заполнения и срок жизни несущего соединения; release v147.0.7727.49-3 добавляет realistic preambles | Это предварительный выпуск для сравнения, не выбранная поставка. Принципы → отдельный compatibility spike: pin, packaging, child process/kill-switch, server capability. Корневая BSD-style лицензия не отменяет third-party notices |
 | Xray XHTTP [S16] | Разделение up/down, ограничение reuse, разные пути и HTTP transport modes | Не включён в sing-box 1.13.19; не менять ядро/встраивать sidecar до TH-04 и ADR с измерением. Дизайн upstream не даёт универсальной устойчивости |
-| Hysteria2 [S11] | Согласование rate, QUIC/TCP+UDP proxy, HTTP/3 cover либо obfs как разные профили | Salamander скрывает QUIC wire image ценой несовместимости с обычным H3; не обходит общий UDP-block. Новые Gecko/Realm/Mimic в current docs не приняты нашим pin |
-| Tor WebTunnel/Snowflake [S17] | Разделение транспорта, distribution и проверки свежести мостов | Не рейтинг и не готовый high-speed VPN backend; runtime/dependencies/trust/нагрузка оцениваются отдельно |
+| Hysteria2 [S11] | Согласование rate, QUIC/TCP+UDP proxy, HTTP/3 cover либо obfs как разные профили | Salamander скрывает QUIC wire image ценой несовместимости с обычным H3; не обходит общий UDP-block. Gecko/Realm/Mimic из просмотренной меняющейся документации не приняты нашим pin |
+| Tor WebTunnel/Snowflake [S17] | Разделение транспорта, distribution и проверки свежести мостов | Не рейтинг и не готовый высокоскоростной backend VPN; runtime/dependencies/trust/нагрузка оцениваются отдельно |
 | UPGen, USENIX 2025 [S18] | Диверсификация семейств протоколов как research alternative к единой FEP-сигнатуре | Результат авторов на своём threat model; не доказательство работы в РФ и не production-приоритет |
 | TUF [S20] | Роли доверия и threat-driven update regression matrix | Применять к OFF-06 после инвентаризации envelope; не заявлять TUF compliance по сходству |
 | Toxiproxy [S21] / iperf3 [S22] | Готовые TCP fault injections / эталонные controlled throughput measurements | MIT / BSD-3-Clause. Toxiproxy не эмулирует UDP/DPI/WFP; iperf3 не доказывает обход, Windows официально не поддерживается |
@@ -125,7 +117,7 @@ Latest docs содержат возможности вне нашего pin; ф�
 ## 13. Надёжность и полезная скорость: детали обеих платформ
 
 Срез от 2026-10-23 углубляет §§7–12;
-требования Windows/общего контура — [PLAN §5.6](../../PLAN.md#reliability-research),
+требования Windows/общего контура — PLAN §5.6 — `docs/PLAN.md#reliability-research`,
 Android — ANDROID-PLAN §8.1 — `docs/ANDROID-PLAN.md#android-reliability-depth`.
 Evidence и расчёты — `docs/evidence/2026-10-23-deep-reliability.md` отделяют прочитанный
 исходник, математический контрпример и будущую native/сетевую приёмку.
@@ -161,35 +153,29 @@ TUN/WFP и native WebView. У каждой метрики есть denominator �
 
 Прочитаны project pins: sing-box1.13.19; SagerNet/quic-go0.59.0-sing-box-mod.4;
 sing-quic `d83826c306d7`; sing-tun `7c73233bd0fb`; x/sync0.20.0.
-Полные commit/file/blob/SHA256 и лицензии — evidence. Android пока закрепляет
-libbox source; бинарный dependency graph/AAR ещё не подтверждён. Выводы из Windows
-go.mod не распространяются на ещё не собранный Android artifact автоматически.
+Полные commit/file/blob/SHA256 и лицензии — evidence. На момент среза 23 октября libbox был закреплён по исходникам,
+но состав поставляемого Android AAR ещё не был подтверждён этим исследованием.
+Это датированная граница: она не означает отсутствие позднее собранного AAR.
+Граф Windows go.mod автоматически не подтверждает состав Android-артефакта.
 
-| Наблюдение в текущей выборке | Практическое следствие |
+| Наблюдение в выборке 23 октября 2026 года | Практическое следствие |
 |---|---|
-| QUIC `sys_conn_windows.go` возвращает basicConn; тот объявляет DF, но не GSO/ECN | Windows USO/ECN в ОС не означают их использование этим форком. Сначала capability actual socket path, затем сравнение; не включать фиктивный UI switch |
+| QUIC `sys_conn_windows.go` возвращает basicConn; тот объявляет DF, но не GSO/ECN | Windows USO/ECN в ОС не означают их использование этим форком. Сначала capability фактический путь сокета, затем сравнение; не включать фиктивный UI switch |
 | QUIC `wrapConn` проверяет OOBCapablePacketConn; send_conn имеет fallback после GSO error | Opaque obfs/protect wrappers могут изменить fast path. Сохранять датаграммные границы, буферное владение, DF/MTU и fallback; не обходить обёртку и её шифрование ради SyscallConn |
 | HY2 client задаёт окна 8MiB stream/20MiB connection и keepalive10s из hysteria constants | В upstream уже есть расходы и таймеры. Ещё один app-level keepalive/«ускоритель окон» может дублировать их; лимиты flow control не равны немедленному выделению такой памяти |
 | HY2 включает Brutal только при `!authResponse.RxAuto && actualTx > 0`; иначе BBR-family sender | Положительной rate недостаточно: server RxAuto сохраняет adaptive branch. Linux TCP `tcp_congestion_control=bbr` не меняет userspace QUIC CC; произвольный завышенный Up/DownMbps меняет алгоритм и конкуренцию |
 | sing-box уже имеет parallel dialer, resolver cache/coalescing и mux client | Развивать их через supported API. Не добавлять внешний второй Happy Eyeballs/cache/mux с противоречивыми таймерами/политиками |
-| Windows renderer держит TCP keepalive60s/20s, mux opt-in/max4/min4, WS early-data2048 | Это текущие параметры, не измеренные оптимумы. TFO уже исключён после прежнего Windows incident; OS support не равен поддержке pinned библиотеки |
+| Windows renderer держит TCP keepalive60s/20s, mux opt-in/max4/min4, WS early-data2048 | Это параметры датированного среза, не измеренные оптимумы. TFO уже исключён после прежнего Windows incident; OS support не равен поддержке pinned библиотеки |
 | Android path fingerprint отделяет VALIDATED hints, сортирует адреса/маршруты, но включает metered/roaming/DHCP/proxy | Хорошее ограждение контекста может быть слишком широким restart key. Проверить отдельно security/path/resolver/billing/presentation changes; не выкидывать поля из admission fence ради скорости |
 
-**Конкретный source finding, RQ-01.** В `hysteria2/salamander.go` закреплённого
-sing-quic vectorised method вычисляет индекс локального буфера с накопленным
-смещением и индекс 32-byte key без скобок вокруг общего смещения.
-Модель M10 даёт выход за границы для двух buffers `[8,3]` и `[8,64]`;
-Git blob сверён. Это подтверждённый контрпример арифметики **если вызывается этот
-method**. Достижимость через актуальные QUIC/obfs/writer wrappers и влияние на
-наше приложение не установлены; upstream/native код не исполнялся. Не объявлять
-воспроизведённый crash, не делать массовый upgrade. До включения новых vectorized
-paths — call graph → узкая разрешённая регрессия → upstream fix/backport/rollback gate.
-В стандартной ветке прочитанных `quic.go`/basicConn/Salamander вызывается `WriteTo`,
-который использует нижележащий writer; это не вызов проблемного vectorised method.
-Отдельная TLS Config branch и другие writers не прослежены полностью. Поэтому
-этот finding не обосновывает объявление текущего HY2 нерабочим.
-Исходник: [закреплённый Salamander](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/salamander.go).
-
+**RQ-01: сначала выражение, затем достижимость.** В векторном методе
+закреплённого Salamander условные входы двух буферов `[8,3]` и `[8,64]`
+показывают выход за границы из-за вычисления индексов. Это ручной контрпример,
+не исполненный crash приложения. Более поздний разбор проследил обычные
+ветки и не нашёл вызова этого проблемного метода в них: [цепочка вызовов](#source-14-1).
+Поэтому прежнее «достижимость ещё не прослежена» уточнено для названных веток;
+оно не распространяется на любой сторонний caller или будущее ядро.
+[Закреплённый Salamander](https://github.com/SagerNet/sing-quic/blob/d83826c306d7c008cafb3fd6d8ee07cbcfd656ed/hysteria2/salamander.go).
 
 <!-- /source-unit: 13.2 -->
 
@@ -199,13 +185,13 @@ paths — call graph → узкая разрешённая регрессия �
 
 Различать TUN MTU, outer path MTU, UDP payload, QUIC packet и HY2 application
 message. QUIC требует доступности UDP payload≥1200; на outer IPv6 path MTU1280
-после40-byte IP и8-byte UDP остаётся1232. Протокольный overhead уменьшает payload
-дальше. В модели с условными64 bytes остаётся1168, но это **не** основание назначить
+после 40-byte IP и 8-byte UDP остаётся 1232. Протокольный overhead уменьшает payload
+дальше. В модели с условными 64 bytes остаётся 1168, но это **не** основание назначить
 inner IPv6 MTU1168. Нужны подходящая application fragmentation/reassembly,
-stream representation или другой путь. Число64 иллюстративное, не HY2 спецификация. [D01][D02]
+stream representation или другой путь. Число 64 иллюстративное, не HY2 спецификация. [D01] [D02]
 
 У закреплённого Salamander overhead известен точнее: `salamanderSaltLen=8`,
-по8 bytes на внешнюю датаграмму. При outer IPv6 PMTU1280 без extension headers
+по 8 bytes на внешнюю датаграмму. При outer IPv6 PMTU1280 без extension headers
 после IP/UDP/salt остаётся **1224 bytes для QUIC packet**, ещё до QUIC/HY2 headers
 (M05). Проверять, что probe size/max packet size и wrapper overhead согласованы;
 сырой UDP budget1232 нельзя автоматически использовать как QUIC packet budget.
@@ -217,7 +203,7 @@ DPLPMTUD использует подтверждённые пробы и recover
 от volume-dependent throttling. Кэш PMTU привязан к конкретному path/endpoint,
 а не стране или всему профилю. В pinned HY2 есть application fragment fields;
 проверить bounds/count/TTL/duplicate/out-of-order/reassembly memory, не писать новый
-fragmenter рядом. У QUIC DATAGRAM нет обязательной повторной передачи payload. [D01][D04]
+fragmenter рядом. У QUIC DATAGRAM нет обязательной повторной передачи payload. [D01] [D04]
 
 GSO/GRO уменьшают syscall/packet overhead, но не разрешают больший MTU на проводе.
 Batch должен иметь допустимые адрес/размер/segment boundaries; fallback не теряет
@@ -237,8 +223,8 @@ Batch должен иметь допустимые адрес/размер/segme
 100Mbps×80ms≈1MB in-flight (M04). Receive windows меньше BDP могут ограничивать
 поток; слишком большие caps при множестве соединений расширяют memory exposure.
 Socket buffer, receive credit, congestion window и очередь приложения — четыре
-разные величины. 16MiB заполненной FIFO при10Mbps требует≈13.42s дренирования;
-это условный расчёт, не прогноз любой UDP queue. [D03][D05][D06]
+разные величины. 16MiB заполненной FIFO при 10Mbps требует≈13.42s дренирования;
+это условный расчёт, не прогноз любой UDP queue. [D03] [D05] [D06]
 
 Brutal требует реалистичной доступной rate, которая на LTE меняется и отличается
 от скорости порта VPS. Завышение может увеличить потери, расход и задержку соседних
@@ -247,7 +233,7 @@ Brutal требует реалистичной доступной rate, кото
 RTT/loss/jitter, metered bytes, CPU и соседний обычный TCP; один speedtest недостаточен.
 Upstream Hysteria performance page предлагает большие buffers/priority/chrt —
 это материалы для опыта, не готовый системный preset. Real-time priority может
-ухудшить работу watchdog/DNS/SSH и других приложений. [D06][D07]
+ухудшить работу watchdog/DNS/SSH и других приложений. [D06] [D07]
 
 Mux уменьшает handshakes, но собирает failure domain, flow-control credit и CC
 нескольких потоков в одном transport. QUIC устраняет stream-level delivery HOL
@@ -255,7 +241,7 @@ Mux уменьшает handshakes, но собирает failure domain, flow-co
 UDP payload в DATAGRAM не становится reliable stream. Вложенный TCP поверх reliable
 TCP может усиливать задержки при потере; это не утверждение, что любой TCP tunnel
 всегда хуже UDP на сети с UDP block. Разделять bulk/interactive pools, caps потоков
-и idle eviction только после server compatibility и scoped измерения. [D03][D04]
+и idle eviction только после server compatibility и scoped измерения. [D03] [D04]
 
 FQ-CoDel — готовый алгоритм для очереди в контролируемом bottleneck, не обещание,
 что qdisc внутри гостевого VPS устранит очередь у гипервизора/оператора. ECN требует
@@ -274,8 +260,8 @@ FQ-CoDel — готовый алгоритм для очереди в контр
 JNI/C allocations, mmap и kernel socket buffers. Слишком низкое значение увеличивает
 GC pressure; unlimited pools и число sockets не исправляются одним GOGC. В Android
 считать Kotlin+native+Go peak вместе, в Windows — GUI+worker+helpers, на VPS —
-core+DNS+служебные процессы.9MiB raw wire превращаются в12MiB base64; три такие копии
-уже36MiB без parsed objects (M12), но фактические allocations пока не измерены. [D26]
+core+DNS+служебные процессы.9MiB исходных данных превращаются в 12MiB base64; три такие копии
+уже 36MiB без parsed objects (M12), но фактические allocations пока не измерены. [D26]
 
 Лимиты вводить до allocation/fanout: connections/streams/fd/goroutines/threads,
 fragment maps, parser depth, image pixels, log/history bytes, distinct cache keys.
@@ -289,7 +275,7 @@ packet loss. PSI показывает время resource stalls; отсутст
 unknown, не «нагрузки нет». CPUWeight/MemoryHigh/MemoryMax/TasksMax/systemd версии —
 инструменты будущего controlled resource profile, а не бездумный hard cap: watchdog,
 DNS и recovery должны получать ресурсы. Latest systemd docs не доказывают наличие
-каждой директивы в Ubuntu24.04. [D27][D28]
+каждой директивы в Ubuntu24.04. [D27] [D28]
 
 Один личный VPS не требует нового distributed control plane. Больше transports
 не защищает от неоплаты, disk-full, bad rollout или общего origin. Полезнее сначала
@@ -297,7 +283,7 @@ DNS и recovery должны получать ресурсы. Latest systemd doc
 deadline оплаты с provenance и independent distribution cache. Maintenance/rekey
 не начинается на всех gateways одновременно; старый сертификат не оставляется
 после явного отзыва ради плавности. После rollback заново действуют source/trust/
-path gates; запуск процесса не acknowledgement готовности новой версии.
+path gates; запуск процесса не подтверждение готовности новой версии.
 
 
 <!-- /source-unit: 13.10 -->
@@ -308,10 +294,11 @@ path gates; запуск процесса не acknowledgement готовнос�
 ## 14. Реальный путь пакета и восстановление: уточнение RQ-01/02
 
 Исследование 2026-10-24 продолжает §13 и уточняет его открытые source questions.
-Текущие входы: Windows V2-140→141, Android AND-06-S4; обе реализации source-only,
-без native/device acceptance. Evidence — `docs/evidence/2026-10-24-transport-recovery.md`
+Входы на 24 октября: Windows V2-140→141, Android AND-06-S4. Этот разбор
+использовал исходники и не выполнял native/device-приёмку; поздние результаты
+владельцев к нему не приписываются. Evidence — `docs/evidence/2026-10-24-transport-recovery.md`
 содержит exact pins, снимки исходников и пределы доказательства.
-[PLAN §5.7](../../PLAN.md#transport-recovery-research) и
+PLAN §5.7 — `docs/PLAN.md#transport-recovery-research` и
 Android §8.2 — `docs/ANDROID-PLAN.md#android-transport-recovery` задают будущую приёмку.
 
 
@@ -328,7 +315,7 @@ Android §8.2 — `docs/ANDROID-PLAN.md#android-transport-recovery` задают
 `SalamanderPacketConn.WriteTo`. Port hopping сохраняет эту цепь для child sockets.
 Наличие underlying UDP socket само по себе не включает scatter/gather/GSO/ECN.
 
-Проверены все20 files закреплённого `common/tls`, включая build-tag alternatives.
+Проверены все 20 files закреплённого `common/tls`, включая build-tag alternatives.
 Встроенные STD/ECH/KTLS configs не реализуют QUIC-specific `qtls.Config`.
 uTLS/Reality `STDConfig` явно отвергают такое использование; это не скрытая
 альтернативная QUIC-ветка. Этот вывод не означает, что любые TCP-only TLS options
@@ -368,7 +355,7 @@ BBR adapter не сохраняется. Новый migration seam обязан 
 
 В HY2 server задан `DisablePathManager=true`: при смене peer address используется
 отдельный direct ChangeRemoteAddr path. Нельзя переносить вывод о client migration
-CC reset на обычный server port hopping. Это source branch distinction, не оценка
+CC reset на обычный server port hopping. Это различие веток исходников, не оценка
 его security/runtime корректности.
 
 RFC9000 различает NAT rebinding и активную миграцию; до handshake confirmation
@@ -389,7 +376,8 @@ API, protect+exact Network bind **до connect**, сохранив fd ownership 
 
 <!-- source-unit: 14.3 -->
 <a id="source-14-3"></a>
-### 14.3. PMTU: declared capability не равно наблюдаемому свойству сокета
+<a id="143-pmtu-declared-capability-не-равно-наблюдаемому-свойству-сокета"></a>
+### 14.3. PMTU: объявленная возможность не равна наблюдаемому свойству сокета
 
 В `wrapConn` значение supportsDF начинается с true. Без доступного SyscallConn
 оно остаётся true без вызова setDF в этой функции. На handshake confirmation
@@ -398,8 +386,8 @@ MTU discovery запускается по `!DisablePathMTUDiscovery && capabilit
 а ОС имеет свои defaults. Но и объявленный DF не доказывает реальную настройку.
 
 У exact packet packer `PackPathProbePacket` добавляет padding до MinInitialPacketSize.
-У Salamander добавляется ещё8 bytes; этот wrapper budget учитывается отдельно.
-Проверять actual socket flags, wire lengths, outer IP family, PMTU decrease и
+У Salamander добавляется ещё 8 bytes; этот wrapper budget учитывается отдельно.
+Проверять фактические флаги сокета, wire lengths, outer IP family, PMTU decrease и
 последствия смены пути. Не удалять obfs/protect/bind wrapper ради ускорения и не
 выдавать PMTU timeout за доказательство DPI. RFC path/MTU semantics остаются
 условием, которое проверяется на конкретной сборке и пути. [T01]
@@ -411,15 +399,15 @@ MTU discovery запускается по `!DisablePathMTUDiscovery && capabilit
 <a id="source-14-4"></a>
 ### 14.4. UDP очередь ограничена по count, но запись может ждать
 
-Pinned QUIC datagramQueue хранит до32 send frames и128 receive frames. При полном
+Pinned QUIC datagramQueue хранит до 32 send frames и 128 receive frames. При полном
 send queue `Add` блокируется до dequeue либо закрытия общей очереди; контекста
 отдельной записи у него нет. `SendDatagram` заранее копирует payload.
 HY2 `udpPacketConn.SetWriteDeadline` возвращает `os.ErrInvalid`; read deadline
-не ограничивает эту запись. Даже bounded queue не ограничивает число внешних
+не ограничивает эту запись. Даже ограниченная очередь не ограничивает число внешних
 заблокированных writers и их уже выделенные buffers.
 
 Не оборачивать каждую просроченную запись новой goroutine и повторным SendDatagram.
-Сначала trace владельца и фактического завершения, затем bounded admission/bytes/
+Сначала trace владельца и фактического завершения, затем ограниченный допуск/байты/
 freshness и поддерживаемая отмена. Нельзя закрыть общую QUIC connection для timeout
 одного optional datagram, не определив влияние на другие TCP/UDP users.
 Устаревший media datagram лучше отбросить по принятому контракту, чем доставить
@@ -445,9 +433,11 @@ Keepalive scheduler подавляет повтор по `keepAlivePingSent`; о
 
 Android 3/60 ограничивает replacement admissions, Windows autoretry запускает full
 start episode; это не общий cap для DNS races/dials/PTO/probes/channel iteration.
-Нужны разные счётчики и один owner внешнего recovery. Смерть child не завершает
-зависший parent source/Binder/IO producer: новая работа ждёт actual return.
-Конечный child watchdog deadline поэтому не означает конечный service recovery time.
+Нужны разные счётчики и один owner внешнего recovery. Смерть дочернего процесса не завершает зависший родительский
+источник/Binder/IO. Новая работа должна учитывать фактическое завершение
+и владение оставшимися ресурсами. Возврат одного метода также не доказывает
+завершение порождённых работ. Конечный watchdog дочернего процесса
+поэтому не задаёт конечное время восстановления всей службы.
 
 В Windows рассмотренный netwatch пропускает polling при TUN и полагается на
 сторожевой probe. Epoch fences отвергают **наблюдённую** смену, но сами не создают
@@ -455,11 +445,14 @@ start episode; это не общий cap для DNS races/dials/PTO/probes/chan
 TUN case; это source gap в доказательстве, не воспроизведённый false-connected bug.
 
 Android strict-owner overlay добавляет fresh PackageManager lookups для новых
-flows. Они и socket control делят NativeCallbackGate32; порог5s проверяется после
+flows. Они и socket control делят NativeCallbackGate32; порог 5s проверяется после
 return и не отменяет зависший Binder. При saturation нельзя ускоряться signer-cache/
 UID shortcut без сохранения security contract. Проверять setup tails, old/new
 flows, Stop/revoke, callback starvation и ICMP/PTB в реальном patched AAR.
-Overlay пока не применён/не собран; stock AAR не подтверждает этот путь.
+В срезе 24 октября overlay ещё не был применён и собран.
+Это не утверждение о текущем состоянии Android. Обычный AAR не подтверждает
+изменённый путь; более поздний артефакт требует своего точного происхождения
+и соответствующих device-результатов.
 
 
 <!-- /source-unit: 14.5 -->
@@ -478,7 +471,8 @@ resolver и собственная реализация QUIC не требуют
 4. TR-02/03: один отдельно выбранный migration/PMTU prototype только после
    API/owner/CC/server gates и разрешения исполнения; controlled restart сохраняется.
 
-Это приоритеты исследований и будущей реализации. Безотказность/превосходство,
+Это исторические приоритеты разбора и входы будущей реализации; новые исследования
+из них автоматически не запускаются. Безотказность/превосходство,
 прирост Mbps и непрерывный звонок не доказаны чтением исходников.
 
 
@@ -495,7 +489,7 @@ resolver и собственная реализация QUIC не требуют
 [T05]: https://developer.android.com/reference/android/net/Network#bindSocket(java.io.FileDescriptor)
 
 T01 §§8.2/9/9.4, T02 §§6.2/7.6, T03 §§5.2…5.4 — стандарты с ограниченной областью.
-T04/T05 прочитаны2026-10-24, mutable docs не заменяют exact fork/Android API gate.
+T04/T05 прочитаны 2026-10-24, mutable docs не заменяют exact fork/Android API gate.
 Точные upstream files/commits/blob/SHA256 и local source lines — в evidence.
 
 
@@ -582,7 +576,7 @@ useful completion и ресурсов. Пока все такие executions **N
 <a id="reviewed-brutal-dispatch"></a>
 ## 20. Рецензированный вывод: полный callback contract важнее имени алгоритма
 
-26 октября2026. **R04-10 ACCEPTED только в source/method-set scope**.
+26 октября 2026. **R04-10 ACCEPTED только в source/method-set scope**.
 [Рецензия](../research/reviews/2H-HB02-R04-10.md) содержит exact inputs,
 guards и ограничения. R04-09/весь R04-004 и реальная производительность не приняты.
 
@@ -591,7 +585,7 @@ guards и ограничения. R04-09/весь R04-004 и реальная п
 имеет time.Time вместо требуемого [extended monotime interface](https://github.com/SagerNet/quic-go/blob/ccd46abedd39c6f8384b1df8daf42008724958f5/congestion/interface.go)
 и не имеет двух остальных extended methods. Normal selection берёт base adapter,
 который не участвует в batch feedback dispatch. Individual ACK/loss stubs не
-обновляют ackRate; на этом пути остаётся начальное1. Это manual source derivation,
+обновляют ackRate; на этом пути остаётся начальное 1. Это manual source derivation,
 не исполнение Go или измеренный wire-rate.
 
 Применимость ограничена выбранной Brutal-веткой; HY2 auto/BBR и server/client
@@ -605,3 +599,64 @@ engine→adapter→controller evidence должны предшествовать
 увеличивает offered load; скорость, fairness, полезное completion и energy требуют
 отдельной приёмки. Все execution/native/live
 gates **NOT_RUN**. Новый transport/самописный controller не предлагается.
+
+[D16]: https://research.google/pubs/the-tail-at-scale/
+[D01]: https://www.rfc-editor.org/rfc/rfc8899.html
+[D02]: https://www.rfc-editor.org/rfc/rfc9000.html
+[D04]: https://www.rfc-editor.org/rfc/rfc9221.html
+[D05]: https://quic-go.net/docs/quic/optimizations/
+[D03]: https://www.rfc-editor.org/rfc/rfc9002.html
+[D06]: https://v2.hysteria.network/docs/advanced/Performance/
+[D07]: https://v2.hysteria.network/docs/developers/Protocol/
+[D08]: https://datatracker.ietf.org/doc/html/rfc8290
+[D26]: https://go.dev/doc/gc-guide
+[D27]: https://docs.kernel.org/accounting/psi.html
+[D28]: https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html
+
+[S12]: https://www.rfc-editor.org/rfc/rfc9114.html
+
+[S13]: https://github.com/HyNetworks/tcp-brutal
+
+[S03]: https://www.usenix.org/conference/usenixsecurity24/presentation/xue-fingerprinting
+
+[S06]: https://www.rfc-editor.org/rfc/rfc9001.html
+
+[S23]: https://www.rfc-editor.org/rfc/rfc9000.html
+
+[S14]: https://github.com/klzgrad/naiveproxy/blob/master/README.md
+
+[S15]: https://github.com/klzgrad/naiveproxy/releases/tag/v147.0.7727.49-3
+
+[S16]: https://github.com/XTLS/Xray-core/discussions/4113
+
+[S11]: https://github.com/HyNetworks/hysteria/blob/master/PROTOCOL.md
+
+[S17]: https://forum.torproject.org/t/tor-project-user-support-report-for-january-2026/21221
+
+[S18]: https://www.usenix.org/conference/usenixsecurity25/presentation/wails
+
+[S20]: https://theupdateframework.github.io/specification/latest/
+
+[S21]: https://github.com/Shopify/toxiproxy
+
+[S22]: https://software.es.net/iperf/
+
+## Применение в двух планах
+
+Для [ПК](../../planning/knowledge-application/PC-PLAN.md) главный потребитель —
+PC-06, затем измерительная частьPC-07; для
+[Android](../../planning/knowledge-application/ANDROID-PLAN.md) — ANDR-07/08.
+Миграция пути дополнительно зависит от защищённого жизненного цикла
+и совместимости обоих концов. Платформа владеет исполнением, общая policy
+не получает native-ресурсы.
+
+Сначала переиспользуются возможности выбранного ядра и существующие владельцы
+буферов, очередей и таймеров. Изменение окна или offload оправдано найденным
+узким местом и проверенным API; цена включает совместимость, лицензию точной
+цепочки и эксплуатацию. Простой личный VPS не требует нового распределённого
+управления. Его текущие оплата, нагрузка, версия и порты ведутся отдельно
+владельцем сервера, а не в теории.
+
+Все количественные улучшения, проверки native-сокета, ресурсы устройства
+и полезный сетевой путь здесь **NOT_RUN**. Формулы и условные traces остаются
+моделями при явно указанных предпосылках.

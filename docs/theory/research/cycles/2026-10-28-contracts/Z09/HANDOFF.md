@@ -1,103 +1,113 @@
-# R28-Z09 — HANDOFF
+# Метрика восстановления: фиксированный состав и неизвестные исходы
 
-## Claim
+**R28-Z09-A, срез 28 октября 2026 года. Статус автора — READY_FOR_REVIEW.**
+[Полный разбор](REPORT.md) · [Источники](SOURCES.md).
 
-**R28-Z09-A — corrected fixed-cohort maturity contract.**
+## Краткий вывод
 
-Protected task completion rate не искажается pending/early outcomes, если:
+У заранее зарегистрированной когорты ранний успех не уменьшает знаменатель,
+а ожидание, пропуск наблюдения и неизвестные часы не исчезают из расчёта.
+При явных предпосылках получаются диапазоны возможной доли завершений,
+а не точная вероятность успеха VPN. Защита конечного события задачи
+и защита всей операции требуют разных подтверждений.
 
-1. единица — pre-outcome registered task-recovery episode; retries/stages не
-   создают новые units;
-2. enrollment roster/N фиксируется независимо от outcomes;
-3. horizon `D(class)` задан до outcome;
-4. analytic maturity определяется только `t0+D≤cut_time` в сравнимом clock scope;
-5. ранний success сохраняется, но не получает меньший denominator; ранний
-   not-complete/partial остаётся provisional;
-6. timing/follow-up unknown остаются в N;
-7. task/protection/system axes разделены; P называется endpoint-protected, а не
-   whole-operation protected.
+**Применимость:** описательная оценка фиксированного receipt-состава.
+**Предел:** не вся популяция, не причинный эффект политики и не
+измеренный recovery rate. Реализация producer/реестра отсутствует в доказательстве.
 
-Author status: **READY_FOR_REVIEW**.
+## Условия
 
-## Scoped recommendation
+1. Единица — эпизод task-recovery, зарегистрированный до исхода;
+   retries и стадии не создают новых единиц.
+2. Правило набора задано заранее; состав N фиксируется после его закрытия
+   и не меняется по результатам.
+3. Горизонт `D(class)` выбран до исхода.
+4. Зрелость задаётся `t0+D≤cut_time` в сопоставимом домене часов.
+5. Ранний успех сохраняется; раннее «пока нет»/partial не становится
+   окончательным F/Q. Промежуточный диапазон относится ко всему N.
+6. Неизвестные timing/follow-up остаются в N.
+7. Task/protection/system оси разделены; P означает endpoint-protected,
+   не whole-operation protected. Категории взаимоисключающи;
+   отмена не переписывает уже подтверждённый поглощающий успех.
 
-- **A / cohort+maturity:** `ACCEPT_CORRECTED_FOR_INDEPENDENT_REVIEW` для fixed
-  registered cohort и endpoint-protected system ITT при явных producer assumptions.
-- **B/privacy/OSS/pilot:** `DEFER/ADAPT`; не принимать по аналогии. Current journal
-  не complete registry/task producer; OONI reference-only; user pilot NOT_RUN.
-- Это предложение для отдельного review, не научный ACCEPTED и не product/native/live PASS.
+## Формулы
 
-## Formulas
+Фиксированный состав: `N=P+U+X+Q+F+C+M+R`, N>0.
 
-Fixed roster at cut:
-
-`N=P+U+X+Q+F+C+M+R`.
-
-- System endpoint-protected ITT:
+- Системное endpoint-protected завершение:
   `I_sys=[P/N,(P+X+M+R)/N]`.
-- Task resolved any route:
+- Завершение задачи любым маршрутом:
   `I_task=[(P+U+X)/N,(P+U+X+C+M+R)/N]`.
 
-At final comparable cut `R=0`. These are deterministic identification hulls,
-not confidence intervals or selection correction. Unknown registry completeness
-for intended factual attempts can force `[0,1]`.
+На итоговом сопоставимом срезе R=0. Это детерминированные границы
+идентификации при корректных категориях и составе, не confidence intervals
+и не поправка на выбор участников. Точность границ требует совместной
+допустимости крайних назначений неизвестных исходов.
+При неограниченном числе незарегистрированных фактических попыток
+целевая граница может стать `[0,1]`. Для N=0 доля не определена.
 
-## Strongest opposing cases checked
+## Контрпримеры
 
-1. **Early denominator:** 1 early P + 1 pending → mature-only reports 1; fixed N
-   correctly gives `[1/2,1]` until second matures.
-2. **Early not-complete:** response at +10, success at +40<D → early F would be
-   false; only D or absorbing contract may assign F/Q terminally.
-3. **Off→on→complete:** точечный protection sample рядом с ручной отметкой не
-   покрывает фактический endpoint interval; без producer coverage → X. Известный
-   unprotected route → U. Whole-operation protection тем более не следует.
-4. **Clock reset:** incomparable elapsed scopes → M_timing, not exclusion/success.
-5. **User stop:** known non-success for system ITT, unknown latent any-route task.
-6. **Retries/late success:** one episode/denominator; late success does not rewrite
-   timely outcome.
+1. Один ранний P и один pending: знаменатель 1 ложно даёт долю 1;
+   по N=2 промежуточная граница `[1/2,1]`.
+2. «Пока нет» в +10, success в +40<D: ранний F был бы ошибкой.
+3. Off→on→complete: проба возле ручной отметки не покрывает фактический
+   endpoint interval. Без coverage — X; явно незащищённое завершение — U.
+4. Несопоставимые часы после reboot — M_timing, не исключение/успех.
+5. Отмена до завершения — non-success для системной величины;
+   скрытое дальнейшее завершение любым маршрутом неизвестно.
+6. Повторы сохраняют один эпизод; поздний успех не переписывает итог к D.
 
-## Source/caller and reuse
+## Источники и готовое переиспользование
 
-- Current project bytes available and hashed; repository commit anchor
-  `413621d…`, but files untracked, so hashes identify reviewed source.
-- `SessionJournal`: process-local ring128, typed facts, GPL-3.0-or-later;
-  adapt vocabulary only, reject as registry/task producer.
-- `ControllerReport/Store/MainActivity`: frozen exact displayed text + manual
-  `ACTION_SEND`; reuse/adapt manual aggregate export, not durable storage/proof.
-- OONI Probe CLI v3.31.0 commit `1605e004…`, GPL-3.0: separate save/submit gates;
-  `upload` CLI is unimplemented. Reference/adapt only, no code copy.
-- Jiang–Ding v6 §2.1: worst-case binary missing bounds without MAR; does not
-  provide registry completeness/protection bridge.
-- Paired C03/C06 HANDOFFs became available only at final review. Both support
-  fixed roster/outcome-independent maturity; C06's interval-coverage objection
-  tightened P so a point sample without producer coverage becomes X. Agreement
-  is corroboration, not primary evidence; paired files were not modified.
+- В исходном срезе байты проекта доступны и хешированы. Anchor `413621d…`
+  не подтверждает содержимое untracked файлов: его задают их SHA-256.
+- `SessionJournal`, GPL-3.0-or-later: process-local ring128 и typed facts.
+  Брать словарь; не считать полным реестром или producer результата задачи.
+- `ControllerReport/Store/MainActivity`: замороженный точный текст и ручной
+  `ACTION_SEND`. Брать границу экспорта, не долговечность или доказательство доставки.
+- OONI Probe CLI v3.31.0 `1605e004…`, GPL-3.0: отдельные save/submit;
+  CLI upload не реализован. Ориентир, без копирования кода.
+- Jiang–Ding v6 §2.1: крайние бинарные исходы при пропусках без MAR.
+  Статья не доказывает полноту реестра и связь с защитой VPN.
+- C03/C06 стали доступны к финальному сопоставлению. Их согласие не
+  является независимым runtime-доказательством; возражение C06 уточнило
+  условие покрытия endpoint interval.
 
-## Privacy/cost
+## Приватность и цена
 
-Minimal record: closed enums, random local IDs, clock/horizon class, provisional
-observations, task-at-D, protection-at-completion, system/user-stop and resource
-axis. No domains/raw URLs/IP/SNI/SSID/package/account/workplace inventory,
-content, credentials, stable device ID or raw errors. Local counts/bounds default;
-manual immutable export only. Durable registry adds storage/migration/tombstone/
-clock/privacy cost beyond current ring.
+Минимум — закрытые enums, случайные локальные IDs, домен часов/горизонт,
+предварительные факты, task-at-D, подтверждение защиты, отмена и ресурсы.
+Без domains/raw URLs/IP/SNI/SSID/package/account/workplace inventory,
+контента, credentials, устойчивого device ID и raw errors.
+По умолчанию — локальные counts/диапазоны, ручной неизменяемый экспорт.
+Долговечный реестр добавляет хранение, миграции, часы, удаление и privacy review;
+конкретная БД и законность политики удаления этим пакетом не выбраны.
 
-## Platform consequence
+## Применение и предлагаемые решения
 
-Windows/Android owners would need an explicit registration owner, fixed roster,
-durable IDs through cut, clock-scope/bridge, task receipt producer and protection
-bridge. Existing lifecycle/journal fields alone do not satisfy those contracts.
-No platform status changes from this research.
+Для владельцев нужны регистрация, фиксированный состав, IDs до среза,
+сопоставимые часы, task receipt и подтверждение области защиты.
+Одни lifecycle/journal поля этих условий не выполняют.
+Маршрут: PC-07/09 [плана ПК](../../../../../planning/knowledge-application/PC-PLAN.md)
+и ANDR-08/09 [плана Android](../../../../../planning/knowledge-application/ANDROID-PLAN.md).
 
-## Unknown / future gates (NOT_RUN)
+- A: `ACCEPT_CORRECTED_FOR_INDEPENDENT_REVIEW` — предложение независимой
+  рецензии ограниченного контракта, не научное ACCEPTED.
+- B/privacy/OSS/pilot: DEFER/ADAPT отдельно; пользовательский пилот NOT_RUN.
 
-Numerical D/R, durable registry owner, lawful deletion/tombstones, strict
-whole-operation protection bridge, task-level caller, all-user selection,
-sampling/comparison inference, user burden/effect, legal compliance, synthetic
-schema and device/user pilot.
+Не установлены численные D/R, владелец хранения, удаление/tombstones,
+строгая защита всей операции, реальный task caller, репрезентативность,
+выборочные/причинные сравнения и польза для пользователя.
+Текущие статусы платформ этим предложением не закрываются.
 
-## Work stages completed
-
-Source/pin/caller; main argument; six opposing traces; reuse/licence/cost;
-continuation interval bounds/triviality; scoped handoff. Paired C03/C06 HANDOFFs
-were not available at review stage; no waiting/cross-write.
+<a id="r28-z09--handoff"></a>
+<a id="claim"></a>
+<a id="scoped-recommendation"></a>
+<a id="formulas"></a>
+<a id="strongest-opposing-cases-checked"></a>
+<a id="sourcecaller-and-reuse"></a>
+<a id="privacycost"></a>
+<a id="platform-consequence"></a>
+<a id="unknown--future-gates-not_run"></a>
+<a id="work-stages-completed"></a>

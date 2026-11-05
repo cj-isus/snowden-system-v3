@@ -20,7 +20,7 @@
 | Поле | Значение |
 |---|---|
 | Evidence | Первичные RFC norms; exact source facts; ручные counterexamples и conditional model. Никакого execution/field evidence |
-| Дата / pins | Windows manifest повторно прочитан28.10: sing-box1.13.19 `b5ebaa1…`, uTLS1.8.4 `cf49b086…`, sing0.8.13, miekg/dns1.1.72; дополнительный first-write trace sing-vmess pseudo `3aed155119a1` / full `3aed155119a174c9290a4099841049f0cb275e02` |
+| Дата / pins | Windows manifest повторно прочитан 28.10: sing-box1.13.19 `b5ebaa1…`, uTLS1.8.4 `cf49b086…`, sing0.8.13, miekg/dns1.1.72; дополнительный first-write trace sing-vmess pseudo `3aed155119a1` / full `3aed155119a174c9290a4099841049f0cb275e02` |
 | Actual caller | `corebridge.renderAndPrepareContext → PreflightResolver → render VLESS/WS → sing-box TLS/WS/dialer`; текущий renderer **не включает real ECH**. ECH transitions условны для future consumer, не текущая deployed неисправность |
 | Принципиальные предпосылки | Действительная platform policy/owner/epoch; правильные reference identities и разрешённые disclosures; native barrier/validation отдельно. Их истинность runtime здесь не доказана |
 | Рекомендация | Принять A как ограниченный proposed contract, B/C как source-scoped prerequisites/counterexamples после отдельного review; не переносить scientific verdict в product PASS |
