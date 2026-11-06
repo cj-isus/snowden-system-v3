@@ -16,10 +16,12 @@ if (exported.materials < 200 || !fs.existsSync(path.join(quartz, "site-content/i
 const build = spawnSync(process.execPath, ["quartz/bootstrap-cli.mjs", "build", "--directory", "site-content", "--output", "public", "--concurrency", "2"], { cwd: quartz, stdio: "inherit" })
 if (build.status !== 0) process.exit(build.status ?? 1)
 const index = fs.readFileSync(path.join(output, "index.html"), "utf8")
+const graph = fs.readFileSync(path.join(output, "graph.html"), "utf8")
+const downloads = fs.readFileSync(path.join(output, "downloads.html"), "utf8")
 const content = JSON.parse(fs.readFileSync(path.join(output, "static/contentIndex.json"), "utf8"))
 const navigation = await buildNavigation(quartz, content)
 const missing = exported.entries.filter(entry => entry.type === "material" && !fs.existsSync(path.join(output, entry.destination.replace(/\.md$/, ".html"))))
-if (missing.length || Object.keys(content).length < exported.materials || !index.includes("knowledge-home") || !index.includes("graph-container")) throw new Error(`Incomplete Pages artifact: ${missing.length} materials missing`)
+if (missing.length || Object.keys(content).length < exported.materials || !graph.includes("knowledge-home") || !graph.includes("graph-container") || !index.includes("product-home") || !downloads.includes("release-downloads") || !fs.existsSync(path.join(output, "release-guide.html"))) throw new Error(`Incomplete Pages artifact: ${missing.length} materials missing`)
 const receipt = {
   sourceCommit: exported.sourceRef, sourceMaterials: exported.materials,
   indexedPages: Object.keys(content).length,

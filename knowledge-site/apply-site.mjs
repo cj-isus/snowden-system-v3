@@ -22,6 +22,7 @@ const configPath = path.join(quartz, "quartz.config.ts")
 fs.writeFileSync(configPath, fs.readFileSync(configPath, "utf8").replace('baseUrl: "cj-isus.github.io/snowden-system-v3"', "baseUrl: " + JSON.stringify(baseUrl)))
 fs.copyFileSync(path.join(site, "styles/custom.scss"), path.join(quartz, "quartz/styles/custom.scss"))
 for (const file of fs.readdirSync(path.join(site, "components"))) fs.copyFileSync(path.join(site, "components", file), path.join(quartz, "quartz/components", file))
+fs.copyFileSync(path.join(site, "releases.json"), path.join(quartz, "quartz/components/releases.json"))
 
 function patch(file, before, after) {
   const absolute = path.join(quartz, file), text = fs.readFileSync(absolute, "utf8")
@@ -35,7 +36,7 @@ patch("quartz/components/Head.tsx", '<link rel="preconnect" href="https://cdnjs.
 // Keep Quartz Graph markup and styles, replace its permanent Pixi/physics loop.
 fs.copyFileSync(path.join(site, "scripts/graph.inline.ts"), path.join(quartz, "quartz/components/scripts/graph.inline.ts"))
 patch("quartz/components/renderPage.tsx", '"static/contentIndex.json"', '"static/navigationIndex.json"')
-const resourceVersion = createHash("sha256").update(fs.readFileSync(path.join(quartz, "knowledge-export.json"))).update(["apply-site.mjs", "patch-search.mjs", "scripts/graph.inline.ts", "styles/custom.scss", "quartz.layout.ts", "quartz.config.ts"].map(file => fs.readFileSync(path.join(site, file), "utf8")).join("\0")).digest("hex").slice(0, 12)
+const resourceVersion = createHash("sha256").update(fs.readFileSync(path.join(quartz, "knowledge-export.json"))).update(["apply-site.mjs", "patch-search.mjs", "scripts/graph.inline.ts", "styles/custom.scss", "quartz.layout.ts", "quartz.config.ts", "releases.json", ...fs.readdirSync(path.join(site, "components")).map(file => `components/${file}`)].map(file => fs.readFileSync(path.join(site, file), "utf8")).join("\0")).digest("hex").slice(0, 12)
 for (const file of ["postscript.js", "index.css"]) patch("quartz/components/renderPage.tsx", `joinSegments(baseDir, "${file}")`, `joinSegments(baseDir, "${file}") + "?v=${resourceVersion}"`)
 applySearchPatches(patch, basePath)
 patch("quartz/components/scripts/mermaid.inline.ts", '"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.0/mermaid.esm.min.mjs"', `new URL(${JSON.stringify(basePath + "/static/mermaid/mermaid.js")}, window.location.origin).href`)

@@ -3,7 +3,7 @@ import * as Plugin from "./quartz/plugins"
 
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: "Snowden / знания",
+    pageTitle: "Snowden System",
     pageTitleSuffix: " · Snowden",
     enableSPA: true,
     enablePopovers: true,
@@ -18,12 +18,12 @@ const config: QuartzConfig = {
       typography: { header: "Segoe UI", body: "Segoe UI", code: "Consolas" },
       colors: {
         lightMode: {
-          light: "#f9fafc", lightgray: "#e0e3ec", gray: "#7c8498",
+          light: "#f9fafc", lightgray: "#e0e3ec", gray: "#647084",
           darkgray: "#41495c", dark: "#202538", secondary: "#7054b3",
           tertiary: "#237a79", highlight: "rgba(112,84,179,0.09)", textHighlight: "#eadc9e99",
         },
         darkMode: {
-          light: "#18191f", lightgray: "#30323e", gray: "#8a90a5",
+          light: "#18191f", lightgray: "#30323e", gray: "#a0a7bd",
           darkgray: "#c1c5d4", dark: "#eef0f8", secondary: "#b8a1ed",
           tertiary: "#8ac5c1", highlight: "rgba(184,161,237,0.10)", textHighlight: "#88702c66",
         },

@@ -3,7 +3,8 @@ import path from "node:path"
 import crypto from "node:crypto"
 import { spawnSync } from "node:child_process"
 import { createRequire } from "node:module"
-import { pathToFileURL } from "node:url"
+import { pathToFileURL, fileURLToPath } from "node:url"
+import { readReleases } from "./release-catalogue.mjs"
 
 const args = new Map()
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1])
@@ -11,6 +12,8 @@ const repository = path.resolve(args.get("--repository") ?? ".")
 const quartz = path.resolve(args.get("--quartz") ?? "")
 const output = path.resolve(args.get("--out") ?? "")
 const ref = args.get("--ref") ?? "HEAD"
+const site = path.dirname(fileURLToPath(import.meta.url))
+const releaseCatalogue = readReleases(site)
 if (!args.has("--quartz") || !args.has("--out") || output === repository || output === quartz) throw new Error("Explicit isolated Quartz and output directories are required")
 if (fs.existsSync(output) && fs.readdirSync(output).length) throw new Error("Use a fresh export directory; canonical files are never overwritten")
 const require = createRequire(path.join(quartz, "package.json"))
@@ -174,8 +177,10 @@ for (const directory of [...directories].sort()) {
   titles.set(index, title)
 }
 const materials = entries.filter(e => e.type === "material").length
-write("index.md", matter.stringify(`**${materials} материалов**: теория, аргументы, источники, рецензии и планы разработки.\n\n[Начать чтение](./theory/READING-GUIDE.md) · [Найти ответ](./theory/KNOWLEDGE-MAP.md) · [Словарь](./theory/GLOSSARY.md) · [План ПК](./planning/knowledge-application/PC-PLAN.md) · [План Android](./planning/knowledge-application/ANDROID-PLAN.md)\n\nГраф отражает реальные ссылки между заметками. Подробные источники и авторские оригиналы доступны через дерево. Научный вывод, план реализации и проверка работающего VPN имеют разные границы доказательства.\n`, { title: "Граф знаний", description: "Открытая база знаний Snowden System: теория, источники и разработка адаптивного VPN." }))
+write("graph.md", matter.stringify(`**${materials} материалов**: теория, аргументы, источники, рецензии и планы разработки.\n\n[Начать чтение](./theory/READING-GUIDE.md) · [Найти ответ](./theory/KNOWLEDGE-MAP.md) · [Словарь](./theory/GLOSSARY.md) · [План ПК](./planning/knowledge-application/PC-PLAN.md) · [План Android](./planning/knowledge-application/ANDROID-PLAN.md)\n\nГраф отражает реальные ссылки между заметками. Подробные источники и авторские оригиналы доступны через дерево. Научный вывод, план реализации и проверка работающего VPN имеют разные границы доказательства.\n`, { title: "Граф знаний", description: "Открытая база знаний Snowden System: теория, источники и разработка адаптивного VPN." }))
+write("index.md", matter.stringify("", { title: "Snowden System — адаптивный VPN", description: "Snowden System: VPN для Windows и Android в разработке. Загрузки, обновления и открытая база знаний." }))
+for (const name of ["downloads.md", "release-guide.md"]) write(name, fs.readFileSync(path.join(site, "content", name)))
 const exportedDestinations = new Set(destinations.values())
-const report = { sourceRef, ref, sourceFiles: sourcePaths.length, materials, generatedDirectoryPages: [...directories].filter(d => !exportedDestinations.has(d + "/index.md")).length, entries, historicalCoordinates: unresolved }
+const report = { sourceRef, ref, sourceFiles: sourcePaths.length, materials, productPages: ["index", "downloads", "release-guide"], releaseCatalogue: { updatedAt: releaseCatalogue.updatedAt, releases: releaseCatalogue.releases.length }, generatedDirectoryPages: [...directories].filter(d => !exportedDestinations.has(d + "/index.md")).length, entries, historicalCoordinates: unresolved }
 fs.writeFileSync(path.join(path.dirname(output), "knowledge-export.json"), JSON.stringify(report, null, 2) + "\n")
-console.log(JSON.stringify({ sourceRef, sourceFiles: sourcePaths.length, materials, exportedMarkdown: titles.size + 1, historicalCoordinates: unresolved.length }))
+console.log(JSON.stringify({ sourceRef, sourceFiles: sourcePaths.length, materials, exportedMarkdown: titles.size + 4, historicalCoordinates: unresolved.length }))
