@@ -12,12 +12,17 @@ var ErrCryptoCloseUncertain = errors.New("quic: original TLS close did not retur
 // original Close invokes TLS; observers join its result outside access.
 type cryptoCloseState struct {
 	access            sync.Mutex
+	owner             *cryptoSetup // original shell, set before constructor callbacks
 	done              chan struct{}
 	started, returned bool
 	original          *tls.QUICConn
+	closed            *tls.QUICConn // exact returned original; diagnostics retain h.conn
 	result            error
 	eventsStarted     bool // external event retirement, guarded by access
 	eventsResult      error
+	keysStarted       bool
+	keysResult        error
+	keys              cryptoKeyReferences
 }
 
 // Close preserves the original TLS result, including an ordinary handshake
@@ -51,6 +56,7 @@ func (h *cryptoSetup) Close() (result error) {
 		defer r.access.Unlock()
 		r.returned, r.result = returned, result
 		if returned {
+			r.closed = original
 			r.original = nil // h.conn remains available for ConnectionState
 		}
 		close(r.done)

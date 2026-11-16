@@ -2,18 +2,15 @@ package hysteria2
 
 import (
 	"context"
-	"io"
 	"net"
-	"os"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/sagernet/quic-go"
+	"github.com/sagernet/quic-go/packetaddr"
 	"github.com/sagernet/sing-quic/hysteria2/internal/protocol"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
-	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/pipe"
 )
@@ -70,157 +67,40 @@ func (m *udpMessage) releaseMessage() {
 type udpPacketConn struct {
 	ctx             context.Context
 	cancel          common.ContextCancelCauseFunc
+	initStage       udpPacketInitStage // retained constructor prefix; immutable after publication
 	sessionID       uint32
 	quicConn        *quic.Conn
+	local           packetaddr.Snapshot // immutable constructor-time socket fact, not live path/egress
+	localSource     net.Addr            // original constructor capture prefix, nil after known capture
 	data            chan *udpMessage
 	udpMTU          int
 	packetId        atomic.Uint32
 	closeOnce       sync.Once
+	destroyErr      error
+	shutdownOnce    sync.Once
+	shutdownErr     error
+	shutdownStage   udpShutdownStage
+	shutdownCurrent *udpMessage // one original queue drain, retained on abnormal return
 	defragger       *udpDefragger
 	onDestroy       func()
 	readWaitOptions N.ReadWaitOptions
 	readDeadline    pipe.Deadline
-	receiveAccess   sync.Mutex // serial feed/defrag/close; readers own dequeued messages
+	readSlots       [maxUDPReadSessionCalls]udpReadCall // budget.mu admits; original caller owns payload fields
+	readCalls       int                                 // budget.mu; includes retained unknown slots
+	readSealed      bool                                // budget.mu
+	control         sync.Mutex                          // serialize setters and original close timer stop
+	controlCalls    int                                 // budget.mu; distinct lane from packet reads
+	controlFailed   bool                                // budget.mu; unknown timer/native setter result
+	receiveAccess   sync.Mutex                          // serial feed/defrag/close; readers own dequeued messages
+	receiveInput    *udpMessage                         // receiveAccess; retained through feed/release/queue handoff
+	receiveOutput   *udpMessage                         // receiveAccess; original assembled output through handoff
+	receiveFailed   bool
 	sendBudget      *udpSendBudget
 	sendScope       *quic.DatagramSendScope
 }
 
-func newUDPPacketConn(ctx context.Context, quicConn *quic.Conn, budget *udpReceiveBudget, send *udpSendBudget, onDestroy func()) (*udpPacketConn, error) {
-	scope, err := quicConn.NewDatagramSendScope()
-	if err != nil {
-		return nil, err
-	}
-	constructed := false
-	defer func() {
-		if !constructed {
-			_ = scope.Close()
-		}
-	}()
-	ctx, cancel := common.ContextWithCancelCause(ctx)
-	conn := &udpPacketConn{
-		ctx:          ctx,
-		cancel:       cancel,
-		quicConn:     quicConn,
-		data:         make(chan *udpMessage, 64),
-		udpMTU:       initialUDPPacketBudget,
-		defragger:    newUDPDefragger(budget),
-		onDestroy:    onDestroy,
-		readDeadline: pipe.MakeDeadline(),
-		sendBudget:   send,
-		sendScope:    scope,
-	}
-	constructed = true
-	return conn, nil
-}
-
-func (c *udpPacketConn) ReadPacket(buffer *buf.Buffer) (destination M.Socksaddr, err error) {
-	select {
-	case p := <-c.data:
-		_, err = buffer.ReadOnceFrom(p.data)
-		destination = M.ParseSocksaddr(p.destination).Unwrap()
-		p.releaseMessage()
-		return
-	case <-c.ctx.Done():
-		return M.Socksaddr{}, io.ErrClosedPipe
-	case <-c.readDeadline.Wait():
-		return M.Socksaddr{}, os.ErrDeadlineExceeded
-	}
-}
-
-func (c *udpPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	select {
-	case pkt := <-c.data:
-		n = copy(p, pkt.data.Bytes())
-		destination := M.ParseSocksaddr(pkt.destination).Unwrap()
-		if destination.IsFqdn() {
-			addr = destination
-		} else {
-			addr = destination.UDPAddr()
-		}
-		pkt.releaseMessage()
-		return n, addr, nil
-	case <-c.ctx.Done():
-		return 0, nil, io.ErrClosedPipe
-	case <-c.readDeadline.Wait():
-		return 0, nil, os.ErrDeadlineExceeded
-	}
-}
-
-func (c *udpPacketConn) inputPacket(message *udpMessage) {
-	c.receiveAccess.Lock()
-	defer c.receiveAccess.Unlock()
-	select {
-	case <-c.ctx.Done():
-		message.releaseMessage()
-		return
-	default:
-	}
-	if message.fragmentTotal <= 1 {
-		select {
-		case c.data <- message:
-		default:
-			message.releaseMessage()
-		}
-	} else {
-		newMessage := c.defragger.feed(message)
-		if newMessage != nil {
-			select {
-			case c.data <- newMessage:
-			default:
-				newMessage.releaseMessage()
-			}
-		}
-	}
-}
-
-func (c *udpPacketConn) Close() error {
-	c.closeOnce.Do(func() {
-		c.closeWithError(os.ErrClosed)
-		c.onDestroy()
-	})
-	return nil
-}
-
-func (c *udpPacketConn) closeWithError(err error) {
-	if c.sendScope != nil {
-		_ = c.sendScope.Close() // seal enqueue before cancellation/RX retirement
-	}
-	c.cancel(err)
-	c.receiveAccess.Lock()
-	defer c.receiveAccess.Unlock()
-	c.defragger.close()
-	for {
-		select {
-		case message := <-c.data:
-			message.releaseMessage()
-		default:
-			return
-		}
-	}
-}
-
 func (c *udpPacketConn) LocalAddr() net.Addr {
-	return c.quicConn.LocalAddr()
-}
-
-func (c *udpPacketConn) SetDeadline(t time.Time) error {
-	if err := c.SetWriteDeadline(t); err != nil {
-		return err
-	}
-	c.readDeadline.Set(t)
-	return nil
-}
-
-func (c *udpPacketConn) SetReadDeadline(t time.Time) error {
-	c.readDeadline.Set(t)
-	return nil
-}
-
-func (c *udpPacketConn) SetWriteDeadline(t time.Time) error {
-	if c.sendScope == nil {
-		return net.ErrClosed
-	}
-	return c.sendScope.SetWriteDeadline(t)
+	return c.local.Addr()
 }
 
 func (c *udpPacketConn) ReaderMTU() int {

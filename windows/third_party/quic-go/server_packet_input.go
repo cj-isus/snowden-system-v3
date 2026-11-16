@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/sagernet/quic-go/internal/protocol"
+	"github.com/sagernet/quic-go/internal/wire"
 	"github.com/sagernet/quic-go/qlog"
 	"github.com/sagernet/quic-go/qlogwriter"
 )
@@ -21,6 +22,8 @@ type serverPacketInputState struct {
 	count, bytes                             int
 	callsDone, failure                       chan struct{}
 	current, handoff, draining               receivedPacket
+	header                                   *wire.Header
+	rejected                                 rejectedPacket // original handoff before channel commit
 	held                                     bool
 	candidate                                *wrappedConn
 	opening                                  serverConnectionOpening
@@ -191,18 +194,53 @@ func (s *baseServer) processServerPacket(p receivedPacket) {
 	if o.held {
 		s.releaseServerPacket()
 	}
+	if o.header != nil || !emptyRejectedPacketMetadata(o.rejected) {
+		panic(errPacketInputUncertain) // do not overwrite an unfinished header/handoff
+	}
 	o.current = receivedPacket{}
 	returned = true
 }
 
+// Only the original receive task mutates its parsed Header. A response message
+// carries a value copy, so this cannot change the receiving actor's metadata.
+func (s *baseServer) clearServerHeader() {
+	if s.packetInput.header != nil {
+		s.packetInput.header.Token = nil // references only, before pool return/handoff
+		s.packetInput.header = nil
+	}
+}
+
 func (s *baseServer) releaseServerPacket() {
+	s.clearServerHeader()
 	releaseClosedPacket(&s.packetInput.current)
 	s.packetInput.held = false
 }
 
 func (s *baseServer) transferServerPacket(handler packetHandler, p receivedPacket) {
 	s.packetInput.held = false // private handler consumes the original ref at entry
+	s.clearServerHeader()
 	handler.handlePacket(p)
+}
+
+// The existing fixed-capacity channels bound metadata. Transfer the original
+// raw reference once, without a concurrent packetBuffer.Split or payload clone.
+func (s *baseServer) enqueueRejectedPacket(queue chan rejectedPacket, p receivedPacket, hdr *wire.Header) {
+	o := &s.packetInput
+	if !o.held || hdr == nil || o.header != hdr || p.buffer == nil || o.current.buffer != p.buffer ||
+		len(p.data) == 0 || len(o.current.data) != len(p.data) || &o.current.data[0] != &p.data[0] ||
+		!emptyRejectedPacketMetadata(o.rejected) {
+		panic(errPacketInputUncertain) // original processing defer retains unknown input
+	}
+	o.rejected = rejectedPacket{receivedPacket: p, hdr: *hdr, hasHeader: true}
+	select {
+	case queue <- o.rejected:
+		o.held = false // only metadata stores follow; receiver may already return the pool buffer
+		s.clearServerHeader()
+		o.rejected = rejectedPacket{}
+	default:
+		o.rejected = rejectedPacket{}
+		s.releaseServerPacket()
+	}
 }
 
 func (s *baseServer) discardZeroRTTQueue(id protocol.ConnectionID) {
@@ -258,6 +296,8 @@ zeroRTT:
 	o.access.Lock()
 	failed := o.failed
 	o.access.Unlock()
-	s.runReturned = !failed && o.current.buffer == nil && o.handoff.buffer == nil && o.candidate == nil && !o.opening.active && s.rejectedConn == nil
+	s.runReturned = !failed && !o.held && emptyPathInputMetadata(o.current) &&
+		emptyPathInputMetadata(o.handoff) && emptyPathInputMetadata(o.draining) && o.header == nil &&
+		emptyRejectedPacketMetadata(o.rejected) && o.candidate == nil && !o.opening.active && s.rejectedConn == nil
 	cleanupReturned = true
 }

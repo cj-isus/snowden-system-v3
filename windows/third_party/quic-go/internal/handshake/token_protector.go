@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 
@@ -14,7 +15,14 @@ import (
 // TokenProtectorKey is the key used to encrypt both Retry and session resumption tokens.
 type TokenProtectorKey [32]byte
 
-const tokenNonceSize = 32
+const (
+	tokenNonceSize            = 32
+	tokenTagSize              = 16 // cipher.NewGCM's default tag
+	maxProtectedTokenSize     = 1024
+	maxProtectedTokenDataSize = maxProtectedTokenSize - tokenNonceSize - tokenTagSize
+)
+
+var errTokenSize = errors.New("token: issuer input exceeds local size limit")
 
 // tokenProtector is used to create and verify a token
 type tokenProtector struct {
@@ -28,6 +36,9 @@ func newTokenProtector(key TokenProtectorKey) *tokenProtector {
 
 // NewToken encodes data into a new token.
 func (s *tokenProtector) NewToken(data []byte) ([]byte, error) {
+	if s == nil || len(data) > maxProtectedTokenDataSize {
+		return nil, errTokenSize
+	}
 	var nonce [tokenNonceSize]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, err
@@ -36,12 +47,19 @@ func (s *tokenProtector) NewToken(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(nonce[:], aead.Seal(nil, aeadNonce, data, nil)...), nil
+	// Reserve the complete owned output once. Seal appends ciphertext/tag after
+	// the same nonce prefix; no intermediate ciphertext plus append clone.
+	out := make([]byte, tokenNonceSize, tokenNonceSize+len(data)+aead.Overhead())
+	copy(out, nonce[:])
+	return aead.Seal(out, aeadNonce, data, nil), nil
 }
 
 // DecodeToken decodes a token.
 func (s *tokenProtector) DecodeToken(p []byte) ([]byte, error) {
-	if len(p) < tokenNonceSize {
+	if s == nil || len(p) > maxProtectedTokenSize {
+		return nil, errTokenSize
+	}
+	if len(p) < tokenNonceSize+tokenTagSize {
 		return nil, fmt.Errorf("token too short: %d", len(p))
 	}
 	nonce := p[:tokenNonceSize]

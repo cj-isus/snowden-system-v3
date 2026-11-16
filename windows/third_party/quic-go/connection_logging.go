@@ -26,6 +26,8 @@ func toQlogFrame(frame wire.Frame) qlog.Frame {
 				Length: int64(len(f.Data)),
 			},
 		}
+	case *wire.NewTokenFrame:
+		return qlog.Frame{Frame: &qlog.NewTokenFrameInfo{Length: len(f.Token)}}
 	case *wire.StreamFrame:
 		return qlog.Frame{
 			Frame: &qlog.StreamFrame{

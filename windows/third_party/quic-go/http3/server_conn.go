@@ -18,7 +18,7 @@ import (
 // RawServerConn is an HTTP/3 server connection.
 // It can be used for advanced use cases where the application wants to manage the QUIC connection lifecycle.
 type RawServerConn struct {
-	rawConn rawConn
+	rawConn *rawConn // retain the owner captured by its original context callback
 
 	idleTimeout time.Duration
 	idleTimer   *time.Timer
@@ -52,7 +52,7 @@ func newRawServerConn(
 		qlogger:        qlogger,
 		logger:         logger,
 	}
-	c.rawConn = *newRawConn(conn, enableDatagrams, c.onStreamsEmpty, nil, qlogger, logger, nil)
+	c.rawConn = newRawConn(conn, enableDatagrams, c.onStreamsEmpty, nil, qlogger, logger, nil)
 	if idleTimeout > 0 {
 		c.idleTimer = time.AfterFunc(idleTimeout, c.onIdleTimer)
 	}
@@ -108,7 +108,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		c.idleTimer.Stop()
 	}
 
-	conn := &c.rawConn
+	conn := c.rawConn
 	qlogger := c.qlogger
 	decoder := c.decoder
 	connCtx := c.serverContext
@@ -142,13 +142,14 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		return
 	}
 	decodeFn := decoder.Decode(headerBlock)
-	var hfs []qpack.HeaderField
+	var hfs *[]qpack.HeaderField
 	if qlogger != nil {
-		hfs = make([]qpack.HeaderField, 0, 16)
+		collected := make([]qpack.HeaderField, 0, 16)
+		hfs = &collected
 	}
-	req, err := requestFromHeaders(decodeFn, maxHeaderBytes, &hfs)
+	req, err := requestFromHeaders(decodeFn, maxHeaderBytes, hfs)
 	if qlogger != nil {
-		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs)
+		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, *hfs)
 	}
 	if err != nil {
 		if errors.Is(err, errHeaderTooLarge) {
@@ -253,9 +254,9 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 }
 
 func (c *RawServerConn) rejectWithHeaderFieldsTooLarge(str *stateTrackingStream) {
-	hstr := newStream(str, &c.rawConn, nil, nil, c.qlogger)
+	hstr := newStream(str, c.rawConn, nil, nil, c.qlogger)
 	defer hstr.Close()
-	r := newResponseWriter(hstr, &c.rawConn, false, c.logger)
+	r := newResponseWriter(hstr, c.rawConn, false, c.logger)
 	r.WriteHeader(http.StatusRequestHeaderFieldsTooLarge)
 	r.Flush()
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"strconv"
-	"sync"
 
 	"github.com/sagernet/quic-go"
 	"github.com/sagernet/quic-go/quicvarint"
@@ -20,7 +19,8 @@ const (
 	maxUDPSendBytes        = 128 << 10
 	initialUDPPacketBudget = 1200 - 3
 	// Existing default allocator rounds a <=6160-byte packed frame to <=8192.
-	// Include bounded address materialization and a 255-pointer fragment table.
+	// Keep the conservative address/former255-pointer-table staging charge.
+	// Actual owned writes add retained input backing and stream one fragment.
 	udpSendCharge = 8192 + 2*(protocol.MaxAddressLength+64) + 255*8
 )
 
@@ -29,71 +29,6 @@ var (
 	errUDPFragmentSize = errors.New("invalid HY2 UDP fragment budget")
 	errUDPDestination  = net.InvalidAddrError("unsupported or oversized HY2 UDP destination")
 )
-
-// One non-waiting admission per carrier. This ledger covers HY2 staging until
-// synchronous write/cleanup return, not QUIC copies/history, foreign backing,
-// caller goroutines or pool/RSS high-water. No waiter or background task is made.
-type udpSendBudget struct {
-	mu       sync.Mutex
-	owners   int
-	bytes    int
-	poisoned bool
-	sealed   bool
-	settled  chan struct{}
-	reported bool
-}
-
-func (b *udpSendBudget) reserve() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.sealed || b.poisoned || b.owners >= maxUDPSendOwners || udpSendCharge > maxUDPSendBytes-b.bytes {
-		return false
-	}
-	b.owners++
-	b.bytes += udpSendCharge
-	return true
-}
-
-func (b *udpSendBudget) release() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.owners <= 0 || b.bytes < udpSendCharge {
-		b.poisoned = true
-		b.settleLocked()
-		return
-	}
-	b.owners--
-	b.bytes -= udpSendCharge
-	b.settleLocked()
-}
-
-func (b *udpSendBudget) settleLocked() {
-	// Poison settles negatively, never as a drained success or fresh capacity.
-	if b.sealed && !b.reported && (b.poisoned || b.owners == 0 && b.bytes == 0) {
-		b.reported = true
-		close(b.settled)
-	}
-}
-
-func (b *udpSendBudget) seal() <-chan struct{} {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if !b.sealed {
-		b.sealed = true
-		b.settled = make(chan struct{})
-	}
-	b.settleLocked()
-	return b.settled
-}
-
-func (b *udpSendBudget) retirementError() error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if !b.sealed || b.poisoned || b.owners != 0 || b.bytes != 0 {
-		return errClientUncertain
-	}
-	return nil
-}
 
 // Only known value representations may materialize an address. Never call an
 // arbitrary net.Addr.String before (or after) checking the resulting length.
@@ -140,7 +75,14 @@ func (m *udpMessage) headerSize() int {
 }
 
 func (m *udpMessage) pack() *buf.Buffer {
+	return m.packOwned(nil)
+}
+
+func (m *udpMessage) packOwned(original *udpWriteCall) *buf.Buffer {
 	buffer := buf.NewSize(m.headerSize() + m.data.Len())
+	if original != nil {
+		original.packed = buffer // before encoding or any Must/pool failure
+	}
 	common.Must(
 		binary.Write(buffer, binary.BigEndian, m.sessionID),
 		binary.Write(buffer, binary.BigEndian, m.packetID),
@@ -200,6 +142,7 @@ func fragUDPMessage(message *udpMessage, packetBudget int) ([]*udpMessage, error
 	return fragments, nil
 }
 
+// Counter-only private compatibility helper. Public writes use beginOwnedWrite.
 func (c *udpPacketConn) beginWrite(length int) error {
 	select {
 	case <-c.ctx.Done():
@@ -221,44 +164,63 @@ func (c *udpPacketConn) beginWrite(length int) error {
 	return nil
 }
 
-func (c *udpPacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
-	reserved := false
+func (c *udpPacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) (err error) {
+	var original *udpWriteCall
+	returned := false
 	defer func() {
-		buffer.Release() // consumes the original caller buffer exactly once
-		if reserved {
-			c.sendBudget.release()
+		if original == nil {
+			c.releaseUnadmittedPacket(buffer)
+		} else if writeErr := c.endOwnedWrite(original, returned); writeErr != nil {
+			err = errors.Join(err, writeErr)
 		}
 	}()
 	if buffer == nil {
 		return errUDPFragmentSize
 	}
-	if err := c.beginWrite(buffer.Len()); err != nil {
-		return err
-	}
-	reserved = true
-	address, err := udpDestinationString(destination)
+	data := buffer.Bytes()
+	original, err = c.beginOwnedWrite(buffer, data, destination, buffer.Start())
 	if err != nil {
 		return err
 	}
-	return c.writeDatagram(buffer.Bytes(), address)
+	address, err := udpDestinationString(destination)
+	if err != nil {
+		returned = true
+		return err
+	}
+	original.address = address
+	err = c.writeDatagram(original)
+	returned = true
+	return
 }
 
-func (c *udpPacketConn) WriteTo(data []byte, destination net.Addr) (int, error) {
-	if err := c.beginWrite(len(data)); err != nil {
-		return 0, err
-	}
-	defer c.sendBudget.release()
-	address, err := udpDestinationString(destination)
+func (c *udpPacketConn) WriteTo(data []byte, destination net.Addr) (n int, err error) {
+	original, err := c.beginOwnedWrite(nil, data, destination, 0)
 	if err != nil {
 		return 0, err
 	}
-	if err := c.writeDatagram(data, address); err != nil {
+	returned := false
+	defer func() {
+		if writeErr := c.endOwnedWrite(original, returned); writeErr != nil {
+			n = 0
+			err = errors.Join(err, writeErr)
+		}
+	}()
+	address, err := udpDestinationString(destination)
+	if err != nil {
+		returned = true
+		return 0, err
+	}
+	original.address = address
+	err = c.writeDatagram(original)
+	returned = true
+	if err != nil {
 		return 0, err
 	}
 	return len(data), nil // enqueue/write-call outcome, not peer delivery
 }
 
-func (c *udpPacketConn) writeDatagram(data []byte, destination string) error {
+func (c *udpPacketConn) writeDatagram(original *udpWriteCall) error {
+	data, destination := original.inputData, original.address
 	select {
 	case <-c.ctx.Done():
 		return net.ErrClosed
@@ -271,14 +233,15 @@ func (c *udpPacketConn) writeDatagram(data []byte, destination string) error {
 	if _, _, err := udpFragmentPlan(len(data), len(destination), budget); err != nil {
 		return err // plan before message/view allocation or packet-ID reservation
 	}
-	message := allocMessage()
+	original.stage = udpWriteMessage
+	original.message = allocMessage()
+	message := original.message
 	message.sessionID = c.sessionID
 	message.packetID = c.nextPacketID(0, false)
 	message.fragmentTotal = 1
 	message.destination = destination
 	message.data = buf.As(data)
-	defer message.releaseMessage()
-	err := c.writeMessage(message, budget)
+	err := c.writeMessage(original, message, budget)
 	if err == nil {
 		return nil
 	}
@@ -296,7 +259,7 @@ func (c *udpPacketConn) writeDatagram(data []byte, destination string) error {
 		return errors.Join(err, planErr)
 	}
 	message.packetID = c.nextPacketID(message.packetID, true)
-	return c.writeMessage(message, nextBudget)
+	return c.writeMessage(original, message, nextBudget)
 }
 
 // All local ID reservations use this short carrier metadata fence. A retry's
@@ -312,44 +275,76 @@ func (c *udpPacketConn) nextPacketID(previous uint16, retry bool) uint16 {
 	return id
 }
 
-func (c *udpPacketConn) writeMessage(message *udpMessage, budget int) error {
+func (c *udpPacketConn) writeMessage(original *udpWriteCall, message *udpMessage, budget int) error {
 	select {
 	case <-c.ctx.Done():
 		return net.ErrClosed
 	default:
 	}
 	if message.data.Len()+message.headerSize() <= budget {
-		return c.writePacket(message)
+		return c.writePacket(original, message)
 	}
-	fragments, err := fragUDPMessage(message, budget)
+	capacity, count, err := udpFragmentPlan(message.data.Len(), len(message.destination), budget)
 	if err != nil {
 		return err
 	}
-	defer releaseMessages(fragments)
-	for _, fragment := range fragments {
-		if err := c.writePacket(fragment); err != nil {
+	if capacity <= 0 || original.fragment != nil || original.packed != nil || original.fragmentCount != 0 {
+		return errUDPFragmentSize
+	}
+	original.fragmentCount = count
+	data := message.data.Bytes()
+	for index := 0; index < count; index++ {
+		original.fragmentIndex = index
+		original.fragmentStart = index * capacity // bounded by the validated payload plan
+		end := len(data)
+		if end > capacity {
+			end = capacity
+		}
+		original.stage = udpWriteFragment
+		original.fragment = allocMessage()
+		fragment := original.fragment
+		fragment.sessionID, fragment.packetID = message.sessionID, message.packetID
+		fragment.fragmentID, fragment.fragmentTotal = uint8(index), uint8(count)
+		fragment.destination = message.destination
+		fragment.data = buf.As(data[:end:end])
+		err = c.writePacket(original, fragment)
+		original.stage = udpWriteFragmentRelease
+		fragment.releaseMessage()
+		original.fragment = nil
+		if err != nil {
+			original.fragmentCount, original.fragmentIndex, original.fragmentStart = 0, 0, 0
 			return err
 		}
+		data = data[end:]
 	}
+	original.fragmentCount, original.fragmentIndex, original.fragmentStart = 0, 0, 0
 	return nil
 }
 
-func (c *udpPacketConn) writePacket(message *udpMessage) error {
+func (c *udpPacketConn) writePacket(original *udpWriteCall, message *udpMessage) error {
 	select {
 	case <-c.ctx.Done():
 		return net.ErrClosed
 	default:
 	}
-	buffer := message.pack()
-	defer buffer.Release()
+	if original.packed != nil {
+		return errClientUncertain
+	}
+	original.stage = udpWritePack
+	buffer := message.packOwned(original)
+	var err error
 	select {
 	case <-c.ctx.Done():
-		return net.ErrClosed
+		err = net.ErrClosed
 	default:
+		original.stage = udpWriteSend
+		err = c.sendScope.Send(c.ctx, buffer.Bytes())
 	}
-	err := c.sendScope.Send(c.ctx, buffer.Bytes())
 	if err != nil && c.ctx.Err() != nil {
-		return errors.Join(err, net.ErrClosed)
+		err = errors.Join(err, net.ErrClosed)
 	}
+	original.stage = udpWritePackedRelease
+	buffer.Release()
+	original.packed = nil
 	return err
 }

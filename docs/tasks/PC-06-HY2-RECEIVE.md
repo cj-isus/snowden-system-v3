@@ -4131,3 +4131,1084 @@ Receipts: .artifacts/memory/bootstrap-v465-crypto-events-.
 Следующий P0: TLS key/AEAD/parameter holders и lifetime byte budgets crypto stream/
 retransmission, сохраняя диагностику и provider aliases.
 Source/unverified: captured SDK1.26.7/API ownership contract and source review identify borrowed-slice lifetime misuse; no runtime corruption reproduction or compilation proof exists. Touched-only gofmt/manual diff/byte review do not prove private fixture/mock compatibility, races/deadlocks, pressure/Close/cancellation/panic/Goexit/nonreturn/wire behavior, speed or GC/RSS/native cleanup. Fork now explicitly requires Go1.26 for QUICErrorEvent/Err, matching the existing Windows parent; older standalone SDK compatibility is not retained. No dependencies were resolved/downloaded/version-updated.128 slots/8MiB bounds queued owned write clones; a local session-ticket copy fits remaining allowance while in-call, then transfers to caller. TLS provider allocations/transport-parameter objects, data already transferred, stream write/retransmission buffers, aggregate process memory/CPU/rate are separate. Copying adds unmeasured handshake cost. Ordinary capacity refusal propagates as error, not readiness/unknown lifetime; inconsistent accounting retains originals and negative result/no retry. RetireEventQueue requires actual native/public-call/data/history/TLS and local sorter receipts; Close/Context alone are insufficient. Only metadata reference cells are cleared, never payload/key bytes or provider objects. TLS keys/native internals/ConnectionState/provider aliases and global/raw/OS/UX/release/comparative acceptance remain OPEN. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution; existing commits retained. FullPC/old9 active;100OPEN56NOT_RUN72tasks/TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v466-key-references"></a>
+
+## V2-466 — original local key-reference retirement
+
+Статус: source/unverified, 2026-11-16; quic-go68/sing-quic76 unchanged consumer.
+Полная цель PC-00…09 и все прежние обязательства сохраняются.
+
+- Аудит actual setReadKey/setWriteKey → updatableAEAD/createAEAD/header protector
+  → hkdfExpandLabel показал synchronous derivation в новые output buffers.
+  Original input secret не сохраняется после SDK event. Предполагаемый defect
+  заимствования здесь не подтверждён; лишняя копия/новый secret holder не добавлены.
+- Original crypto Close cell теперь получает свою shell identity до constructor
+  callbacks и exact TLS pointer только после обычного возврата original Close.
+  Ordinary TLS error остаётся исходным Close result; он не равен неизвестному
+  завершению. TLS diagnostic object не подменяется отдельным «похожим» объектом.
+- Additive RetireKeyReferences в обеих existing handshake/root interfaces
+  вызывается current WaitForCryptoQueueRetirement после native/public-call/
+  STREAM/DATAGRAM/sent+received-history/TLS/event и local-sorter receipts.
+  До изменений проверяются исходная identity и успешный event retirement.
+- Один fixed typed prefix в original cell содержит AEAD, config,3 параметра,
+  3 opener/3 sealer aliases, RTT/trace/logger references. В callback-free bounded
+  pass под metadata lock очищаются только local fields; prefix/result остаётся
+  при abnormal outcome. Negative state terminal для этой попытки, без retry,
+  timeout cleanup, force-close, provider callback или self-join.
+- Перед nil fields устанавливается serial retired gate. 1RTT getters и ACK-key
+  API возвращают ErrKeysDropped, CID/handshake mutators не создают новые ключи;
+  long-header getters видят dropped nil holders. Existing event queue gate
+  проверяется до dispatch и закрывает Start/HandleMessage/ticket/event paths.
+  Private event helpers не экспортируются как новые concurrent APIs.
+- Original TLS Conn/ConnectionState/Used0RTT и historical flags сохранены.
+  Ни AEAD/key-byte backing, ни provider/config objects не мутируются. TLS native
+  state и aliases/exporter могут продолжать удерживать ключи; локальный nil не
+  является физическим освобождением, zeroization или доказательством выигрыша.
+
+Ручной просмотр7 existing Windows diffs/1 new source; touched-only gofmt6 exit0.
+15 reviewed source inputs,0 новых SDK inputs;261 frozen cache originals и201
+verbatim mirrors сохранены. Frozen dependency versions/tags/licences unchanged.
+Receipts: .artifacts/memory/bootstrap-v466-key-references-.
+Следующий P0: lifetime count/byte bounds crypto streams и retransmission queues
+до clone/append; сохранить actual ownership и diagnostics/provider boundaries.
+Source/unverified. Manual source/diff/byte review and touched-only gofmt do not prove compilation, fixture/mock/API compatibility, races/deadlocks, callbacks, Close/nonreturn/panic/Goexit/native retirement, protocol behavior or performance. The fixed reference pass is external-only after the existing original native/public/data/history/TLS/event/local-sorter aggregate. Serialized internal key APIs are guarded after retirement; this does not grant concurrent arbitrary access or make derived AEAD objects thread-safe. Drop only local reference fields, not referenced objects/key-byte arrays, provider state or TLS internals. Original TLS Conn and its configuration/exporter/native secrets may remain through ConnectionState and other aliases; no key erasure/GC/RSS/whole-carrier cleanup is claimed. Negative/abnormal original identity/state preserves the original prefix and cached error without retry. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent work on this slice. Prior Git-only publication evidence stays separate; no automatic new commit/push. Lifetime crypto-stream/retransmission count/byte budgets, global resource limits, full PC/old9/native/OS/UX/release/comparative acceptance remain OPEN; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v467-crypto-write-storage"></a>
+
+## V2-467 — original crypto transmit storage и отказ до copy
+
+Статус: source/unverified, 2026-11-16; quic-go69/sing-quic77 unchanged consumer.
+Полная цель PC-00…09 и прежние обязательства сохраняются.
+
+- Actual baseCryptoStream.Write и Initial.Write делали unbounded append. Теперь
+  общий checked Write использует original owner, fixed64 full backing slots,
+  8MiB lifetime accepted payload,4096 nonempty calls и16MiB cumulative backing
+  на stream. Empty writes credit не расходуют; growth имеет явный hard clamp.
+  Slot/count/bytes резервируются до make/copy, новый buffer записывается в свой
+  original slot до copy старого prefix и новых input bytes.
+- Old backing остаётся в fixed prefix, даже когда writeBuf уже resliced: frames
+  и sent-history могут удерживать прежние views. В Pop/Finish/ACK/timeout credit
+  не возвращается. Это local lifetime quota, не лимит TLS или process RSS.
+  Новый input копируется один раз в собственный transmit storage; speculative
+  alias recycling и запись поверх ранее опубликованных payload не добавлены.
+- Ordinary pressure до copy возвращает0 bytes+sticky error. Active/abnormal или
+  invalid original owner/counters/view сохраняют prefix с отрицательным state,
+  без retry/refund/timeout cleanup. Read/pop после retirement закрыты.
+- Initial ClientHello parsing/cuts/scrambling сохранены через common Write gate.
+  Initial/Handshake actual event callers уже возвращают Write error. Server
+  handleHandshakeComplete игнорировал oneRTT session-ticket Write result; теперь
+  ошибка возвращается до очереди ticket/control frames и publish ready.
+- Existing crypto aggregate после original native/public/data/history/TLS
+  preflight проверяет все3 write owners, scalar credit, distinct full backing
+  identities и exact current suffix view. Затем joins existing event/key
+  retirement; только после успеха очищает local reference cells и seal writes.
+  Counters/failure остаются diagnostic, payload/key/provider objects не меняются.
+  Capacity error отличается от unknown custody, которая запрещает retirement.
+- В ходе source-аудита найден следующий actual allocation path:
+  retransmissionQueue.GetFrame → wire.CryptoFrame.MaybeSplitOffFrame создаёт
+  tail copy. Он не покрывается новым stream-store credit. Pending control/crypto
+  references и split-copy lifetime требуют отдельного связанного учёта/отказа.
+  Этот пункт не закрыт, полный crypto/carrier bound не заявляется.
+
+Ручной просмотр5 existing Windows diffs/1 new source; touched-only gofmt4 exit0.
+14 reviewed source inputs/0 SDK inputs;261 frozen cache originals/201 verbatim
+mirrors сохранены. Dependency versions/tags/licences unchanged.
+Receipts: .artifacts/memory/bootstrap-v467-crypto-write-storage-.
+Следующий P0: bounded retransmission queue admission и tail-copy lifetime before
+split, с явной доставкой pressure error и сохранением history/frame aliases.
+Source/unverified. Manual source/diff/byte review and touched-only gofmt do not prove compilation, tests/mock/fixture compatibility, races, handshake/wire behavior, Close/nonreturn/panic/Goexit/native retirement, throughput/latency or RSS. Quotas apply to each of the three original crypto transmit stores:8MiB accepted lifetime payload,4096 nonempty writes,64 allocated buffers and16MiB cumulative backing. This is an explicit local policy, not a protocol maximum or an empirically optimal setting. Fixed full backing references intentionally retain old buffers until native/history retirement; ordinary resident memory may increase compared with early GC, while aggregate allocation remains bounded in this store. Input TLS/event storage, receive parser/sorter buffers, emitted frame metadata, retransmission MaybeSplitOffFrame tail copies, token/control queues and other aliases remain separate. No global/whole-crypto/whole-carrier/physical memory or speed claim. Pressure is a sticky ordinary write error accepting zero bytes; structural/abnormal state retains original prefix without retry. Preflight validates original owner/counters/backing identities/active view for every stream before event/key retirement, and clears reference cells only after positive aggregate receipts. No payload/key/provider byte mutation, callbacks, timeout cleanup or quota renewal. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC/old9/global/native/OS/UX/release/comparative acceptance remain open; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v468-retransmission-storage"></a>
+
+## V2-468 — original retransmission storage и split-copy lifetime
+
+Статус: source/unverified, 2026-11-16; quic-go70/sing-quic78 unchanged consumer.
+Полная цель PC-00…09 и прежние обязательства сохраняются.
+
+- Conn удерживает original queue shell до init, owner identity не переносится
+  между экземплярами. Pending admission до metadata growth/append:4096 entries,
+  16MiB referenced payload views и1MiB per frame. Exact known native frame layout
+  даёт payload credit без arbitrary Frame.Length. STREAM/DATAGRAM/ACK не получают
+  generic retransmission authority. Fixed-size frame fields покрыты count bound.
+- Entry хранит immutable admission credit. Bounded header checks сверяют сумму
+  queue lengths, metadata caps и original identity без обхода frame payload.
+  Pop очищает старую cell до reslice, пустая metadata head отпускается. Full
+  space drop снимает heads и pending credit; byte/key/provider objects не меняет.
+- Actual GetFrame больше не использует unowned clone в MaybeSplitOffFrame.
+  Queue-local split сохраняет исходную семантику: prefix остаётся view прежнего
+  backing, remainder копируется и original frame получает новый tail/offset.
+ 4096 lifetime copies/16MiB copied backing резервируются до metadata/make/copy;
+  candidate output и full tail backing находятся в original operation/slots.
+  Producer и split output используют full-slice clamp; downstream append не
+  получает оставшуюся capacity buffer. Public wire split API не изменён.
+- Split backing сохраняется до завершения original aggregate, не освобождается
+  по ACK/pop/key-space drop/timeout. Metadata grow имеет hard clamp. Unknown/
+  abnormal operation оставляет input/output/growing/original heads с terminal
+  negative state без retry. Ordinary pressure не изменяет original queued frame,
+  принимает0 новых entries/copies и становится explicit connection error.
+- OnLost signature остаётся void. Actual native gates читают failure после ACK,
+  loss timeout, PTO queue, Retry, migration и packet-space drop, а также перед
+  loop wait/send. Обычные ошибки сохраняют identity, если queue failure нет.
+  PackCoalesced/AppendPacket/PTO wrappers не маскируют pressure как nothing-to-pack;
+  known partial output отклоняется через existing owner, unknown original buffer
+  сохраняется. На error наружу не возвращается stale packet после pool return.
+  Нет inline close callback, новых goroutines или таймеров.
+- При аудите обнаружено: native Initial/Handshake key drop не вызывал имеющийся
+  retransmissionQueue.DropPackets. Теперь он снимает pending old-space heads
+  после original packet-space call. App/0RTT generic routing не менялся; lifetime
+  split credit остаётся занятым. Invalid state запрещает последующие transitions.
+- Existing crypto aggregate после native/public/data/history/TLS receipt
+  сверяет все pending metadata/credits и copy-head sizes без frame dereferences
+  или methods. После event/key receipts освобождаются только references; fixed
+  original heads остаются при abnormal retirement. Copy counters/failure retained
+  для diagnostics; payload/key/provider backing не перезаписывается.
+
+Ручной просмотр7 existing Windows diffs/2 new sources; touched-only gofmt7 exit0.
+18 reviewed inputs/0 SDK inputs;261 frozen cache originals/201 verbatim mirrors
+сохранены. Dependency versions/tags/licences и actual Transport/HY2 unchanged.
+Receipts: .artifacts/memory/bootstrap-v468-retransmission-storage-.
+Следующий P0: crypto receive parser/sorter перед clone, framer/token/control
+storage и source-wide resource inventory; не переносить локальные quotas в RSS.
+Source/unverified. Manual source/diff/byte inspection and touched-only gofmt do not prove compilation, existing tests/mocks/fixtures, race/deadlock behavior, ACK/loss/PTO/Retry/migration/key-drop/panic/Goexit/nonreturn paths, actual wire compatibility, throughput/latency or native retirement. Pending4096 entries/16MiB payload views/1MiB per frame are explicit local admission policy, not protocol maxima or optimal measured settings. Payload credit uses cap for byte slices and length for strings; it is conservative per reference, not unique physical backing or RSS. Metadata capacity is clamped; copies have separate4096 lifetime count/16MiB tail backing. Native input allocation, provider/TLS/receive/framer/token storage and data already transferred remain outside these quotas. Full backing is intentionally retained through history aliases; resident memory may increase versus earlier GC. Original queue operation captures candidates before allocation; structural/abnormal state is retained without retry, ordinary pressure is an explicit connection failure. Pending credit refunds never renew split-copy credit. Public wire split API stays unchanged; only the current queue caller uses the owned budgeted path, not a blanket promise about future callers. Preflight and reference cleanup inspect immutable entry metadata/owned copy heads, never pooled frame fields or callbacks; payload/key/provider objects are not mutated. Failure gates do not change protection/direct-fallback authority. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. Full PC/old9/provider/global/native/OS/UX/release/comparative acceptance remains open; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v469-crypto-receive-storage"></a>
+
+## V2-469 — original fixed-domain crypto receive block
+
+Статус: source/unverified, 2026-11-16; quic-go71/sing-quic79 unchanged consumer.
+Полная цель PC-00…09 и прежние обязательства сохраняются.
+
+- Actual owned CRYPTO parser создавал payload copy до semantic range check;
+  generic crypto sorter мог ещё копировать trimmed fragments. Новый additive
+  ParseCryptoFrameView проверяет byte grammar/length и возвращает capped view
+  текущего pinned packet. Actual Conn использует этот path синхронно; old owning
+  parseCryptoFrame/ParseLessCommonFrame сохраняют независимую copy-семантику.
+- Negative/overflow/range/finished checks предшествуют payload allocation и
+  addition. Existing MaxCryptoStreamOffset16KiB не увеличен. CryptoBufferExceeded
+  и ProtocolViolation остаются semantic error paths; malformed byte grammar
+  остаётся FrameEncodingError. Zero payload сохраняет прежний highest-offset
+  эффект, но data block не выделяет.
+- Original stream владеет одним lazy block с16KiB data и2KiB bitmap. Он заменяет
+  generic crypto map/tree/fragment/trim storage. До allocation отмечается original
+  active slot; partial/abnormal block остаётся с sticky error/no retry. В state
+  хранятся owned block и scalar counters, raw view не сохраняется.
+- Unseen offsets копируются из packet view ровно один раз. Already accepted
+  bytes не переписываются даже при overlap; GetCryptoData возвращает contiguous
+  immutable capped prefix и уменьшает pending, но сохраняет block/bitmap.
+  Полная domain bitmap позволяет больше gap patterns, чем old generic sorter.
+  Contiguous data может объединять прежние frame boundaries; exact native/wire
+  acceptance и конфликтующие overlaps пока не проверены.
+- Actual log conversion для CRYPTO хранит только offset/length; wire log также
+  не получает payload. Inspected installed SDK HandleData сохраняет data в
+  readbuf: его alias может жить дальше отдельного call. Поэтому Finish/read
+  не освобождают/reuse backing, и следующие receives не меняют accepted bytes.
+- Unknown read/owner/counters/active state проверяется до handshake events/ready
+  и positive native receipt; nil/no-data не подменяет ошибку. Finish допускается
+  лишь без pending bytes. Late receive/read после retirement закрыт.
+- Existing aggregate после native/public/data/history/TLS receipt проверяет
+  bitmap popcount, delivered prefix, highest range и counter consistency для
+  всех3 original stores. Затем event/key retirement, потом local block reference
+  release. Нет callbacks, pools, payload/key wipe или provider mutation;
+  historical counters и TLS diagnostic aliases сохраняются.
+- Generic ReceiveStream sorter/ledger не изменён, обновлены только stale crypto
+  comments.1 verbatim wire crypto parser mirror переведён в owned change со
+  snapshot; остальные200 verbatim mirrors и261 original cache bytes сохранены.
+
+Ручной просмотр8 existing Windows diffs/1 new source; touched-only gofmt7 exit0.
+17 reviewed source inputs/1 captured SDK input. Dependency versions/tags/licences
+и actual Transport/HY2 unchanged. Receipts: .artifacts/memory/bootstrap-v469-crypto-receive-storage-.
+Следующий P0: framer/token/control-frame admission перед clone/append, packet/
+qlog metadata и source-wide resource inventory с точными границами local/global.
+Source/unverified. Manual source/diff/byte inspection, installed SDK source and touched-only gofmt do not prove compilation, existing tests/private queue-field fixtures/mocks, actual reassembly/wire/TLS compatibility, race/Close/panic/Goexit/nonreturn behavior or performance. Native CRYPTO no longer uses the generic sorter; it may coalesce contiguous data across old frame boundaries, supports the full existing16KiB offset domain without generic gap-count limits, and retains the first accepted byte at each offset. Duplicate, overlap/conflict, arbitrary order, holes, zero-length offsets, boundaries, phase changes and old fixture migration need future authorized acceptance. The lazy block contains16KiB data+2KiB bitmap per stream at the current frozen constant; no fragment/trim backing or gap metadata is allocated on this native path. Packet/header/qlog metadata, input UDP/decryption buffers, legacy owning parser calls, generic standalone sorter calls, TLS internals and providers/global storage remain outside this local bound. The block is retained until original native/history/TLS/event/key receipts; TLS readbuf/diagnostic aliases can still keep it afterward. No physical cleanup/zeroization/RSS or measured latency/throughput claim. Native packet views do not escape into receive state or trace payloads; accepted bytes and capped TLS views are not overwritten. Unknown original/counter/active state is sticky, never retried or published as readiness/positive native retirement. Preflight reads bitmap/counter metadata only; release drops local references, never payload/key/provider bytes. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC/old9/framer/control/provider/TLS/global/native/OS/UX/release/comparative acceptance remains open; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v470-framer-control-storage"></a>
+
+## V2-470 — общий admission generic control queue
+
+Статус: source/unverified, 2026-11-16; quic-go72/sing-quic80 unchanged HY2.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефекты и изменения
+
+- QueueControlFrame проверял только число кадров. Два append внутри Append
+  (StreamDataBlocked/DataBlocked при нехватке места в пакете) обходили эту проверку.
+  Отправленный элемент снимался reslice без очистки ячейки и мог удерживать frame.
+- Generic framer и retx переиспользуют queuedFrameEntry и инспекцию известных
+  native frame layouts. Владельцы, бюджеты и retirement остаются раздельными.
+  При admission не вызывается произвольный Frame.Length. STREAM/DATAGRAM/ACK
+  не получают новый generic fallback; typed nil/неизвестный frame дают state error.
+- Сохраняется existing16384 count; добавлены16MiB referenced payload views на
+  очередь и1MiB на кадр. Для byte slices учитывается cap, для reason string — len;
+  это не unique allocation/RSS и не доказательство размера string backing.
+  Credit резервируется до make/copy/append metadata; capacity растёт с clamp.
+  Все три generic producer path проходят одну функцию под controlFrameMutex.
+- LIFO ordering сохраняется. Перед native Length проверяются original input и
+  immutable payload credit; после передачи очищается снятая ячейка, пустой head
+  становится nil, pending credit возвращается только локальной очереди.
+- Original Conn сначала сохраняет buffered sendingScheduled и framer shell,
+  затем init связывает owner/wake до allocations/callbacks. Capacity и uncertain
+  различаются atomic code. Failure делает неблокирующее уведомление в этот же
+  канал; новый worker, callback, inline Close или wait не добавлены.
+- Original operation удерживает input и metadata candidate до normal result.
+  Нештатный выход оставляет prefix и sticky state error без retry. Append теперь
+  освобождает controlFrameMutex и mutex при panic/Goexit; порядок остаётся
+  controlFrameMutex → mutex. Это не подтверждение native/panic/race поведения.
+- 0RTT rejection сначала сверяет stored metadata/credit. Новый bounded candidate
+  содержит те же сохраняемые типы, что раньше; old/candidate heads остаются в
+  original prefix на время замены. Payload methods не вызываются, failure latch
+  не сбрасывается. Возможен overlap двух ограниченных metadata heads.
+- Retirement после прежних original producer receipts сверяет count/credit,
+  пустой неиспользуемый tail и отсутствие active prefix. Затем снимает local
+  references/counters/wake, сохраняя failure diagnostics. Payload/keys/provider
+  bytes и pooled frame methods при очистке не трогаются.
+- Native run/readiness/send видят typed failure; already-latched error не
+  превращается в handshake readiness. Regular coalesced/Append/PTO wrappers
+  не маскируют ошибку как nothing-to-pack: known partial output отклоняется,
+  uncertain buffer удерживается. Уже начавшиеся OS writes и гонка после check
+  не становятся атомарно прерванными.
+- Ручной просмотр выявил недопустимый вызов новых lifecycle методов через
+  frameSource (его API содержит только HasData/Append). Исправлено конкретным
+  native *framer assertion без расширения интерфейса; unsupported/nil source
+  не подтверждает custody и удерживает buffer. Aggregate crypto retirement
+  дополнительно требует exact original packer/framer identity. Совместимость
+  private custom sources/fixtures и компиляция пока не проверены.
+
+### Доказательство и остаток
+
+Ручной просмотр10 existing Windows diffs/1 new source; touched-only gofmt9 exit0.
+15 reviewed source inputs/0 SDK inputs.261 original cache files,200 verbatim
+mirrors и49 owned mirror baselines сохранены; версии зависимостей/теги/лицензии
+и actual Transport/HY2 consumer не изменялись. Последние исправления отражены
+в accepted-source-diffs/accepted-upstream-preservation/formatting-accepted;
+первичные receipts сохранены отдельно. Receipts: .artifacts/memory/bootstrap-v470-framer-control-storage-.
+Следующий P0: NEW_TOKEN parse/generation/default LRU/custom callback custody,
+затем packet/qlog metadata и общий inventory с точными local/global границами.
+Path-response и stream-control getter lanes не объявлены закрытыми этим срезом.
+Source/unverified only. Limits cover pending generic control-frame references and their visible payload capacities (or reason-string length), not unique backing, substring retention, producer allocations, RSS/GC, per-process/global memory, bandwidth or CPU deadlines. Metadata heads are clamped to16384 entries; growth/0RTT filtering can overlap one old and one new bounded head. Popped payload credit is returned only for this queue. Path-response lanes, stream-control getters/maps, packet/header/qlog storage, NEW_TOKEN parse/generation/default/custom TokenStore and callbacks remain separate. Native frameSource interface is unchanged, but unsupported custom concrete sources now fail native packing custody; compatibility with private fixtures/adapters is unverified. Failure checks/notification do not atomically stop OS writes already in flight or a concurrent failure after a check. No provider callback, new worker, payload/key wipe or physical release proof is introduced. Unknown original operation/storage state is sticky, retained and not retried; it cannot certify readiness/native retirement. Ordinary capacity failure remains distinct and can retire known metadata. All source/protocol/ordering/0RTT/queue/native/lock/panic/race/performance acceptance is unverified. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9 remain active; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v471-client-token-storage"></a>
+
+## V2-471 — client NEW_TOKEN admission и optional cache
+
+Статус: source/unverified, 2026-11-16; quic-go73/sing-quic81.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Причина и текущий consumer
+
+Owned NEW_TOKEN parser копировал payload до handleNewTokenFrame, включая случай
+TokenStore=nil. Native qlog conversion сохранял wire frame целиком, debug log
+печатал token bytes. Default LRU ограничивал число origins/tokens без byte quota,
+сохранял borrowed string key и не обрабатывал безопасно нулевые размеры.
+Текущий frozen HY2 consumer не задаёт TokenStore; V2-471 не включает cache.
+
+### Реализация
+
+- Additive ParseNewTokenFrameView переиспользует ту же byte grammar/zero/length
+  validation и возвращает capped borrowed slice. Actual Conn удерживает raw
+  packet до синхронного handling; old parseNewTokenFrame/ParseLessCommonFrame
+  сохраняют independent-copy контракт. No cache/skipHandling/oversize/quota
+  не создают native token payload copy; malformed framing всё ещё ошибка.
+- Native toQlogFrame возвращает NewTokenFrameInfo только с Length; wire debug
+  также печатает лишь length. Никакой packet view не передаётся external trace.
+  Old qlog.NewTokenFrame alias и raw encoder остаются для owning callers.
+  Это не аудит остальных Retry/Initial/header/raw trace путей; совместимость
+  нового metadata JSON с потребителями qlog пока не подтверждена.
+- Original Conn cell устанавливается до allocations/callbacks. Для configured
+  store key длиной1…1024 bytes копируется отдельно, чтобы не держать substring
+  backing. При nil store key даже не вычисляется через RemoteAddr.String.
+- Original operation захватывает provider, Pop result, clone и Put input до
+  вызова/inspection/передачи. Максимум64 lifetime copies/1MiB и16KiB на токен
+  резервируются до make/copy. Output capped; Pop result копируется для packer,
+  поэтому большой provider backing не принимается через маленький slice view.
+  Native Put получает независимый owned token, raw packet view не сохраняется.
+- Nil store, invalid/empty/oversize token/key или исчерпанная optional quota
+  дают cache miss/skip. QUIC framing не объявляется ошибочным, protection и
+  VPN route не меняются; cache не активируется. Счётчики lifetime не возвращаются
+  при Pop/Close/ACK/timeout. RTT берётся из существующих producer facts.
+- Callback остаётся inline в original constructor/native loop. Panic/Goexit
+  оставляет active input/data/store и sticky error/no retry. Native run/readiness/
+  send не выдают positive receipt для unknown state. Nonreturn требует реального
+  возврата; self-join и arbitrary provider lifetime не решены новым timeout.
+- Default LRU сохраняет TokenStore API, но явно меняет local size policy:
+  nonpositive constructor dimensions отключают caching; positive clamped до64
+  origins и16 tokens per origin. Пустые/слишком длинные keys и oversized tokens
+  игнорируются.1MiB quota считает referenced payload cap + owned key len, не RSS.
+- Immutable per-slot byte credits разделены с payload. Capacity/bytes допущены
+  до key clone/ring/list/map adoption; один loop удаляет не более64 LRU origins.
+  Existing origin replacement учитывает old credit; Pop сохраняет прежний LIFO,
+  очищает снятый slot и удаляет пустой origin. Cleanup не читает token payload.
+  Key копируется до map adoption; unused references не удерживаются в list slot.
+- Default-cache operation хранит input/key/candidate под mutex до normal result.
+  Unknown metadata/abnormal return делает cache sticky-disabled без повторного
+  использования. Из этого не следует завершение внешнего provider/global state.
+- Aggregate после native/public/data/history/TLS проверяет original cell,
+  counters/key/phase и отсутствие active prefix перед event/key retirement.
+  Затем снимаются cell.store/key, Conn tokenStoreKey и original packer.token
+  (включая его Retry alias). Config.TokenStore/provider/diagnostic aliases могут
+  жить дальше; чужие caches и token/payload/key bytes не очищаются.
+
+### Доказательство и остаток
+
+Ручной просмотр10 existing Windows diffs/1 new source; touched-only gofmt9 exit0.
+17 reviewed source inputs/0 SDK inputs.261 original cache files,197 verbatim
+mirrors и52 owned mirror baselines сохранены;3 verbatim mirrors переведены в
+owned snapshots. Dependency versions/tags/licences и actual HY2 не изменены.
+Receipts: .artifacts/memory/bootstrap-v471-client-token-storage-.
+Следующий P0: issuer/protector/generation/Retry/Initial-token size and ownership,
+header/qlog metadata и source-wide resource inventory. Default-cache policy,
+borrowed/owning parser, trace schema/aliasing, callback shutdown и native wire
+совместимость остаются unverified; нет performance/whole-carrier доказательства.
+Source/unverified only. Native NEW_TOKEN framing remains valid when optional caching is disabled/full/oversize; only address-validation optimization is skipped, with no direct fallback/protection change. Defaults are not activated in HY2. Limits cover at most64 lifetime copied payloads/1MiB plus one <=1024-byte owned key per Conn, <=16KiB per copied token; Pop/Close never refund lifetime credit. Default LRU clamps64 origins/16 token slots per origin and1MiB referenced payload capacities+owned key lengths; metadata/maps/allocator rounding, duplicate/external aliases and process/global/RSS/GC/time bounds are separate. Stored ClientToken payloads remain opaque/immutable by the existing safe-Go interface. A normal callback return is not provider/global retirement. Custom callbacks remain inline: nonreturn/self-joining behavior, provider-owned retention/concurrency and hard cancellation are not solved by a timeout or new task. Unknown operations retain their original cells and do not retry/certify success. Aggregate cleanup drops only this cell.store/key, Conn tokenStoreKey and original packer.token after native/history/TLS/event/key receipts; Config.TokenStore and other provider/TLS/diagnostic aliases can remain. No token/payload/key/provider bytes are wiped. Native NEW_TOKEN debug/qlog views carry only length; Retry/Initial headers, standalone owning parsers/raw qlog alias/encoder, issuer/protector/generation and other trace paths remain separate and are not declared globally secret or bounded. Parser/protocol/native ordering, constructor-limit migration/private fixtures, qlog consumer/schema, callback/panic/Goexit/race/shutdown/retirement and performance acceptance remain unverified. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9 remain active; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v472-token-issuer"></a>
+
+## V2-472 — bounded token issuer и native header logging
+
+Статус: source/unverified, 2026-11-16; quic-go74/sing-quic82.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефекты и изменения
+
+- tokenProtector принимал payload без local size admission до random/HKDF/AES
+  и AEAD.Open; NewToken отдельно выделял ciphertext и затем копировал его через
+  append к nonce. Local issuer policy теперь1024 encrypted/976 plaintext bytes
+  (32-byte nonce + default16-byte GCM tag), проверка до этих операций.
+  Полный output резервируется один раз; Seal дописывает ciphertext/tag после
+  nonce prefix в этот buffer. Это изменение explicit storage, не замер скорости.
+- До ASN.1 marshal собственные variable address fields уже ограничены.
+  UDP принимается с IP длиной4/16 bytes, без нормализации identity; nil/malformed
+  UDP не создаёт copy. Generic String вызывается один раз, затем результат
+  длиной1…512 bytes допускается до нашего copy. Provider callback сам может
+  выделять память/блокироваться; этот предел не является его hard bound.
+- DecodeToken по-прежнему принимает empty encrypted input как nil/no token.
+  Непустой input ограничен до HKDF/AES/Open, plaintext — перед ASN.1 parsing.
+  Authenticated ASN fields не считаются автоматически корректными: address
+  prefix/size, оба CID length <=20 и неотрицательный RTT с верхней границей
+  duration multiplication проверяются до ParseConnectionID и умножения.
+  Устранены source paths к CID-length panic и RTT wrap при malformed fields.
+- ValidateRemoteAddr отвергает nil/invalid encoded address и не может принять
+  nil==nil после ошибки кодирования. Normal UDP/text encoding, nonce/key/KDF
+  info/AAD/ASN field order оставлены. Старые oversized/custom/malformed tokens
+  теперь могут быть отклонены; совместимость пока не подтверждена запуском.
+- Server age sample остаётся после ValidateRemoteAddr/callback return, чтобы
+  blocking provider не продлевал старую до-вызова проверку expiry. Отрицательный
+  age (future token/current wall-clock rollback) теперь отвергается. Existing
+  Retry/non-Retry age caps сохранены; это не решение системного clock trust.
+- Native Initial/Retry ExtendedHeader debug вместо token hex хранит length.
+  Три native qlog header paths (received Retry, received long header, sent Retry)
+  опускают optional Token целиком; пустые token bytes не подставляются.
+  Существующий qlog.Token/raw encoder не меняется для standalone owning callers.
+  NEW_TOKEN scalar conversion V2-471 сохраняется. Это не глобальный аудит всех
+  stateless-reset/credential/trace payloads и не очистка старых diagnostic aliases.
+- Client Retry original-phase/CID/version/integrity admission и owned parser
+  не изменялись. Этот1024 limit относится к нашему issuer/protector, не к opaque
+  NEW_TOKEN или third-party Retry wire policy. Cache автоматически не включается,
+  protection/fallback/lifecycle API остаются прежними. Issuer failures по-прежнему
+  проходят существующий error path, без искусственного success/retirement.
+
+### Доказательство и остаток
+
+Ручной просмотр7 existing Windows diffs/0 new source; touched-only gofmt5 exit0.
+16 reviewed source inputs/0 SDK inputs.261 original cache files,194 verbatim
+mirrors и55 owned mirror baselines сохранены;3 mirrors получили owned snapshots.
+Dependency versions/tags/licences и actual Transport/HY2 consumer не менялись.
+Receipts: .artifacts/memory/bootstrap-v472-token-issuer-.
+Следующий P0: actual Retry/Initial header parsing before clone, original accepted
+token ownership и Initial-packet fit; затем packet/qlog metadata и общий resource
+inventory. Crypto/wire/clock/qlog/private fixtures/provider/callback/native/OS
+приёмка остаётся OPEN. Новые provider lifetime receipts этим срезом не заявлены.
+Source/unverified only.1024-byte encrypted/976-byte plaintext quota applies to this local issuer/protector, not a universal QUIC token limit or opaque third-party client token. Generic net.Addr.String executes before its returned length can be checked; its own allocations/blocking/reentrancy/panic/Goexit and actual producer custody remain outside these copy bounds. UDP nil/malformed IP is rejected before copy, valid4/16-byte identity stays unchanged. Random/HKDF/AES/GCM/ASN.1 internals, concurrent calls/total lifetime/provider state/global/process/RSS/GC and hard deadlines are not bounded by this per-input policy. Output explicitly uses one complete reserved backing, not a zero-allocation or measured speed claim. Current algorithm/key/nonce prefix/KDF info/AAD/ASN field layout are preserved by source; no crypto/wire cross-version execution proof. Authenticated malformed fields and old oversized/custom-address/future-clock tokens can now be rejected; migration, wall-clock rollback and API/private-fixture compatibility require future acceptance. Existing native issuer error propagation remains; no optional-success substitution or provider retirement receipt added. Native Initial/Retry debug and header qlog paths omit address-validation token bytes only. Standalone raw qlog/owning header parser, stateless-reset/other diagnostics, actual Retry token clone/integrity/phase/Initial-packet fit and original native/provider/OS retirement remain separate. No key/token/provider bytes wiped, cache activated or protection/direct fallback changed. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9 remain active; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v473-packet-token"></a>
+
+## V2-473 — native packet token view, fit и original Retry copy
+
+Статус: source/unverified, 2026-11-16; quic-go75/sing-quic83.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефекты и реализация
+
+- Native Conn использовал owning ParsePacket и копировал token до phase/version/
+  CID/integrity checks. Additive ParsePacketView разделяет ту же byte grammar,
+  возвращает capped token/packet/rest views. Owning ParsePacket, private helpers
+  и server pre-dispatch parser продолжают независимое копирование, включая old
+  partial-error/empty-token semantics. Length proof использует subtraction до sum.
+- Original raw input остаётся у existing processing/queue/unpack owners. Initial
+  associated-data token не меняется при decrypt; replay хранит raw packet owner.
+  Native header/qlog diagnostics не передают token bytes после V2-471/472.
+  Borrowed token не сохраняется в cache/trace/packer; только admitted owned copy.
+- Cached Pop раньше мог загрузить token до16KiB, который вообще не оставлял
+  места CRYPTO в Initial. Pure fit admission вызывается до payload clone и
+  переиспользует ExtendedHeader.GetLength/CryptoFrame.Length. Providers/PN peek/
+  crypto для этой проверки не вызываются.
+- Используется configured Initial1200…1452 и запас PN4, destination CID до20,
+  native InitialAEAD16 и1 byte CRYPTO через current8MiB write-offset domain.
+  Это запас для следующих fragments, а не только первого offset0. Можно
+  пропустить token, помещающийся лишь в более узкий текущий header; full flight,
+  ACK scheduling/coalescing/PTO/changed MTU и edge interoperability не доказаны.
+- Original concrete packer связывается в Conn cell до provider callbacks даже
+  при TokenStore=nil; проверяются original framer/srcCID/streams/retx и quiescent
+  intake. Неподходящий cache token даёт optional miss, не меняет VPN protection.
+  Ручной review нашёл RemoteAddr/String key callbacks перед token operation;
+  они перенесены внутрь того же original prefix после packer binding. Их
+  abnormal outcome также удерживается; собственная provider memory не ограничена.
+- Existing Retry phase/version/destination/original CID/integrity checks остаются
+  обязательными. Token, уже длиннее MaxPacketBufferSize1452, отвергается до tag
+  computation: он всё равно не поместится в наш Initial. Остальной valid-tag
+  candidate проходит fit до receivedRetry/CID/keys/history changes.
+- Accepted Retry резервирует отдельный single-copy slot перед make/copy, максимум
+  1452 bytes и output cap=len. Optional64-copy/1MiB quota ему не мешает. Original
+  operation держит candidate и concrete packer через ResetForRetry, crypto key
+  change, SetToken и CID change. Normal nonfit очищает только operation, не
+  меняет protocol state. На known reset error соединение идёт прежним close path.
+- Panic/Goexit/unknown callback outcome удерживает prefix/candidate и sticky
+  error; native/readiness/aggregate gates V2-471 не выдают positive receipt.
+  Нет нового worker, timeout как completion, retry чужой операции или byte wipe.
+  Public close после последней проверки не превращён в атомарный cutoff.
+- Metadata-only aggregate preflight дополнительно проверяет original packer,
+  Retry reserved/installed flags и owned slice identity/capacity. Known pre-install
+  reset error допустим только с close decision; unknown остаётся retained.
+  После original native/public/data/history/TLS/event/key receipts снимаются
+  cell/Retry/packer aliases, сохраняя historical flags и внешние provider aliases.
+
+### Доказательство и остаток
+
+Ручной просмотр5 existing Windows diffs/1 new source; touched-only gofmt4 exit0.
+18 snapshotted reviewed inputs/0 SDK inputs; дополнительно прочитан frozen
+InitialAEAD source (включён в identities/cache custody).261 original cache files,
+193 verbatim mirrors и56 owned mirror baselines сохранены;1 header mirror
+переведён в owned snapshot. Dependency versions/tags/licences/HY2 unchanged.
+Финальные key-callback исправления: accepted-source-diffs/accepted-upstream-
+preservation/formatting-accepted; первичные receipts сохранены.
+Receipts: .artifacts/memory/bootstrap-v473-packet-token-.
+Следующий P0: server pre-dispatch/rejected-packet header lifetime и clone admission,
+packet/qlog metadata, затем общий inventory producer/last-holder/local/global.
+Borrowed/owning/error/coalesced parsing, valid/invalid/oversized Retry, fit headroom,
+reset/key/CID callback failure и native wire/MTU/retirement ещё unverified.
+Source/unverified only. Native Conn borrows Initial/Retry token and packet/rest views only while original raw processing/queue/unpack owners hold the packet. Legacy owning ParsePacket/parseHeader/parseLongHeader and server pre-dispatch keep copies; malformed/unsupported/empty/partial/coalesced/private-fixture compatibility is unverified. Fit uses current configured Initial size1200..1452 with native InitialAEAD16, worst PN4, possible destination CID20 and one CRYPTO byte through the existing8MiB write-offset domain. This intentionally reserves future-fragment room, can skip a token fitting only the current narrower header, and does not prove whole ClientHello/ACK/coalescing/PTO progress, changed MTU/path/network success or maximum edge-token interoperability. Rejecting nonfit cached token affects optional optimization; nonfit Retry is ignored before phase/CID/keys/history mutation. Retry integrity/version/original CID/phase remain mandatory; public close after the last check is not made atomic. One separate Retry payload credit<=1452 is reserved before make/copy, not shared with optional64-copy/1MiB budget and never reused; intermediate integrity-tag/native crypto work and allocator/provider/TLS/global/process/RSS/GC/CPU are separate. Unknown reset/key/CID/provider callback outcome retains original operation/candidate/concrete packer and cannot certify native/readiness/aggregate; no timeout/retry/new worker or byte wipe. Known error cleanup still requires original native/public/data/history/TLS/event/key receipts; Config/provider/diagnostic aliases can remain. Native packet token views never enter cache/trace/packer directly; only admitted independent copies escape. Server rejected-packet/header custody, other qlog/packet metadata and source-wide resource inventory remain open. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9 remain active; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v474-server-header"></a>
+
+## V2-474 — original server header и сообщение очереди по значению
+
+Статус: source/unverified, 2026-11-16; quic-go76/sing-quic84.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Область и реализация
+
+Это Windows vendored QUIC listener code. Текущий HY2 client его не включает;
+срез не развёртывает VPS/службу и не подтверждает ускорение VPN.
+
+- Server pre-dispatch раньше копировал token через owning ParsePacket, хотя
+  original input/response queues уже держат raw packet. Он теперь использует
+  тот же ParsePacketView, что Conn, и сохраняет header рядом с current raw owner
+  до callbacks. Standalone owning wire API сохраняется.
+- Rejected message меняет private hdr pointer на inline Header+hasHeader.
+  Это отдельная копия metadata со slice view в собственный raw input message;
+  mutable Header pointer между receive/response actors не разделяется.
+  Initial parsedLen/type/CIDs/length сохраняются для existing INVALID_TOKEN
+  decrypt и ответов. Decoder/AEAD/ASN copies этим не исключены.
+- Existing capacities invalid-token4/refused4/retry8 не увеличены. Inline metadata
+  делает message крупнее; его count ограничен до channel construction, но это
+  не численный выигрыш RAM/CPU и не RSS quota. Version queue protocol не менялся.
+- Все3 rejected paths вызывают общий enqueueRejectedPacket. Original current
+  buffer/header и empty handoff проверяются, original rejected slot сохраняется
+  до select. При commit передаётся существующий raw reference; sender затем
+  делает только metadata stores, даже если receiver уже вернул buffer в pool.
+  Нет concurrent Split/refcount increment, повторного send или нового worker.
+- Producer header view снимается при transfer/drop. Только original receive
+  actor меняет свой Header; queued Header value независим. Полная очередь
+  возвращает ещё не переданный raw input через прежний original owner.
+  Unknown prefix вызывает existing negative input path без speculative release.
+- Response получает original message до callbacks и проверяет kind/presence,
+  Initial type, parsedLen/length range и capped token view. Current/draining
+  token reference снимается до original raw pool return. Payload/key bytes
+  не меняются; unknown callback/write/pool outcome удерживает original slots.
+- Positive receive receipt теперь требует !held и пустых current/handoff/drain/
+  header/rejected references; positive send receipt — пустых original input/
+  header/output references после actual producer done и drain. Это дополнение
+  source custody, не доказательство kernel/provider/native completion.
+- Misrouted short-header panic больше не выводит raw packet bytes; unused fmt
+  import удалён. Остальные diagnostics не объявлены глобально audited/redacted.
+
+### Доказательство и остаток
+
+Ручной просмотр5 existing Windows diffs/0 new source; touched-only gofmt3 exit0.
+15 snapshotted reviewed inputs/0 SDK inputs; дополнительно прочитан existing
+releaseClosedPacket helper.261 original cache files,193 verbatim mirrors и56
+owned mirror baselines сохранены; promoted mirrors нет. Dependency versions/
+tags/licences/actual HY2 consumer unchanged. Receipts: .artifacts/memory/bootstrap-v474-server-header-.
+Следующий P0: source-wide inventory actual Windows producers/queues/metadata/
+last holders с count/bytes/time и native/global границами; оставшиеся packet/qlog
+allocations выбирать по фактическому consumer. Полный PC plan не закрыт.
+Source/unverified only. This is the vendored Windows QUIC listener implementation, not a VPS deployment, app listener activation or measured HY2 client benefit. Actual HY2 client stays unchanged. ParsePacketView removes only token copies made by header parser/response queue; AEAD/ASN/issuer/decoder/raw packet/provider/trace allocations remain separate. Inline Header makes each fixed channel message larger; existing4/4/8 capacities bound its count, not process/global/RSS/allocator/CPU/time. No new goroutine, cross-task packetBuffer.Split or concurrent refcount increment is added. Channel commit transfers the existing raw reference; sender only clears its own metadata after commit, receiving message contains a Header value copy. Header/token views are valid only while their original raw owner is held; normal cleanup drops references before pool return and never reads/wipes pooled payload. Unknown callback/write/pool/partial operation retains original slots and invalidates receipts rather than retry or speculative pool return. Scope-specific metadata checks do not prove full native/provider/OS retirement, cancel cutoff, scheduler/race behavior or bytes physically released. Public owning wire parser remains; private rejectedPacket hdr shape now value+presence, so old fixtures/adapters may need migration. Server receive/response/Close/overflow/invalid-token/retry/version/0RTT/constructor failure and actual wire compatibility are unverified. Other qlog/packet metadata, producer/last-holder/global resource inventory and all full-PC gates remain open. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN; fullPC00-09/old9 active.
+
+<a id="pc-v475-http3-fields"></a>
+
+## V2-475 — фактический HTTP/3 consumer, decoded limit и qlog metadata
+
+Статус: source/unverified, 2026-11-16; quic-go77/sing-quic85.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефекты и изменения
+
+- Actual HY2 auth создаёт прямой HTTP3 ClientConn с64KiB response-header limit.
+  RequestStream.ReadResponse передавал адрес nil slice даже без qlogger;
+  parseHeaders проверял только pointer и всё равно append-ил metadata fields.
+  Request/response/trailer readers теперь передают nil collector без logger.
+  Существующие header maps и QPACK strings по-прежнему нужны потребителю.
+- Existing response/request decoded size limit сохранён; общий helper использует
+  последовательные subtraction checks name/value/32, без overflow суммы int.
+  Over-limit поле больше не попадает в metadata collector перед отказом.
+- Wire trailers раньше ограничивали только encoded block. Теперь тот же original
+  configured limit применяется к сумме decoded name+value+32 до Add/collector.
+  При отказе не публикуется partial Trailer map. Negative encoded limit отвергается
+  до uint conversion/allocation. QPACK errors и исходная error propagation сохранены.
+- Private parseTrailers signature сохранена через default1MiB wrapper; реальные
+  client/server wire paths используют parseTrailersWithLimit с explicit limit.
+  Новые зависимости, decoder fork, worker, pool, очередь и fallback не добавлены.
+
+### Адресный inventory по текущим исходникам
+
+| Вход/владелец | Граница до собственного удержания | Срок / последний держатель | Что не доказано |
+|---|---|---|---|
+| HY2 auth response HEADERS | encoded64KiB; decoded name+value+32 не больше64KiB на секцию | local block/decoder closure до возврата parser; map у response | QPACK transient strings, actual GC/RSS, callback retention |
+| HTTP3 request/response trailers | original caller limit отдельно для encoded и decoded; count следует из32/field | parser local block; complete map у body caller; partial не публикуется | HY2 auth их не читает: original Body.Close cancels без drain |
+| Optional qlog fields | absent collector при nil logger; accepted fields только после decoded charge | local list, затем произвольный recorder | sink can retain/block; не whole-carrier limit и не secret-redaction gate |
+| Peer SETTINGS | existing encoded8KiB before make; finite varint pairs, unknown map | parse local block; settings у rawConn | actual map/allocator bytes, optional logger clone/sink lifetime |
+| Informational responses | doRequest отвергает шестой1xx после его чтения; per-section header limit | original response/trace callback | public repeated ReadResponse and external callbacks имеют отдельный scope |
+| HTTP3 client tasks | existing64 active registrations before worker start | original owner/wait receipts | external body/stream borrowers, time, native/global resources |
+
+Pinned local QPACK0.6.0 Decode не копирует encoded block, но удерживает его в
+closure; literal/Huffman strings создаются до выдачи поля. Новый учёт не обещает
+pre-decoder admission, принудительную остановку, byte wipe или hard memory quota.
+Статический HTTP3 server fix применяется к существующей библиотеке: listener/VPS
+не включается. Actual HY2 source и trust/handshake/lifecycle gates не менялись.
+
+### Доказательство и остаток
+
+Manual3Go+2ORIGIN diffs, touched-only gofmt3 exit0;13 reviewed inputs,1 unchanged
+cached dependency decoder;261 original cache files,191 verbatim mirrors,58 owned
+mirrors (2 promoted). Receipts: .artifacts/memory/bootstrap-v475-http3-fields-.
+Source/unverified. Decoded field charges are logical name+value+32 per section, not allocator/map/slice/RSS or process quotas. Pinned QPACK allocates each string before yielding the field, its closure retains borrowed encoded bytes until parsing returns; no decoder API/version change or early wipe. Optional qlogger/trace/body callers may retain data or block independently. HY2 auth uses response headers but closes unread body, so trailer enforcement affects existing library consumers, not an observed auth trailer path. Existing SETTINGS8KiB, request1xx and task64 limits are scoped separately and not multiplied into a whole-carrier guarantee. Legacy private parseTrailers now defaults1MiB; wire request/response trailer paths retain their configured limits. Over-limit field is excluded from qlog metadata; error precedence at simultaneous invalid/oversize trailer can change. Header/wire/private fixtures/default wrapper/Close/sink/concurrency/API compilation remain unverified. No measured CPU/RAM/speed/retirement gain, no byte erasure. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency resolution/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+Следующий срез: продолжить actual producer/queue/cache/last-holder inventory;
+отдельно проверить ранние allocations и metadata retention в HTTP3/rawConn,
+а не считать per-section size полным memory/lifetime контрактом.
+
+<a id="pc-v476-http3-datagram"></a>
+
+## V2-476 — очередь HTTP/3 DATAGRAM и исходные ожидающие получатели
+
+Статус: source/unverified, 2026-11-16; quic-go78/sing-quic86.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+Current HY2 auth не включает HTTP3 datagrams. Изменяется существующий library
+path, без активации второго reader, listener или VPS.
+
+### Область и изменения
+
+- Предыдущая очередь ограничивала только32 entries и сдвигала slice без очистки
+  исходной ячейки. Использован existing internal/utils/ringbuffer без его правок.
+  Lazy Init32 только после receive/count/byte admission под existing mutex;
+  guarded PushBack не расширяет ring, PopFront очищает исходную metadata cell.
+- Immutable entry charge — original backing capacity. Native rawConn передаёт
+  cap(b) целого lower-QUIC allocation вместе с capped payload после stream-ID
+  prefix; header bytes не теряются в учёте. Queue ceiling1MiB проверяется через
+  subtraction до Init/retention. Existing drop при count/close дополнен byte
+  pressure; без payload clone, worker, wait-list или fallback.
+- Private enqueueDatagram signature сохранена: она знает только visible cap.
+  Скрытый prefix произвольного private subslice не объявляется учтённым.
+  При pop собственная credit возвращается вместе с передачей исходного payload;
+  внешний получатель далее владеет им вне queue quota. Ring metadata переиспользуется.
+- One-slot hasData объединял notification и мог оставить других concurrent
+  receivers спящими при close либо нескольких queued messages. Lazy receiveDone
+  создаётся под тем же mutex, что первый receive close, и закрывается однократно
+  для всех waiters; nil close cause нормализуется. Pop оставшихся данных передаёт
+  hasData следующему waiter. Исходный queued-data-before-error drain сохранён.
+- Nil context даёт ошибку; captured Done проверяется до dequeue. Done/Cause
+  вызываются вне queue mutex. Это check point, не атомарный OS cancel cutoff.
+  Внешние caller goroutines не становятся новыми внутренними задачами.
+
+### Остаток inventory / следующие границы
+
+Stream task reservation завершается original send-context callback, тогда как
+rawConn map удаляет stream только после двух сторон. Поэтому existing64 active
+tasks не доказывают64 map entries или освобождение queued data. Map registration,
+duplicate/empty notification, закрытие и exact original last-holder требуют
+отдельного среза; не очищать их по одному сигналу Closing/Context.
+
+Receive close не стирает queued payload: он остаётся до drain/release wrapper.
+Existing clearStream/onStreamsEmpty callbacks и их время не изменены; новое
+уведомление не подтверждает native/OS retirement. Без использования очереди нет
+ring allocation; struct metadata, lazy channel и actual allocator classes отдельно.
+
+### Доказательство и ограничения
+
+Manual2Go+2ORIGIN diffs, touched-only gofmt2 exit0;15 reviewed inputs,0SDK.
+261 original cache files,191 verbatim mirrors,58 owned mirrors сохранены;
+новых исходников/зависимостей нет. Receipts: .artifacts/memory/bootstrap-v476-http3-datagram-.
+Source/unverified.32 entries and1MiB cap charges bound only queued HTTP3 storage for one stream. Native charge comes from the inspected lower queue own make/copy; allocator rounding/metadata/external returned borrowers and process/native/RSS/time are separate. Legacy private enqueue knows only its visible cap, not hidden backing prefixes. Lazy ring retains fixed empty metadata until wrapper reclamation; no physical byte wipe. Receive close preserves already queued data until caller drains or releases wrapper, not eager cleanup/forced cancellation. Existing callbacks may block under existing locks; close broadcast is not a native retirement receipt or Stop SLO. Cancellation can win only at the check, not an atomic cutoff. Caller goroutines/body/stream borrowers and rawConn map cardinality/last-holder settlement remain separate from task64. No HTTP3 datagram enablement in actual HY2 auth, no competing reader or measured speed/resource improvement. Private queue shape, nil/cancel ordering, close broadcast, multiwaiter handoff, byte pressure/drop/drain, ring/callback/panic/Goexit interleavings, build/API/wire/fixture compatibility remain unverified. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+<a id="pc-v477-http3-registry"></a>
+
+## V2-477 — HTTP/3 registry: admission, original identity и qlogger join
+
+Статус: source/unverified, 2026-11-16; quic-go79/sing-quic87.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефекты и реализация
+
+- Existing task64 учитывал callback, завершающийся при закрытии send Context.
+  Native Stream.Context прямо объявлен send-side-only. Карта удаляла wrapper
+  после двух local sides и могла пережить callback; поэтому теперь у неё есть
+  собственный max64. Duplicate/closing/capacity проверяются под streamMx до
+  wrapper/channel construction. Прежние caller error→CancelRead/Write сохранены.
+- Stream registry выделен в небольшой stream_registry.go с существующими owner
+  seams. Complete unwatched wrapper и original WG registration находятся в map
+  до установки того же send-context watcher, которая выполняется вне metadata
+  lock. Old constructor shape сохранён через те же builder/watcher helpers.
+- Client callback permit резервируется заранее; known отказ до входа в watcher
+  возвращает только unused permit. Unknown registration сохраняет map/original
+  и callback permit, закрывает intake, без второго watcher/retry/спекулятивного Done.
+- Private clearStream теперь получает exact original wrapper. Чужой/отсутствующий
+  owner не удаляется; только реальное removal уменьшает WG и вызывает прежнее
+  onStreamsEmpty. Этот callback и существующий lock order не переносились.
+- Все прежние WG.Add (stream/control/uni/datagram worker) проходят один streamMx
+  и closing seal; оба WG.Wait сначала seal-ят intake под тем же mutex. Поэтому
+  новый Add не проходит за этот seal. Нет новых worker, таймера или wait-list.
+- При review найден RawServerConn.rawConn value copy после newRawConn: original
+  Context callback сохранял старый объект, а рабочий код менял скопированные
+  mutex/WG/admission. Теперь хранится original pointer. Constructor и3 прежних
+  address-taking места (parser и два reject-writer аргумента) адаптированы.
+  Расширение заранее сверено с pre-reviewed input и snapshotted до этой правки;
+  ранний scope-checkpoint ошибочно насчитал4 address sites, фактически3 + constructor.
+
+### Граница доказательства
+
+Closing закрывает intake; map не стирается, WG не уменьшается синтетически.
+Local two-side close не доказывает прекращение native Read/Write или освобождение
+очередей/внешних aliases. Map64 и task64 независимы; число всех live wrappers,
+callback time, global allocator/RSS, full native/data last-holder не выведены из них.
+Следующий срез — original HTTP3 registry/borrower retirement и его честный receipt,
+не cleanup по одному Context. Current HY2 auth использует client registry;
+HTTP3 datagrams не включаются, server/VPS не запускается.
+
+### Доказательство и ограничения
+
+Manual6 source/ORIGIN diffs (5 existing +1new), touched-only gofmt4 exit0;
+12 reviewed inputs,0SDK;261 original cache files,191 verbatim mirrors,58 owned
+mirrors сохранены. Public APIs/dependencies unchanged; private clearer/registry/
+server field shape migration не проверены. Receipts: .artifacts/memory/bootstrap-v477-http3-registry-.
+Source/unverified.64 bounds original map entries, not all live wrappers/caller goroutines/queued-returned payloads/allocator/native/RSS/time. No map purge, synthetic Done, native cleanup or retry on Closing/Context. Ordinary remove still follows two local wrapper sides; it is not physical native/data retirement. Existing onStreamsEmpty callback remains under original lock and may block; no Stop SLO or forced interruption. Client task64 and map64 are separate admissions, not measured optimal settings. Server pointer migration fixes the inspected copied-owner construction; server accept/handler tasks, idle timer and arbitrary external callbacks/providers remain separate. All existing qloggerWG Add sites are serialized with both Wait seals, not every possible external qlog/body/trace writer or sink lifetime. Private streamClearer now requires owner pointer; new private registry fields and RawServerConn pointer affect fixtures/adapters. Default/raw client, server, Goaway/0RTT/constructor failure/close/duplicate/capacity/abnormal watcher/concurrency/API/wire and native acceptance remain unverified. Actual HY2 source unchanged; no HTTP3 datagram/server activation or measured speed/resource improvement. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+<a id="pc-v478-http3-join"></a>
+
+## V2-478 — qlog-independent HTTP/3 registry join и незавершённое удаление
+
+Статус: source/unverified, 2026-11-16; quic-go80/sing-quic88.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефект и изменения
+
+- Без qlogger qloggerDone закрывался в constructor; прежний WaitForShutdown
+  ожидал task drain и этот уже закрытый канал. Registry WG учитывал map entries,
+  но его join выполнялся только в qlogger callback. Send-context callback мог
+  закончиться при ещё открытой receive стороне, поэтому этого было недостаточно.
+- Теперь после original task drain, уже наблюдавшего Closing, выполняется join
+  existing registry WG независимо от qlogger. Admission seal предшествует Wait;
+  mutex/WG не заменены. Original qloggerDone и его error по-прежнему join-ятся.
+  Сам вызов Wait не закрывает активное соединение и не вызывает native Close.
+- После WG.Wait берётся original streamMx: map nonnil/empty, intake sealed,
+  clear-original slot empty и sticky failure nil нужны для positive registry result.
+  Mutex дополнительно ждёт исходный callback prefix, который может пережить Done.
+- clearStream сохраняет один original wrapper до delete/Done/onStreamsEmpty.
+  Normal return снимает slot. Abnormal return удерживает его, закрывает intake
+  и latch-ит ошибку; следующий clear не перезаписывает неизвестного владельца.
+  Unknown registration использует тот же failure latch. No retry/synthetic Done.
+- Actual HY2 attachHTTP3 уже хранит original WaitForShutdown closeCall;
+  finishClose ждёт initialDone и join-ит call.err. Failed cleanup остаётся в
+  Client.conn/pending, повторное использование запрещено. Consumer source не менялся.
+- При сопоставлении join с caller найден normal error path: unexpected first
+  response frame закрывает carrier, но не обязательно local wrapper receive side.
+  doRequest возвращал ошибку, RoundTrip закрывал reqDone, и watcher мог выбрать
+  reqDone вместо cancellation/Closing. Теперь returned error явно CancelWrite/
+  CancelRead исходного stream до reqDone. Original response error и original
+  watcher join сохранены. Нормально не вернувшийся/abnormal call не повторяется.
+  Этот caller snapshotted по pre-reviewed identity до расширенной правки.
+
+### Контракт ожидания и остаток
+
+Закрытие tracked borrower с обеих local сторон теперь требуется и без qlog.
+Поздний auth Body.Close может завершить исходную map registration после начала
+shutdown; вместо преждевременного результата она ожидается. Брошенный raw stream
+без закрытой receive стороны способен удерживать join бессрочно. Это сохраняет
+владельца, но не решает его native terminal observation/forced shutdown; этот
+remaining lifecycle gate нельзя закрыть source receipt или одним Context.
+
+Нет новых workers, WG, канала, poller, timer, purge map/data, byte wipe или Close.
+Очереди/returned buffers и внешние aliases не объявляются физически освобождёнными
+после metadata result. Original Hysteria/QUIC native и data receipts остаются
+независимыми; raw borrower terminal observation и оставшийся actual resource
+inventory требуют отдельного среза. Не вызывать join из зарегистрированной
+task или clear callback: original owner не должен ждать самого себя.
+
+### Доказательство и ограничения
+
+Manual4Go+2ORIGIN diffs, touched-only gofmt4 exit0;13 reviewed inputs,0SDK;
+initial3Go review сохранён, accepted4Go review включает error caller;
+261 original cache files,191 verbatim mirrors,58 owned mirrors сохранены.
+Receipts: .artifacts/memory/bootstrap-v478-http3-join-.
+Source/unverified. This strengthens WaitForShutdown: tracked streams must complete both local sides, even with qlog disabled. An abandoned raw stream can hold the join indefinitely; no timeout-based retirement of pending raw borrowers, new watcher, polling or Stop SLO is added. Taking the original mutex joins the clear callback prefix after WG.Done but cannot interrupt a blocked callback. Unknown clear retains its original wrapper in one fixed slot and sticky failure; pending other registrations remain owned. Seal and Closing are intake facts, not data/native retirement; no map purge, synthetic Done, payload wipe or retry. A positive registry result covers original registrations and its checked metadata, not external returned buffers, body/stream aliases, hidden callbacks/sinks or allocator/native/global/RSS memory. Existing registered qlogger join and HY2 negative-error retention are preserved, not runtime proof. Private new fields and stronger raw-borrower shutdown contract affect fixtures/adapters. Default/raw client, auth initializer/late body close, qlog nil/on, callback panic/Goexit, repeated shutdown, half-close/drain/Close/concurrency/API/wire acceptance remain unverified. Actual HY2 and public signature/dependency versions unchanged. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+<a id="pc-v479-http3-native"></a>
+
+## V2-479 — завершение abandoned HTTP/3 metadata после исходного native receipt
+
+Статус: source/unverified, 2026-11-16; quic-go81/sing-quic89.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Причина и границы исходного механизма
+
+V2-478 честно ожидал map/WG, но raw borrower мог не вызвать receive close даже
+после фактического native shutdown. Один Context не разрешает сбросить эту запись.
+В frozen QUIC уже есть WaitForStreamMapRetirement: original packet input,
+Open/Accept, receive/data, all-call/send-data/framer receipts до удаления native
+map metadata. Этот aggregate уже используется HY2 через crypto/history retirement.
+
+### Реализация
+
+- Новый небольшой stream_registry_retirement.go — один lazy finalizer на rawConn,
+  original Conn/done/result и fixed64 entries/stage/index до native join. Repeated/
+  concurrent Wait ждут его original result; ошибка не создаёт новую попытку.
+- После original HTTP3 task drain/Closing join-ится именно original native
+  aggregate. Negative/abnormal сохраняет owner/prefix и sticky failure. Native
+  success ещё не равен global/native/OS/GC или полному resource retirement.
+- Original terminal cause читается после native result вне metadata locks.
+  Nil cause не допускает cleanup. Preflight проверяет original identity, закрытый
+  intake, map/count≤64, отсутствие duplicate wrapper/unknown clear/failure.
+  Только полный bounded snapshot публикует nativeReady.
+- Local completion берёт established stream→parent locks. Native Close/Cancel,
+  Context callbacks и payload/pool операции под ними не вызываются. Первые
+  send/recv errors сохраняются; недостающие получают original terminal cause.
+  Receive close будит ожидающих, queued payload сохраняется для external drain.
+- Exact original map removal уменьшает его WG один раз; ordinary concurrent
+  clear допускается как уже завершённый только при двух nonnil local errors.
+  Terminal removal не вызывает onStreamsEmpty: actual client callback иначе
+  повторил бы GOAWAY Close, server callback reset-ил бы idle timer после завершения.
+- Затем joins existing WG, original mutex/postflight и original qlogger result.
+  Snapshot/cause снимаются только при полном positive registry result; original
+  native identity остаётся для cached receipt. Partial/unknown prefix не затирается.
+
+### Сопоставление ожиданий
+
+Native aggregate не зависит от HTTP3 map/WG в просмотренном source graph.
+Дополнительно изучены unchanged connection.go и встроенный qlogwriter Writer:
+native close снимает своего producer; nonlast removal не ждёт снятия HTTP3
+producer. Admitted events/sink и custom trace providers способны блокировать;
+универсальная свобода от циклов или Stop SLO этим не доказана.
+
+Результат относится к original native stream map/call/STREAM-data и локальному
+registry. External aliases/returned buffers/HTTP3 datagram/trace callers, весь
+native/provider/global/RSS/OS scope остаются отдельными. HY2 source unchanged;
+datagram/server/VPS не активируются. Новых native действий, workers/timers/poller,
+payload wipe или cleanup по одному Closing нет. Один lazy done channel и64 slots
+не объявляются измеренным выигрышем памяти/скорости.
+
+### Доказательство и следующий шаг
+
+Manual6 source/ORIGIN diffs (5 existing +1new), touched-only gofmt4 exit0.
+17 reviewed/frozen inputs:15 initial +2 supplemental,0SDK;261 original cache
+files,191 verbatim mirrors,58 owned mirrors сохранены. Initial review сохранён,
+accepted source использует original cause. Receipts: .artifacts/memory/bootstrap-v479-http3-native-.
+Source/unverified. Entry point is ClientConn.WaitForShutdown; the server lifecycle does not invoke this finalizer. Native proof is the existing stream map/calls/STREAM data aggregate, not every DATAGRAM/trace/provider/native/OS/GC/RSS resource or protected VPN path. Metadata cleanup never follows Closing/Context alone. Native/context provider error or blocking still retains the original owner; qlogger completion remains its original join and may block. One lazy finalizer/done channel and fixed64 metadata slots are not measured RSS or CPU gains. Queued HTTP3 datagrams remain for external drain; returned buffers/body/stream aliases and hidden sink references remain outside this result. Native terminal removal skips the private empty callback: actual client handler would re-close GOAWAY and server handler would reset idle timer; ordinary active-stream callback path remains. Captured original cause preserves error identity; nil cause rejects completion. Repeated/concurrent Wait joins one cached original result, no restart after uncertainty. Stream->parent lock order and original-reference preflight require future race/deadlock/abnormal/cancel/native gate acceptance. Custom qlog providers can have dependencies absent from inspected built-in writer; its nonlast producer Close does not wait for HTTP3 producer removal, but admitted events/sink work may block. Source/default/raw client/qlog nil-on/private fixture/API/wire and performance/native acceptance remain unverified. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+Далее: вернуться к inventory фактически используемых producers/cache/last holders
+с учётом добавленного HTTP3 receipt; не расширять этот scoped result до всех
+Win32/provider/OS/UX/release требований и не закрывать native gates без разрешённой приёмки.
+
+<a id="pc-v480-hy2-udp-close"></a>
+
+## V2-480 — HY2 UDP: закрытие, удержание original map и частичного drain
+
+Статус: source/unverified, 2026-11-16; quic-go82 (pair metadata only)/sing-quic90.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Найденное в actual client path
+
+Parent finishClose переносил UDP map в local variable, затем nil-ил поле до
+individual cleanup. При abnormal unwind original map/current session терялись
+из carrier. Индивидуальный Close возвращал nil после Once, closeWithError не
+передавал native scope error; repeat после panic мог выглядеть успешным. Drain
+передавал message в pool без retained current slot. Defrag remove заранее удалял
+group и nil-ил cell до actual release, теряя prefix при abnormal callback.
+
+### Изменения
+
+- Retained udpRetiring map/current session+ID в parent. Handoff под udpAccess
+  после connDone; earlier constructor включается. Current destroy callback смотрит
+  на current map, а не retained original, поэтому не меняет finalizer iteration.
+  Только original finalizer меняет retired fields до retired publication.
+- Parent теперь join-ит original child shutdown/destroy и его error. Original map
+  снимается только после полного positive native/transport/HTTP3/TCP/task/send/RX
+  close result и failure fence. Negative/abnormal сохраняет map/current reference.
+  Нового life→UDP lock order и foreign call под handoff mutex нет.
+- packet_close.go отделяет original shutdown Once/result от original destroy Once.
+  Public/parent callers ждут те же результаты; normal error передаётся наверх,
+  abnormal не повторяется. OnDestroy допускается после known successful shutdown;
+  parent вызывает и join-ит его сейчас, а не оставляет после carrier retirement.
+- Current queued message сохраняется до actual release; при pool panic/Goexit
+  phase/current остаются, повторный Close не читает и не выпускает pointer снова.
+- Defrag group остаётся в map и cell до actual release return. Metadata credit
+  и retained scalar обновляются после releases; failed remove сохраняет original
+  prefix и отказывает в повторном feed/close. Нет synthetic count/byte reset.
+- RX poison сохраняет owner/bytes и даёт negative settlement. Client callback
+  установлен до publication. Shutdown/destroy уведомляют parent вне budget/RX
+  locks; remove под RX lock делает poison-only, без такого callback.
+
+### Границы и сохранённые условия
+
+Native DatagramSendScope.Close в inspected frozen source — seal/wakeup, не join
+Send/call/history/native data. Parent original native/data/budget gates сохранены.
+Не добавлены goroutines, timers, новая очередь, wire field или dependency.
+Existing UDP256 sessions/4096 owners/8MiB и defrag64 groups/256KiB/10s lazy expiry,
+TCP256/512calls и Salamander8 writers остаются их прежними scoped ceilings.
+Salamander password уже cap-clamped: первоначальное подозрение на shared append
+не подтверждено исходниками; повторный фиктивный race fix не добавлялся.
+
+Это не полное владение RX: decoded input, Feed input/assembly output, reader/wait/
+caller output buffers всё ещё требуют собственных original prefixes и error
+notification. Их counts не заменяют refs или global/RSS/time proof. Service
+internal private errors ещё игнорируются старыми caller; сервер/VPS не запускался.
+
+### Доказательство и следующий шаг
+
+Manual7 source/ORIGIN diffs (6 existing +1new), touched-only gofmt5 exit0;
+15 reviewed inputs,0SDK;261 original cache files,191 verbatim mirrors,58 owned
+mirrors сохранены. quic-go runtime source unchanged; pair metadata updated.
+Receipts: .artifacts/memory/bootstrap-v480-hy2-udp-close-.
+Source/unverified. Scope is Windows HY2 client UDP shutdown/map/group-drain references, not all RX decode/feed/assembly/read/wait/output borrowers, TX/provider or whole carrier/native/OS retirement. Public child Close seals enqueue and drains known queued RX; native Scope.Close explicitly does not await send calls/history/data. Parent retains original map until all original native/transport/HTTP3/TCP/task/send/RX receipts and failure check are positive. Pending reader credits/provider/pool/cancel/destroy work can still block; no Stop SLO/forced interruption. Unknown pool release retains pointer without further dereference/release; no physical backing validity or byte wipe claim. Poison preserves original owner/byte counts and settles negatively; it does not manufacture free capacity. Notification is close-phase only, outside budget/RX locks; complete receive/accounting failure notification and reader/feed/assembly call prefixes remain future work. Client destroy uses current map after handoff, so it cannot mutate the retained original; only the original finalizer writes retired fields. Service internal close callers still ignore returned private errors and have no client failure callback; no VPS/server acceptance. Existing protocol/ceilings preserved; no measured speed/RSS/FD gain. Private layout/return contracts, public Close error behavior, simultaneous public/parent Close, late constructor/destroy, pool panic/Goexit, fragment expiry/assembly, actual native/wire/fixture/API/race/deadlock acceptance remain unverified. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+Далее: original RX decode/dispatch/feed/assembly/reader/wait prefixes и их
+последний держатель в actual client; не объявлять ресурс завершённым по одному
+counter/channel/Cancel. Все остальные fullPC и старые native/OS/UX/release gates остаются.
+
+<a id="pc-v481-hy2-rx-prefix"></a>
+
+## V2-481 — HY2 RX: original decode/dispatch/input/assembly references
+
+Статус: source/unverified, 2026-11-16; quic-go83 (pair metadata only)/sing-quic91.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Найденное и исправленное в исходниках
+
+- Client decode сохранял raw input и allocated message только в стеке, включая
+  окно после reserve перед alloc/string/buf.As. Теперь carrier хранит один slot
+  original RX task: raw/charge/message до known dispatch return; unknown не
+  очищается и не используется вновь. Parent проверяет idle после tasks.Wait.
+- Receive task сохраняется один; новый helper receiveUDPMessageOwned принимает
+  slot, прежняя service/private signature делегирует с nil. Не добавлены
+  per-packet operation object, goroutine, timer, queue, wire или новый ceiling.
+- Новый packet_input.go хранит input перед ctx/drop/feed, затем assembly output
+  перед queue/release. После known feed return input уже передан defragger или
+  освобождён; alias очищается без dereference. Перед снятием assembly alias
+  original output получает child receiveOutput, под тем же RX mutex.
+- Defragger хранит assemblyCharge до allocMessage и assembly до buf.NewSize,
+  copy и удаления исходных groups. Abnormal feed сохраняет failed/poison;
+  неизвестный output запрещает повторный feed/close. Известная ошибка Write
+  оставляет прежнюю cleanup ветку, снимая alias только после release return.
+- Input failure фиксирует poison под RX lock, уведомляет client после unlock.
+  Close не повторяет cleanup при failed/current input/output; исходные carrier
+  receipts и bounds сохранены. Decoder при budget uncertainty сохраняет slot
+  и возвращает negative result вместо обычного overload success.
+
+### Доказательство и границы
+
+Manual9 source/ORIGIN diffs (8 existing+1new), touched-only gofmt7 exit0;
+14 reviewed inputs,0SDK;261 original cache files/191 verbatim mirrors/58 owned
+mirrors сохранены. quic-go runtime unchanged. Receipts: .artifacts/memory/bootstrap-v481-hy2-rx-prefix-.
+Source/unverified. Scope is actual Windows HY2 client raw/decode/dispatch, serialized input and defrag assembly prefixes. The original single loopMessages task alone writes clientUDPReceive; parent inspects after tasks.Wait. This is not an arbitrary concurrent/reentrant handleMessage API or server lifecycle acceptance. The unchanged receiveUDPMessage wrapper supplies no original client slot. Unknown references can be pooled/handed off already; retain without dereference/release/retry, no physical backing validity or wipe claim. New slots do not add payload copies or explicit per-packet operation objects; compiler allocation/CPU/speed/RSS is unmeasured. Existing ceilings/native/transport/HTTP3/TCP/task/send/RX receipts remain. Child enqueue handoff can race reader release; sender only clears its alias after known send/release and does not inspect it again. Failure guard poisons under RX then releases RX before client callback; decoder notifications hold no carrier/RX lock. ReadPacket/ReadFrom/WaitReadPacket, read options/output buffers and all late receive accounting notifications still need original owners. Pool/allocator/native internals, provider blocking, concurrency/Goexit/race/deadlock/wire/private fixture/layout/contracts and whole resource/OS/global/time acceptance are unverified. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+Далее: actual ReadPacket/ReadFrom/WaitReadPacket original call/message/output
+owners, их drain/handoff и late accounting failure notification. Не подменять
+эту работу budget counters или новой goroutine/таймером; fullPC и старые
+native/OS/UX/release обязательства остаются открытыми.
+
+<a id="pc-v482-hy2-readers"></a>
+
+## V2-482 — HY2: original read calls, output custody и partial-copy error
+
+Статус: source/unverified, 2026-11-16; quic-go84 (pair metadata only)/sing-quic92.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефекты и исходные изменения
+
+- ReadPacket/ReadFrom/WaitReadPacket хранили dequeued message только в стеке.
+  Public destroy мог убрать session из map при ещё работающем reader; budget
+  counters не сохраняли сам pointer. Новый packet_read.go использует8 fixed
+  slots/session и общий512-call admission, без per-read object/worker/queue.
+- RX budget readers map хранит session до known end всех calls независимо от
+  active map. Positive settlement/error требуют reads/map empty плюс прежние
+  owner/byte условия. Unknown оставляет slot/root/counts, запрещает reuse и
+  уведомляет actual client после budget unlock.
+- Read select помещает message прямо в original slot до copy/parse/release.
+  Caller buffer/slice — borrowed refs, не освобождаются здесь. Wait output
+  сохранён до message pool return, copy/PostReturn или buffer release/handoff.
+  Panic/Goexit не вызывает speculative release и не возвращает ошибку как nil.
+- Public Close seal-ит reader admission перед scope/cancel, не ждёт собственный
+  reader. Parent по-прежнему ждёт existing whole-carrier budget; новый self-join
+  не добавлен. Старый reader root переживает normal public onDestroy.
+- InitializeReadWaiter и beginRead snapshot используют один budget mutex.
+  Проверены negative fields, overflow-safe sums и request<=65535; default pool
+  charge<=65536 резервируется в existing8MiB RX budget до allocator.
+- В pinned SDK Buffer.Write может вернуть short n при nil error. Wait теперь
+  проверяет fit до allocation и exact n после Write; short output даёт
+  io.ErrShortBuffer. После cleanup возвращается nil buffer, не released pointer.
+  Original ReadFrom/ReadPacket copy/truncation behavior сохранён.
+
+### Доказательство и дальнейшая работа
+
+Manual7 source/ORIGIN diffs (6 existing+1new), touched-only gofmt5 exit0;
+17 reviewed inputs,6 unchanged cached SDK sources (read only, not executed).
+261 original cache files/190 verbatim mirrors/59 owned mirrors сохранены;
+packet_wait — owned promotion, quic-go runtime unchanged. Receipts: .artifacts/memory/bootstrap-v482-hy2-readers-.
+Source/unverified. Scope is Windows HY2 original public read calls, dequeued message/caller-output references and wait output allocation/handoff. Eight fixed slots/session and512 admitted/retained calls/carrier are engineering ceilings, not measured speed/RSS/latency. A budget-rooted session can outlive active-map removal; len(readers)<=readCalls, independent of256 active sessions. Unknown retains original slots/credits without replay or payload dereference, then notifies the client outside budget/RX locks. Public Close seals but does not join readers; this avoids adding a read-to-public-Close self-join, not arbitrary allocator-to-whole-Client.Close cycles. Whole-carrier positive budget result requires no original readers/roots or owner/byte credits. Failed calls can settle negatively with active roots still retained; negative is not actual retirement. Caller-owned buffers/slices and returned outputs are external owners, no physical backing validity/global/RSS/wipe claim. Pinned default pool rounds <=65535 allocation to <=65536 backing; custom allocators/aliases/pool high-water and allocator internals remain separate. Options validation covers nonnegative fields and checked bounded sums; selected API compatibility is unverified. ReadFrom and ReadPacket retain their original copy/truncation behavior; only WaitReadPacket full-copy success/error output semantics changed. Existing context/deadline behavior and native/send receipts remain; no new timer/worker/queue/per-read operation object. Service shares reader code but has no client failure callback/server lifecycle acceptance. TX write/pack/fragment/release prefixes remain stack-only in places, their unconditional credit cleanup is not a complete failure receipt. Private fixture/layout/API/wire/capacity/concurrent Close/options/read/pool panic/Goexit/race/deadlock/native/provider/global/OS/time/resource acceptance is unverified. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+Далее: actual TX staging/message/fragment/packed-buffer/caller-buffer owners,
+original release prefixes и send-budget late failure propagation. Текущие stack
+locals и unconditional send credit release не считать whole-carrier retirement.
+FullPC и старые native/OS/UX/release обязательства остаются открытыми.
+
+<a id="pc-v483-hy2-send-owners"></a>
+
+## V2-483 — admitted HY2 TX: original refs, release и sequential fragmentation
+
+Статус: source/unverified, 2026-11-16; quic-go85 (pair metadata only)/sing-quic93.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефекты и изменения в actual public write path
+
+- WriteTo делал unconditional budget release даже при abnormal unwind; message,
+  fragment list и packed frame хранились в стеке. WritePacket мог остановить
+  deferred cleanup до credit release при pool failure, не публикуя uncertainty.
+- Новый packet_send_owner.go расширяет existing8-owner/128KiB budget восемью
+  fixed original slots: session/input buffer or borrowed bytes/destination/main
+  message/current fragment/packed frame/stage. Visible cap(data)+buffer.Start
+  проверяется и учитывается до staging allocation; positive требует slots idle.
+- End guard различает known normal operation и неизвестный Send/pack. При
+  unknown cleanup не запускается. Во время известной cleanup текущая ссылка
+  остаётся до actual return; ошибка не повторяет release и не кредитует owner.
+  Callback actual client установлен до publication и вызывается вне send/RX lock.
+- Main message живёт до final cleanup, input — до завершения borrowed views.
+  Pack reference сохраняется до encoding/Send/Release. Последовательная сборка
+  держит один fragment view/frame вместо полного списка; count<=255 и прежний
+  single progressing size retry с fresh packetID сохранены в исходниках.
+- Normal Send return позволяет release HY2 pack: inspected addCopy создаёт
+  независимую native payload copy. Queue/history/borrowers/native receipt не
+  подменяются этим return. Public session Close по-прежнему только seal.
+- Refused WritePacket сохраняет consumption contract, guarded caller Release
+  уведомляет о abnormal return. Это ещё не persistent rejected-buffer owner;
+  произвольные concurrent rejected allocator callbacks/preflight/ctor/control
+  остаются открытыми. Новое cap charging может раньше отказывать при pressure.
+
+### Доказательство и дальнейшая работа
+
+Manual5 source/ORIGIN diffs (4 existing+1new), touched-only gofmt3 exit0;
+15 reviewed inputs=13 initial+2 supplemental native files, matched frozen prior.
+2 unchanged cached SDK source files read only;261 original cache files/
+190 verbatim mirrors/59 owned mirrors сохранены, quic-go runtime unchanged.
+Receipts: .artifacts/memory/bootstrap-v483-hy2-send-owners-.
+Source/unverified. Scope is admitted actual Windows HY2 WritePacket/WriteTo TX input/message/fragment/packed-frame original references and normal/abnormal cleanup. Eight fixed slots/128KiB are scoped engineering ceilings, not speed/RSS/global/time guarantees. Visible retained backing is cap(data)+buffer.Start with checked sum; hidden prefixes/full-slice aliases/custom allocator backing remain outside this estimate. Additional input charge can reject formerly accepted large-capacity slices and reduce admitted concurrency under pressure; no performance gain asserted. Normal Send return permits HY2 packed-buffer cleanup because inspected native addCopy makes an independent owned copy; QUIC queue/history/borrowers and native aggregate remain separate. Unknown Send/pack/fragment/pool return keeps original roots/credits; no repeat release or pointer dereference. A previously published pool alias can already be reused elsewhere, no physical validity or wipe claim. An independently poisoned budget retains even a known-finished slot rather than manufacturing fresh capacity. WritePacket consumption on refusal remains in the original caller invocation, with abnormal notification but without fixed persistent rejected-buffer roots; arbitrary concurrent rejected-buffer callbacks, nil/corrupt caller buffers and admission/preflight custody remain separate/open. Caller WriteTo memory/address aliases require stable caller ownership; no clone/race guarantee for concurrent mutation. Public session Close remains seal only and does not join writers; the carrier retains original send-budget/native joins. Private writeDatagram/writeMessage/writePacket signatures changed; old private pack/bulk-fragment/counter helpers are retained but do not claim owned admission or future fixture compatibility. Service shares code but has no client failure callback/server acceptance. Original constructors/control/provider/allocator callbacks can still block or form cycles; no forced interruption/Stop SLO. Private fixture/layout/API/wire/pressure/retry/concurrent Close/panic/Goexit/race/deadlock/native/provider/global/OS/time/resource acceptance is unverified. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+Далее: original rejected-buffer/pre-admission и constructor/control lifetimes,
+отделив actual default allocator/callers от произвольных callback assumptions.
+Не добавлять unbounded quarantine или новый worker вместо original receipt.
+FullPC и старые native/OS/UX/release обязательства остаются открытыми.
+
+<a id="pc-v484-hy2-constructor"></a>
+
+## V2-484 — original UDP construction, stale publication и shared abort
+
+Статус: source/unverified, 2026-11-16; quic-go86 (pair metadata only)/sing-quic94.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Найденное и изменения
+
+- ListenPacket проверял connDone лишь до constructor. Closing мог начаться
+  во время native scope/context construction, а candidate всё ещё публиковался.
+  Частичный constructor и его scope оставались только в стеке; scope Close error
+  игнорировался. Parent видел лишь уже опубликованную UDP map.
+- packet_constructor.go хранит candidate/init stage до native acquire/context/
+  queue/defrag/deadline. Client держит один original pending record/carrier;
+  unknown initialization публикует failure после UDP unlock и сохраняет prefix.
+- client_udp_lifetime.go публикует candidate под udpAccess->lifeAccess fence
+  с requestClose, проверяя failure/closing/operation cancellation channel.
+  Под lifeAccess нет Context/native/cancel/pool вызовов; operation Err вне locks.
+  При ошибке public ListenPacket возвращает nil interface. Lifetime ctx остаётся
+  carrier ctx, creation cancellation не становится lifetime опубликованной сессии.
+- Если candidate не опубликован, один abort Once/result закрывает captured
+  scope/cancel вне locks, без onDestroy. Известная operation error не становится
+  cleanup uncertainty; unknown result сохраняется и не повторяется.
+- Parent handoff переносит pending record в sole retiring field вместе с map,
+  затем join-ит тот же abort. Caller не трогает retired field; pending очищается
+  лишь при matching original/known cleanup. Full positive result снимает root.
+- Existing service/private signature переиспользует initializer и возвращает
+  cleanup errors, но локальный record не обеспечивает persistent server custody.
+  Новых workers/timers/queues нет; pinned MakeDeadline создаёт только channel.
+
+### Доказательство и оставшийся объём
+
+Manual7 source/ORIGIN diffs (5 existing+2new), touched-only gofmt5 exit0;
+17 reviewed inputs,2 unchanged cached SDK sources read only.261 original cache
+files/190 verbatim mirrors/59 owned mirrors сохранены; quic-go runtime unchanged.
+Receipts: .artifacts/memory/bootstrap-v484-hy2-constructor-.
+Source/unverified. Scope is actual Windows HY2 UDP constructor candidate, publication/closing fence and original unpublished scope/cancel abort. One pending record/carrier is bounded; existing256 active session/native scope and reader/TX limits remain. Builder still holds udpAccess through native scope and pinned context/queue/defrag/deadline initialization, so arbitrary replacement/dependency callbacks can block metadata acquisition; independent carrier abort calls already start before this join. No forced interruption/Stop SLO/whole native/provider/global/RSS/time/OS proof. Publication uses udpAccess->lifeAccess with no foreign call under lifeAccess; inspected requestClose releases lifeAccess before UDP handoff. This fences canonical closing/failure publication, not every unrelated budget notification instant or arbitrary injected state. Operation Context.Done is preflight outside locks and Err after abort/outside locks; caller Context can still block outside the native owner. Child lifetime remains carrier ctx, separate from creation ctx. Unknown initialization remains failed even if captured scope/cancel return known cleanup; unknown abort result is cached/no retry and original root retained on negative carrier result. Partial dependency internals not returned to the initializer cannot be reconstructed by this owner. Candidate was never mapped/exposed, so no RX/message/read/write/deadline setter can own it; abort closes captured scope/cancel without onDestroy. MakeDeadline itself only allocates its initial channel in pinned source. Common service/private wrapper shares initializer and joins cleanup errors, but its stack-local record does not provide persistent server custody/client failure callback. New pending-error refusal and changed common cleanup/error/layout/private contracts require future fixture/API/native/wire/race/deadlock/Goexit/concurrent Close/ctx acceptance. Existing public SetReadDeadline/SetDeadline still permit timers after Close and do not yet join/control original timers; LocalAddr remains a live native query. Rejected-buffer and pre-admission custody remain open. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+Далее: actual UDP control lifetime. SetReadDeadline/SetDeadline могут создавать
+таймер после Close; нужны original admission/seal, timer stop/join и отсутствие
+late reset. LocalAddr всё ещё вызывает native: рассмотреть existing packetaddr
+snapshot seam с original owner. Rejected-buffer/preflight, fullPC и старые
+native/OS/UX/release обязательства остаются открытыми.
+
+<a id="pc-v485-hy2-controls"></a>
+
+## V2-485 — original UDP controls, final read deadline clear и frozen LocalAddr
+
+Статус: source/unverified, 2026-11-16; quic-go87 (pair metadata only)/sing-quic95.
+Полная цель PC-00…09 и прежние FR/TH/OFF/COM/RQ/TR/TH-00…08 сохраняются.
+
+### Дефекты и изменения
+
+- SetReadDeadline и read-часть SetDeadline могли создать таймер после Close;
+  setters не имели original owner/join. LocalAddr каждый раз вызывал native.
+- Новый packet_control.go использует independent fixed8/carrier2/session lane
+  в existing RX budget, не расходуя read slots. Original slot хранит session,
+  deadline value и stage; unknown оставляет refs/counters, positive budget
+  требует empty control slots/calls. Нет per-control object/worker/очереди.
+- Session control mutex сериализует setters и privileged original close clear.
+  После получения mutex setter повторяет seal check. Error/unknown фиксируется
+  до unlock; client notification после unlock. SetDeadline сохраняет write-first
+  и read-only-after-success. Старый admitted waiter после clear не делает reset.
+- Close seal-ит admission перед scope/cancel, затем вызывает original pinned
+  Deadline.Set(zero) вне budget/RX locks и public capacity перед RX drain.
+  Он останавливает timer либо видит fired close action; generic callback-thread/
+  OS join и hard Stop SLO из этого не выводятся. Unknown timer не повторяется.
+- Existing packetaddr snapshot захватывается в original constructor: candidate
+  держит native-returned raw address до bounded Capture. LocalAddr выдаёт fresh
+  standard/frozen address из immutable snapshot, без native/provider вызова.
+  Это creation-time socket fact, не live route/egress; invalid metadata может
+  теперь отклонить constructor. Исходный opaque callback ещё может блокировать.
+
+### Доказательство и дальнейшая работа
+
+Manual7 source/ORIGIN diffs (6 existing+1new), touched-only gofmt5 exit0;
+16 reviewed inputs,1 unchanged cached SDK source read only.261 original cache
+files/190 verbatim mirrors/59 owned mirrors сохранены; quic-go runtime unchanged.
+Receipts: .artifacts/memory/bootstrap-v485-hy2-controls-.
+Source/unverified. Scope is Windows HY2 UDP deadline setter admission/original owner, serialized final read-timer clear and constructor-time LocalAddr snapshot. Independent8-control/carrier2/session fixed lane is an engineering pressure policy, not measured throughput/RSS/SLO; normal pressure can return new capacity errors. Control mutex serializes setters, with seal recheck after acquisition. Close seals first, closes original scope/cancels, bypasses public control capacity for timer clear, then performs existing RX drain. Already-admitted setters may finish before final clear; afterward waiting setters can only reject, not reset. Public Close does not join every queued control caller, but RX budget fixed slots root such callers beyond map removal and carrier positive budget result requires them empty. A positive budget receipt alone is not the child timer receipt; whole carrier also joins each original child close. Unknown timer/native setter retains original slot and sets controlFailed before mutex release; no repeat unknown timer action. Shared RX poison alone does not label a known timer operation unknown; independent known close timer clear remains possible. Pinned pipe.Deadline.Set(zero) stops timer or observes its fired channel-close action; this is not a generic goroutine/thread/OS retirement or hard wall-time proof. No new timer/worker/queue/per-control object, existing SDK timer reset/clear behavior reused unchanged. LocalAddr is an immutable constructor socket fact, not live migration/route/egress; Addr returns fresh bounded standard/frozen metadata without native callbacks. Capture can newly reject invalid metadata; raw provider address stays rooted through callback, and opaque provider/native query can block constructor under udpAccess. Caller/provider mutation, callback internals not returned to owner, arbitrary dependency replacements, rejected-buffer/preflight custody and private fixture/API/native/wire/concurrency/Goexit/race/deadlock/resource/OS/global/time/performance acceptance remain open. Service shares code but lacks persistent client-style construction/failure owner; no server acceptance. Next source priority reselected from explicit PC-PLAN next list: PC-01 original-helper/WFP/W4c, with TUN still unavailable until required implementation and authorized native acceptance. PC06 scoped source does not close its full gates or replace fullPC00-09/old9. No tests/fixtures/build/vet/typecheck/product/SDK/harness/browser/native/admin/live/VPS/network/dependency/generation/Git/other-role/chat/subagent execution. FullPC00-09/old9/rootNETGUARD001 OPEN; TUN unavailable/schema2 unsupported.
+
+Далее вернуться к explicit next из сводного PC-плана: PC-01 original-helper/
+WFP/W4c admission source, сверить текущий remaining protocol/caller и закрывать
+его source gaps с сохранённым закрытым TUN gate. PC06 rejected-buffer/preflight,
+callee/provider/whole-resource/native/OS gates и все fullPC/old9 обязательства
+сохраняются; scoped UDP implementation не объявляется полной приёмкой.

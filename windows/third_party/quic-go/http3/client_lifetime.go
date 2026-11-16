@@ -138,12 +138,16 @@ func (c *ClientConn) acceptUnidirectionalStreams() {
 	})
 }
 
-// WaitForShutdown joins this client's registered calls/workers and its original
-// qlogger completion after the underlying QUIC connection begins closing. It
-// does not initiate/retry Close or prove native/global retirement. Do not call
-// it from one of those workers. External body/stream borrowers remain separate.
+// WaitForShutdown joins this client's registered calls/workers, original stream
+// registry (with or without qlog), and qlogger completion after QUIC starts
+// closing. Residual local stream metadata ends only after the original native
+// stream/map/call/data receipt. It does not initiate/retry Close, time out an
+// uncertain owner, or prove whole native/global retirement. Do not call it from
+// a registered worker, native operation, or stream-clear callback.
+// External returned buffers and other body/stream aliases remain separate.
 func (c *ClientConn) WaitForShutdown() error {
 	err := c.tasks.wait()
+	registryErr := c.rawConn.waitForStreamRegistry()
 	<-c.rawConn.qloggerDone
-	return errors.Join(err, c.rawConn.qloggerErr)
+	return errors.Join(err, registryErr, c.rawConn.qloggerErr)
 }

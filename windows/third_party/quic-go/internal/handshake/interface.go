@@ -126,6 +126,8 @@ type CryptoSetup interface {
 	WaitForShutdown() error
 	// External-only after original Conn/native/data/history and TLS receipts.
 	RetireEventQueue() error
+	// Drop local key/parameter aliases only; preserve TLS diagnostics and providers.
+	RetireKeyReferences() error
 	ChangeConnectionID(protocol.ConnectionID)
 	GetSessionTicket() ([]byte, error)
 

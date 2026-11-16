@@ -30,7 +30,7 @@
 
 ### Публичная версия исходных условий
 
-Данные реального сервера, его конфигурация и внутренние операционные квитанции исключены из публичного снимка. Публикация исходников не подтверждает доступность сервера, VPN-путь или готовность релиза. Полный локальный план и его исходные сведения сохранены у владельца.
+Сведения реального сервера, рабочие конфигурации и операционные квитанции исключены из публичного снимка. Исходники не подтверждают доступность сервера, VPN-путь или готовность релиза. Полный исходный план сохранён локально у владельца.
 
 ## 2. Порядок работ и владельцы
 
@@ -3407,6 +3407,221 @@ retires after actual loop/data/history/TLS/local sorter receipts; unknown retain
 no retry/byte/key wipe. q67/s75 unchanged consumer;6Go1manifest2origin4docs/
 manual8diff1new/gofmt6exit0. No tests/build/native/network/Git; TLS keys/stream-
 crypto/retransmission lifetime budgets/provider/OS/fullPC OPEN.
+
+<a id="pc-v466-key-references"></a>
+
+V2-466 PC-06 source/unverified: [local key references](../../tasks/PC-06-HY2-RECEIVE.md#pc-v466-key-references).
+Existing native/public/data/history/TLS/event/local-sorter aggregate дополнен
+одним original-shell/exact-TLS retirement pass. Fixed typed prefix, no callbacks/
+waits/byte wipe; unknown retained/no retry. Local key/config/parameter/RTT/trace
+aliases отпускаются, TLS Conn/ConnectionState и historical Used0RTT сохраняются.
+Serial key APIs/late event dispatch закрыты; native derivation уже owns outputs.
+q68/s76 unchanged consumer;6Go2origin4docs/manual7diff1new/gofmt6exit0.
+No tests/build/native/network/Git на этом срезе; crypto-stream/retransmission
+lifetime budgets/provider/TLS internals/OS/fullPC remain OPEN.
+
+<a id="pc-v467-crypto-write-storage"></a>
+
+V2-467 PC-06 source/unverified: [crypto transmit storage](../../tasks/PC-06-HY2-RECEIVE.md#pc-v467-crypto-write-storage).
+Per original stream:8MiB accepted lifetime/4096 writes/16MiB backing/fixed64 buffers,
+admission before make/copy and clamped growth. No Pop/Finish/ACK/timeout refund;
+Initial scrambling preserved, server ticket Write error propagated. All3 original
+stores preflight before event/key retirement; local references clear only after
+aggregate receipts, unknown prefix retained/no retry/no byte wipe.
+q69/s77 unchanged consumer;4Go2origin4docs/manual5diff1new/gofmt4exit0.
+No tests/build/native/network/Git; retx tail copies and queue accounting/global/
+TLS/provider/native/OS/fullPC remain OPEN.
+
+<a id="pc-v468-retransmission-storage"></a>
+
+V2-468 PC-06 source/unverified: [retransmission storage](../../tasks/PC-06-HY2-RECEIVE.md#pc-v468-retransmission-storage).
+Original queue admission4096 entries/16MiB views/1MiB frame, clamped metadata;
+4096 lifetime split copies/16MiB backing before allocation. Stored pending credit
+refunds are separate from retained split backing; emitted views clamped. Void-
+OnLost errors reach native lifecycle/packer gates, unknown prefix retained/no retry.
+Initial/Handshake key drop retires pending heads; metadata-only cleanup after
+native/history/TLS/event/key, no frame callbacks/pool/byte wipe. Wire API unchanged.
+q70/s78 unchanged consumer;7Go2origin4docs/manual7diff2new/gofmt7exit0.
+No tests/build/native/network/Git; receive/framer/provider/TLS/global/OS/fullPC OPEN.
+
+<a id="pc-v469-crypto-receive-storage"></a>
+
+V2-469 PC-06 source/unverified: [CRYPTO receive storage](../../tasks/PC-06-HY2-RECEIVE.md#pc-v469-crypto-receive-storage).
+Native borrowed parser view сохраняет old owning API. Existing16KiB range/phase
+проверяется до lazy16KiB data+2KiB bitmap allocation; generic crypto sorter/trim
+clones исключены. Accepted bytes не переписываются, TLS views immutable/capped;
+Finish сохраняет backing, unknown blocks readiness/native receipt/no retry.
+Bitmap-only preflight и reference release после native/history/TLS/event/key.
+q71/s79 unchanged consumer;7Go2origin4docs/manual8diff1new/gofmt7exit0.
+No tests/build/native/network/Git; segmentation/overlap/protocol/fixtures и
+framer/control/provider/TLS/global/OS/fullPC remain OPEN.
+
+<a id="pc-v470-framer-control-storage"></a>
+
+V2-470 PC-06 source/unverified: [control-frame storage](../../tasks/PC-06-HY2-RECEIVE.md#pc-v470-framer-control-storage).
+Generic framer: existing16384 count plus16MiB pending payload views/1MiB frame,
+shared immutable entry/layout with retx, оба blocked-frame append через admission,
+очистка снятых references. Original wake signal и atomic failure соединены с
+native loop/readiness/send и regular packer gates. Unknown operation сохраняется;
+Append unlocks, bounded 0RTT/filter и metadata-only retirement не маскируют ошибку.
+Explicit concrete-framer assertion исправляет frameSource seam; aggregate
+проверяет exact original identity. q72/s80 unchanged HY2;9Go2origin4docs/
+manual10diff1new/gofmt9exit0. No tests/build/native/network/Git.
+Token/path/stream-control/packet/qlog/provider/global/OS и fullPC остаются OPEN.
+
+<a id="pc-v471-client-token-storage"></a>
+
+V2-471 PC-06 source/unverified: [client token storage](../../tasks/PC-06-HY2-RECEIVE.md#pc-v471-client-token-storage).
+Native borrowed NEW_TOKEN parser и scalar debug/qlog metadata; owning parser и
+old raw qlog alias сохранены. Original optional store/key/Pop/clone/Put cell
+ограничивает lifetime copies до64/1MiB/16KiB token перед allocation. Default LRU
+имеет64 origins/16 slots/1MiB views+owned keys, safe zero sizes и immutable credit.
+Capacity не отвергает peer framing и не включает cache. Unknown state удерживается,
+native/readiness/aggregate gated; local aliases снимаются после original receipt.
+q73/s81 unchanged HY2/no TokenStore;9Go2origin4docs/manual10diff1new/gofmt9exit0.
+No tests/build/native/network/Git. Issuer/Retry/header/other qlog/provider/global/
+native/OS/fullPC остаются OPEN.
+
+<a id="pc-v472-token-issuer"></a>
+
+V2-472 PC-06 source/unverified: [token issuer](../../tasks/PC-06-HY2-RECEIVE.md#pc-v472-token-issuer).
+Собственный issuer ограничен1024 encrypted/plain976 до crypto и получает один
+reserved output; address copy/marshal inputs ограничены после provider return.
+Decoded address/CID/RTT validation предшествует CID parsing/duration arithmetic;
+server future age отвергается после actual address validation. Native Initial/
+Retry header diagnostics не передают token bytes; opaque client policy, raw
+standalone qlog и Retry integrity/phase остаются. q74/s82 unchanged HY2;
+5Go2origin4docs/manual7diff0new/gofmt5exit0. No tests/build/native/network/Git.
+Retry parser/Initial fit/provider/String/global/native/OS/fullPC OPEN.
+
+<a id="pc-v473-packet-token"></a>
+
+V2-473 PC-06 source/unverified: [packet token admission](../../tasks/PC-06-HY2-RECEIVE.md#pc-v473-packet-token).
+Native Conn borrowed Initial/Retry parser сохраняет owning/server paths. Existing
+header/CRYPTO length API проверяет configured Initial-fit с PN4/CID20/AEAD16/offset
+headroom перед clone/mutation. Original packer/stream/retx identity и separate
+single-Retry owned slot<=1452 удерживаются через reset/key/CID callbacks; nonfit
+не меняет state, unknown retained/no retry/no native-ready. Metadata checked
+before aggregate reference release. q75/s83 unchanged HY2;4Go2origin4docs/
+manual5diff1new/gofmt4exit0. No tests/build/native/network/Git.
+Server pre-parser/whole-flight/MTU/provider/global/native/OS/fullPC OPEN.
+
+<a id="pc-v474-server-header"></a>
+
+V2-474 PC-06 source/unverified: [server header custody](../../tasks/PC-06-HY2-RECEIVE.md#pc-v474-server-header).
+Vendored listener использует borrowed pre-parser и original header slot;
+rejected messages содержат inline Header/presence/raw ref. Fixed4/4/8 queues
+имеют общий retained handoff, без token clone/shared mutable Header pointer.
+Views снимаются перед pool return; metadata/kind/range и empty prefixes gated
+до callbacks/positive receipts. Unknown retained/no retry, raw panic dump removed.
+Actual HY2 unchanged/no listener activation; q76/s84;3Go2origin4docs/
+manual5diff0new/gofmt3exit0. No tests/build/native/network/Git.
+Queue/private fixtures/wire/concurrency/provider/global/OS/fullPC OPEN.
+
+<a id="pc-v475-http3-fields"></a>
+
+V2-475 PC-06 source/unverified: [HTTP3 field accounting и inventory](../../tasks/PC-06-HY2-RECEIVE.md#pc-v475-http3-fields).
+Без qlog не создаётся field collector; decoded name+value+32 проверяется до
+map/collector retention, включая wire trailers с исходным configured limit.
+Actual HY264KiB headers, unread-body Close/no trailer parsing; SETTINGS8KiB/
+1xx/task64 уже ограничены. QPACK field allocation предшествует этому учёту:
+нет pre-decoder/global/RSS/native гарантии. q77/s85;3Go2origin4docs/gofmt3.
+No tests/build/native/network/Git; wire/private/fullPC/all old gates OPEN.
+
+<a id="pc-v476-http3-datagram"></a>
+
+V2-476 PC-06 source/unverified: [HTTP3 DATAGRAM storage](../../tasks/PC-06-HY2-RECEIVE.md#pc-v476-http3-datagram).
+Lazy32 existing ringbuffer/zeroing pop и immutable1MiB queued capacity charge,
+native original prefix учтён до удержания; queued drain сохранён. Lazy close
+broadcast и data handoff для ожидающих, nil/cancel до pop; без clone/new worker.
+Actual HY2 auth HTTP3 datagrams disabled. Map/external/native/global/RSS/time
+не ограничены этим срезом. q78/s86;2Go2origin4docs/gofmt2. No tests/build/
+native/network/Git; wire/private/fullPC/all old gates OPEN.
+
+<a id="pc-v477-http3-registry"></a>
+
+V2-477 PC-06 source/unverified: [HTTP3 original registry](../../tasks/PC-06-HY2-RECEIVE.md#pc-v477-http3-registry).
+Independent map64/duplicate/closing gate до wrapper/callback; map/WG owner до
+watcher, exact-owner removal. Общий Add/seal/Wait mutex; server rawConn pointer
+сохраняет original Context callback owner вместо value copy. No purge on Closing;
+data/native/external last-holder отдельно. q79/s87 HY2 unchanged/auth uses registry;
+4Go2origin4docs/gofmt4. No tests/build/native/network/Git; wire/private/fullPC OPEN.
+
+<a id="pc-v478-http3-join"></a>
+
+V2-478 PC-06 source/unverified: [HTTP3 registry join](../../tasks/PC-06-HY2-RECEIVE.md#pc-v478-http3-join).
+WaitForShutdown ждёт original registry WG даже без qlog; task drain/Closing
+предшествуют seal/wait, original qlogger join сохранён. Map/clear/failure predicate
+под original mutex; unknown clear удерживает исходный slot и sticky error.
+Known request errors cancel обе стороны до reqDone; original error/join сохранены.
+HY2 negative owner retention unchanged. Raw borrowers могут удерживать join;
+нет purge/timeout/native cleanup. q80/s88;4Go2origin4docs/gofmt4.
+No tests/build/native/network/Git; data/native/global/private/fullPC OPEN.
+
+<a id="pc-v479-http3-native"></a>
+
+V2-479 PC-06 source/unverified: [native stream receipt → HTTP3 metadata](../../tasks/PC-06-HY2-RECEIVE.md#pc-v479-http3-native).
+Один finalizer join-ит existing original native map/call/data aggregate. Только
+positive/cause/snapshot64 допускают local completion/exact remove/broadcast;
+queued drain сохранён, native Close/Cancel/empty callback не вызываются.
+Repeated Wait использует original result; unknown retains prefix, no retry.
+q81/s89 HY2 unchanged;4Go2origin4docs/gofmt4. No tests/build/native/network/Git;
+provider blocking/external/global/native/OS/private/fullPC gates OPEN.
+
+<a id="pc-v480-hy2-udp-close"></a>
+
+V2-480 PC-06 source/unverified: [HY2 UDP original close](../../tasks/PC-06-HY2-RECEIVE.md#pc-v480-hy2-udp-close).
+Retained parent UDP map/current + child drain/group references; shared shutdown/
+destroy error joined, no unknown retry or credit reset. Close-phase budget failure
+notifies original client outside RX locks; Scope.Close stays seal only. Existing
+resource ceilings preserved, q82 metadata-only/s90;5Go2origin4docs/gofmt5.
+No tests/build/native/network/Git; decoder/read/feed/assembly/provider/global/OS/
+private/fullPC gates OPEN.
+
+<a id="pc-v481-hy2-rx-prefix"></a>
+
+V2-481 PC-06 source/unverified: [original RX/input/assembly](../../tasks/PC-06-HY2-RECEIVE.md#pc-v481-hy2-rx-prefix).
+Carrier task-owned raw/charge/message, serialized child input/output, defrag
+assembly charge/message до original return; unknown retained/no retry. Parent
+idle check после task join, failure notification после RX unlock. q83 metadata-
+only/s91;7Go2origin4docs/gofmt7. No tests/build/native/network/Git; reader/Wait/
+output/accounting/native/provider/global/OS/private/fullPC gates OPEN.
+
+<a id="pc-v482-hy2-readers"></a>
+
+V2-482 PC-06 source/unverified: [original UDP readers/output](../../tasks/PC-06-HY2-RECEIVE.md#pc-v482-hy2-readers).
+Fixed8/session512/carrier, budget session roots after public destroy and original
+read settlement; public Close seal only. Message/output/charge retained on unknown,
+options snapshot/bounded allocation, Wait full-fit/n and nil error output.
+q84 metadata-only/s92;5Go2origin4docs/gofmt5. No tests/build/native/network/Git;
+TX staging/pack/fragment/release custody/native/provider/global/OS/fullPC OPEN.
+
+<a id="pc-v483-hy2-send-owners"></a>
+
+V2-483 PC-06 source/unverified: [admitted TX owners](../../tasks/PC-06-HY2-RECEIVE.md#pc-v483-hy2-send-owners).
+Eight fixed send slots, original input/message/current fragment/pack/release
+roots; checked retained cap+start within128KiB. Unknown no cleanup/replay/refund,
+client callback after unlock. Sequential fragments and original bounded retry.
+q85 metadata-only/s93;3Go2origin4docs/gofmt3. No tests/build/native/network/Git;
+rejected-buffer/preflight/constructor/control/native/global/OS/fullPC OPEN.
+
+<a id="pc-v484-hy2-constructor"></a>
+
+V2-484 PC-06 source/unverified: [original UDP constructor](../../tasks/PC-06-HY2-RECEIVE.md#pc-v484-hy2-constructor).
+One pending candidate before native init; publication fenced with closing under
+udpAccess->lifeAccess. Caller/parent share one outside-lock unpublished abort,
+unknown retained/no replay, positive-only root drop. q86 metadata-only/s94;
+5Go2origin4docs/gofmt5. No tests/build/native/network/Git; control/post-Close
+deadline timer/LocalAddr/rejected-buffer/preflight/native/global/OS/fullPC OPEN.
+
+<a id="pc-v485-hy2-controls"></a>
+
+V2-485 PC-06 source/unverified: [UDP controls/timer/snapshot](../../tasks/PC-06-HY2-RECEIVE.md#pc-v485-hy2-controls).
+Independent control slots8/carrier2/session, post-lock seal recheck, final timer
+clear under session mutex; unknown retained/no replay/callback after unlock.
+LocalAddr constructor snapshot, no native getter. q87 metadata-only/s95;
+5Go2origin4docs/gofmt5. No tests/build/native/network/Git. Next PC01 W4c/helper/
+WFP source, TUN unavailable; PC06 and fullPC/native/OS/rejected/preflight OPEN.
 
 Абсолютный запрет владельца на тестирование/сборки/исполнение сети сохраняется.
 

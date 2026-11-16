@@ -9,8 +9,8 @@ import (
 )
 
 type framesToRetransmit struct {
-	crypto []*wire.CryptoFrame
-	other  []wire.Frame
+	crypto []queuedFrameEntry
+	other  []queuedFrameEntry
 }
 
 type retransmissionQueue struct {
@@ -18,53 +18,37 @@ type retransmissionQueue struct {
 	initial   *framesToRetransmit
 	handshake *framesToRetransmit
 	appData   framesToRetransmit
+	storage   retransmissionStorage
 }
 
 func newRetransmissionQueue() *retransmissionQueue {
-	return &retransmissionQueue{
-		initial:   &framesToRetransmit{},
-		handshake: &framesToRetransmit{},
+	q := &retransmissionQueue{}
+	q.init()
+	return q
+}
+
+func (q *retransmissionQueue) init() {
+	if q.storage.owner != nil || q.initial != nil || q.handshake != nil {
+		panic(errRetransmissionState)
 	}
+	q.storage.owner = q
+	q.initial, q.handshake = &framesToRetransmit{}, &framesToRetransmit{}
 }
 
 func (q *retransmissionQueue) addInitial(f wire.Frame) {
-	if q.retired || q.initial == nil {
-		return
-	}
-	if cf, ok := f.(*wire.CryptoFrame); ok {
-		q.initial.crypto = append(q.initial.crypto, cf)
-		return
-	}
-	q.initial.other = append(q.initial.other, f)
+	q.enqueue(q.initial, f)
 }
 
 func (q *retransmissionQueue) addHandshake(f wire.Frame) {
-	if q.retired || q.handshake == nil {
-		return
-	}
-	if cf, ok := f.(*wire.CryptoFrame); ok {
-		q.handshake.crypto = append(q.handshake.crypto, cf)
-		return
-	}
-	q.handshake.other = append(q.handshake.other, f)
+	q.enqueue(q.handshake, f)
 }
 
 func (q *retransmissionQueue) addAppData(f wire.Frame) {
-	if q.retired {
-		return
-	}
-	switch f := f.(type) {
-	case *wire.StreamFrame:
-		panic("STREAM frames are handled with their respective streams.")
-	case *wire.CryptoFrame:
-		q.appData.crypto = append(q.appData.crypto, f)
-	default:
-		q.appData.other = append(q.appData.other, f)
-	}
+	q.enqueue(&q.appData, f)
 }
 
 func (q *retransmissionQueue) HasData(encLevel protocol.EncryptionLevel) bool {
-	if q.retired {
+	if q.retired || q.failureError() != nil {
 		return false
 	}
 	//nolint:exhaustive // 0-RTT data is retransmitted in 1-RTT packets.
@@ -82,7 +66,7 @@ func (q *retransmissionQueue) HasData(encLevel protocol.EncryptionLevel) bool {
 }
 
 func (q *retransmissionQueue) GetFrame(encLevel protocol.EncryptionLevel, maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
-	if q.retired {
+	if q.retired || q.failureError() != nil {
 		return nil
 	}
 	var r *framesToRetransmit
@@ -100,37 +84,49 @@ func (q *retransmissionQueue) GetFrame(encLevel protocol.EncryptionLevel, maxLen
 	}
 
 	if len(r.crypto) > 0 {
-		f := r.crypto[0]
-		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, v)
-		if newFrame == nil && !needsSplit { // the whole frame fits
-			r.crypto = r.crypto[1:]
+		if f := q.getCryptoFrame(r, maxLen, v); f != nil {
 			return f
 		}
-		if newFrame != nil { // frame was split. Leave the original frame in the queue.
-			return newFrame
-		}
 	}
-	if len(r.other) == 0 {
+	if q.failureError() != nil || len(r.other) == 0 {
 		return nil
 	}
-	f := r.other[0]
-	if f.Length(v) > maxLen {
-		return nil
-	}
-	r.other = r.other[1:]
-	return f
+	return q.getControlFrame(r, maxLen, v)
 }
 
 func (q *retransmissionQueue) DropPackets(encLevel protocol.EncryptionLevel) {
+	if q.retired {
+		return
+	}
+	var target **framesToRetransmit
 	//nolint:exhaustive // Can only drop Initial and Handshake packet number space.
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		q.initial = nil
+		target = &q.initial
 	case protocol.EncryptionHandshake:
-		q.handshake = nil
+		target = &q.handshake
 	default:
 		panic(fmt.Sprintf("unexpected encryption level: %s", encLevel))
 	}
+	if !q.metadataReady() {
+		q.storage.failure = errRetransmissionState
+		return
+	}
+	if *target == nil {
+		return
+	}
+	r := &q.storage
+	r.operation = retransmissionOperation{stage: retransmissionDrop, spaces: q.snapshotSpaces()}
+	returned := false
+	defer q.guardOperation(&returned)
+	n, bytes, ok := retransmissionSpaceCredit(*target)
+	if !ok || n > r.entries || bytes > r.bytes {
+		return
+	}
+	r.entries, r.bytes = r.entries-n, r.bytes-bytes
+	*target = nil // original heads stay in operation until the ordinary return
+	r.operation = retransmissionOperation{}
+	returned = true
 }
 
 func (q *retransmissionQueue) AckHandler(encLevel protocol.EncryptionLevel) ackhandler.FrameHandler {

@@ -45,6 +45,7 @@ type cryptoStreamHandler interface {
 	io.Closer
 	WaitForShutdown() error
 	RetireEventQueue() error
+	RetireKeyReferences() error
 	ConnectionState() handshake.ConnectionState
 }
 
@@ -180,6 +181,7 @@ type Conn struct {
 	connFlowController    flowcontrol.ConnectionFlowController
 	tokenStoreKey         string                    // only set for the client
 	tokenGenerator        *handshake.TokenGenerator // only set for the server
+	clientTokens          clientTokenStorage        // original optional cache/copy owner
 
 	unpacker          unpacker
 	frameParser       wire.FrameParser
@@ -604,24 +606,13 @@ var newClientConnection = func(
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, s.initialStream, s.handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	s.construction.stage = connectionConstructingToken
-	if len(tlsConf.ServerName) > 0 {
-		s.tokenStoreKey = tlsConf.ServerName
-	} else {
-		s.construction.remoteAddr = conn.RemoteAddr()
-		s.tokenStoreKey = s.construction.remoteAddr.String()
-	}
-	if s.config.TokenStore != nil {
-		s.construction.token = s.config.TokenStore.Pop(s.tokenStoreKey)
-		if s.construction.token != nil {
-			s.packer.SetToken(s.construction.token.data)
-			s.rttStats.SetInitialRTT(s.construction.token.rtt)
-		}
-	}
+	s.prepareClientTokens(tlsConf.ServerName)
 	s.finishConstruction()
 	return &wrappedConn{Conn: s}
 }
 
 func (c *Conn) preSetup() {
+	c.clientTokens.owner = c // original cell before allocations or provider callbacks
 	c.packetInput.init()
 	c.cryptoQueues.done = make(chan struct{})
 	c.closeChan = make(chan struct{}, 1)
@@ -637,7 +628,8 @@ func (c *Conn) preSetup() {
 	c.handshakeStream = &cryptoStream{}
 	c.handshakeStream.init()
 	c.sendQueue = newSendQueue(c.conn)
-	c.retransmissionQueue = newRetransmissionQueue()
+	c.retransmissionQueue = &retransmissionQueue{}
+	c.retransmissionQueue.init() // original shell before storage allocation
 	c.frameParser = *wire.NewFrameParser(
 		c.config.EnableDatagrams,
 		c.config.EnableStreamResetPartialDelivery,
@@ -657,7 +649,9 @@ func (c *Conn) preSetup() {
 		c.logger,
 	)
 	c.earlyConnReadyChan = make(chan struct{})
-	c.framer = newFramer(c.connFlowController)
+	c.sendingScheduled = make(chan struct{}, 1)
+	c.framer = &framer{}
+	c.framer.init(c.connFlowController, c.sendingScheduled)
 	c.streamsMap = &streamsMap{}
 	c.streamsMap.init(
 		c.ctx,
@@ -677,7 +671,6 @@ func (c *Conn) preSetup() {
 	c.receiveFrames.calls.framer = c.framer                  // immutable original binding before public exposure
 	c.receivedPackets.Init(8)
 	c.notifyReceivedPacket = make(chan struct{}, 1)
-	c.sendingScheduled = make(chan struct{}, 1)
 	c.handshakeCompleteChan = make(chan struct{})
 
 	now := monotime.Now()
@@ -700,7 +693,7 @@ func (c *Conn) run() (err error) {
 	sendQueueCloseAttempted := false
 	sendQueueCloseReturned := false
 	defer func() {
-		returned := receiveLoopReturned && receiveDrainReturned && sendQueueCloseReturned && !c.pathSwitch.active && !c.pathResponse.active && !c.serverProbe.active && (c.pathManager == nil || c.pathManager.retiring == nil) && c.packetPackerQuiescent() && c.packetOutput.original == nil && !c.packetOutput.failed && c.sentPacketHandler.PacketStateError() == nil
+		returned := receiveLoopReturned && receiveDrainReturned && sendQueueCloseReturned && !c.pathSwitch.active && !c.pathResponse.active && !c.serverProbe.active && (c.pathManager == nil || c.pathManager.retiring == nil) && c.packetPackerQuiescent() && c.packetOutput.original == nil && !c.packetOutput.failed && c.sentPacketHandler.PacketStateError() == nil && c.retransmissionQueue.stateError() == nil && c.cryptoReceiveStateError() == nil && c.framer.controlNativeStateError() == nil && c.clientTokenStateError() == nil
 		defer func() {
 			// Publish a negative result even if metadata retirement unwinds
 			// abnormally. No positive done signal precedes the actual cleanup.
@@ -740,7 +733,11 @@ func (c *Conn) run() (err error) {
 	defer c.timer.Stop()
 
 	if c.closeErr.Load() == nil {
-		if cause := context.Cause(c.ctx); cause != nil {
+		if err := c.framer.controlFailure(); err != nil {
+			c.destroyImpl(err)
+		} else if err := c.clientTokenStateError(); err != nil {
+			c.destroyImpl(err)
+		} else if cause := context.Cause(c.ctx); cause != nil {
 			c.destroyImpl(cause)
 		} else if err := c.cryptoStreamHandler.StartHandshake(c.ctx); err != nil {
 			c.destroyImpl(err)
@@ -756,8 +753,16 @@ func (c *Conn) run() (err error) {
 
 runLoop:
 	for {
-		if c.framer.QueuedTooManyControlFrames() {
-			c.setCloseError(&closeError{err: &qerr.TransportError{ErrorCode: InternalError}})
+		if err := c.retransmissionQueue.failureError(); err != nil {
+			c.setCloseError(&closeError{err: err})
+			break runLoop
+		}
+		if err := c.framer.controlFailure(); err != nil {
+			c.setCloseError(&closeError{err: err})
+			break runLoop
+		}
+		if err := c.clientTokenStateError(); err != nil {
+			c.setCloseError(&closeError{err: err})
 			break runLoop
 		}
 		// Close immediately if requested
@@ -847,7 +852,7 @@ runLoop:
 		// This could cause packets to be declared lost, and retransmissions to be enqueued.
 		now := monotime.Now()
 		if timeout := c.sentPacketHandler.GetLossDetectionTimeout(); !timeout.IsZero() && !timeout.After(now) {
-			if err := c.sentPacketHandler.OnLossDetectionTimeout(now); err != nil {
+			if err := c.retransmissionQueue.failureAfter(c.sentPacketHandler.OnLossDetectionTimeout(now)); err != nil {
 				c.setCloseError(&closeError{err: err})
 				break runLoop
 			}
@@ -980,6 +985,12 @@ func (c *Conn) readinessError() error {
 			return closeErr.err
 		}
 		return net.ErrClosed
+	}
+	if err := c.framer.controlFailure(); err != nil {
+		return err
+	}
+	if err := c.clientTokenStateError(); err != nil {
+		return err
 	}
 	return context.Cause(c.ctx)
 }
@@ -1169,7 +1180,9 @@ func (c *Conn) handleHandshakeComplete(now monotime.Time) error {
 		return err
 	}
 	if ticket != nil { // may be nil if session tickets are disabled via tls.Config.SessionTicketsDisabled
-		c.oneRTTStream.Write(ticket)
+		if _, err := c.oneRTTStream.Write(ticket); err != nil {
+			return err
+		}
 		for c.oneRTTStream.HasData() {
 			if cf := c.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize); cf != nil {
 				c.queueControlFrame(cf)
@@ -1319,7 +1332,7 @@ func (c *Conn) handleOnePacketImpl(rp receivedPacket, datagramID qlog.DatagramID
 		}
 
 		if wire.IsLongHeaderPacket(p.data[0]) {
-			hdr, packetData, rest, err := wire.ParsePacket(p.data)
+			hdr, packetData, rest, err := wire.ParsePacketView(p.data)
 			if err != nil {
 				if c.qlogger != nil {
 					if err == wire.ErrUnsupportedVersion {
@@ -1521,7 +1534,7 @@ func (c *Conn) handleShortHeaderPacket(
 		return true, nil
 	}
 	c.pathManager.SwitchToPath(path)
-	if err := c.sentPacketHandler.MigratedPath(p.rcvTime, protocol.ByteCount(c.config.InitialPacketSize)); err != nil {
+	if err := c.retransmissionQueue.failureAfter(c.sentPacketHandler.MigratedPath(p.rcvTime, protocol.ByteCount(c.config.InitialPacketSize))); err != nil {
 		return true, err
 	}
 	maxPacketSize := protocol.ByteCount(protocol.MaxPacketBufferSize)
@@ -1719,6 +1732,10 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 		c.logDroppedRetryPacket(hdr, len(data), qlog.PacketDropHeaderParseError)
 		return false
 	}
+	if len(hdr.Token) > protocol.MaxPacketBufferSize {
+		c.logDroppedRetryPacket(hdr, len(data), qlog.PacketDropUnexpectedPacket)
+		return false // can never fit our Initial; bound integrity-tag input too
+	}
 
 	// Retry binds to the immutable destination of our original Initial, not a
 	// potentially updated CID-manager view. This is not TLS peer authentication.
@@ -1734,16 +1751,16 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 	}
 
 	newDestConnID := hdr.SrcConnectionID
-	c.receivedRetry = true
-	if err := c.sentPacketHandler.ResetForRetry(rcvTime); err != nil {
+	accepted, err := c.applyRetryToken(hdr.Token, newDestConnID, rcvTime)
+	if err != nil {
 		c.destroyImpl(err)
 		return false
 	}
-	c.handshakeDestConnID = newDestConnID
-	c.retrySrcConnID = &newDestConnID
-	c.cryptoStreamHandler.ChangeConnectionID(newDestConnID)
-	c.packer.SetToken(hdr.Token)
-	c.connIDManager.ChangeInitialConnID(newDestConnID)
+	if !accepted {
+		c.logDroppedRetryPacket(hdr, len(data), qlog.PacketDropUnexpectedPacket)
+		c.logger.Debugf("Ignoring Retry without Initial CRYPTO space or after close.")
+		return false
+	}
 
 	if c.logger.Debug() {
 		c.logger.Debugf("<- Received Retry:")
@@ -1757,7 +1774,6 @@ func (c *Conn) handleRetryPacket(hdr *wire.Header, data []byte, rcvTime monotime
 				DestConnectionID: hdr.DestConnectionID,
 				SrcConnectionID:  newDestConnID,
 				Version:          hdr.Version,
-				Token:            &qlog.Token{Raw: hdr.Token},
 			},
 			Raw: qlog.RawInfo{Length: len(data)},
 		})
@@ -1935,10 +1951,6 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 	var log func([]qlog.Frame)
 	if c.qlogger != nil {
 		log = func(frames []qlog.Frame) {
-			var token *qlog.Token
-			if len(packet.hdr.Token) > 0 {
-				token = &qlog.Token{Raw: packet.hdr.Token}
-			}
 			c.qlogger.RecordEvent(qlog.PacketReceived{
 				Header: qlog.PacketHeader{
 					PacketType:       toQlogPacketType(packet.hdr.Type),
@@ -1946,7 +1958,6 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 					SrcConnectionID:  packet.hdr.SrcConnectionID,
 					PacketNumber:     packet.hdr.PacketNumber,
 					Version:          packet.hdr.Version,
-					Token:            token,
 				},
 				Raw: qlog.RawInfo{
 					Length:        int(packetSize),
@@ -2097,6 +2108,34 @@ func (c *Conn) handleFrames(
 			}
 			wire.LogFrame(c.logger, datagramFrame, false)
 			handleErr = c.handleDatagramFrame(datagramFrame)
+		} else if frameType == wire.FrameTypeCrypto {
+			frame, l, err := c.frameParser.ParseCryptoFrameView(data, c.version)
+			if err != nil {
+				return false, false, nil, err
+			}
+			data = data[l:]
+			if log != nil {
+				frames = append(frames, toQlogFrame(frame))
+			}
+			if skipHandling {
+				continue
+			}
+			wire.LogFrame(c.logger, frame, false)
+			handleErr = c.handleCryptoFrame(frame, encLevel, rcvTime)
+		} else if frameType == wire.FrameTypeNewToken {
+			frame, l, err := c.frameParser.ParseNewTokenFrameView(data)
+			if err != nil {
+				return false, false, nil, err
+			}
+			data = data[l:]
+			if log != nil {
+				frames = append(frames, toQlogFrame(frame))
+			}
+			if skipHandling {
+				continue
+			}
+			wire.LogFrame(c.logger, frame, false)
+			handleErr = c.handleNewTokenFrame(frame)
 		} else {
 			frame, l, err := c.frameParser.ParseLessCommonFrame(frameType, data, c.version)
 			if err != nil {
@@ -2222,6 +2261,9 @@ func (c *Conn) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.Encr
 			return err
 		}
 	}
+	if err := c.cryptoReceiveStateError(); err != nil {
+		return err // a failed/no-data read must not publish handshake readiness
+	}
 	return c.handleHandshakeEvents(rcvTime)
 }
 
@@ -2325,10 +2367,11 @@ func (c *Conn) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
 			ErrorMessage: "received NEW_TOKEN frame from the client",
 		}
 	}
-	if c.config.TokenStore != nil {
-		c.config.TokenStore.Put(c.tokenStoreKey, &ClientToken{data: frame.Token, rtt: c.rttStats.SmoothedRTT()})
+	if frame == nil {
+		c.clientTokens.failed.Store(true)
+		return errClientTokenState
 	}
-	return nil
+	return c.saveClientToken(frame.Token)
 }
 
 func (c *Conn) handleHandshakeDoneFrame(rcvTime monotime.Time) error {
@@ -2346,6 +2389,7 @@ func (c *Conn) handleHandshakeDoneFrame(rcvTime monotime.Time) error {
 
 func (c *Conn) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) error {
 	acked1RTTPacket, err := c.sentPacketHandler.ReceivedAck(frame, encLevel, c.lastPacketReceivedTime)
+	err = c.retransmissionQueue.failureAfter(err)
 	if err != nil {
 		return err
 	}
@@ -2560,7 +2604,16 @@ func (c *Conn) dropEncryptionLevel(encLevel protocol.EncryptionLevel, now monoti
 		c.publishPeerSendParameters(&peerParameterSnapshot{phase: peerParametersRejected0RTT})
 	}
 	c.sentPacketHandler.DropPackets(encLevel, now)
+	if err := c.retransmissionQueue.failureError(); err != nil {
+		return err
+	}
 	c.receivedPacketHandler.DropPackets(encLevel)
+	if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
+		c.retransmissionQueue.DropPackets(encLevel)
+		if err := c.retransmissionQueue.failureError(); err != nil {
+			return err
+		}
+	}
 	//nolint:exhaustive // only Initial and 0-RTT need special treatment
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -2730,6 +2783,15 @@ func (c *Conn) applyTransportParameters() error {
 }
 
 func (c *Conn) triggerSending(now monotime.Time) error {
+	if err := c.retransmissionQueue.failureError(); err != nil {
+		return err
+	}
+	if err := c.framer.controlFailure(); err != nil {
+		return err
+	}
+	if err := c.clientTokenStateError(); err != nil {
+		return err
+	}
 	c.pacingDeadline = 0
 
 	sendMode := c.sentPacketHandler.SendMode(now)
@@ -3039,7 +3101,11 @@ func (c *Conn) sendProbePacket(sendMode ackhandler.SendMode, now monotime.Time) 
 	// or until there are no more packets to queue.
 	var packet *coalescedPacket
 	for packet == nil {
-		if wasQueued := c.sentPacketHandler.QueueProbePacket(encLevel); !wasQueued {
+		wasQueued := c.sentPacketHandler.QueueProbePacket(encLevel)
+		if err := c.retransmissionQueue.failureError(); err != nil {
+			return err
+		}
+		if !wasQueued {
 			break
 		}
 		var err error

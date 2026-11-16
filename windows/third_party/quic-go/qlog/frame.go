@@ -75,6 +75,12 @@ type DatagramFrame struct {
 	Length int64
 }
 
+// NewTokenFrameInfo is the native metadata-only NEW_TOKEN diagnostic view.
+// The legacy NewTokenFrame alias/raw encoder remains available to owning callers.
+type NewTokenFrameInfo struct {
+	Length int
+}
+
 func (fs frames) encode(enc *jsontext.Encoder) error {
 	h := encoderHelper{enc: enc}
 	h.WriteToken(jsontext.BeginArray)
@@ -101,6 +107,8 @@ func (f Frame) Encode(enc *jsontext.Encoder) error {
 		return encodeCryptoFrame(enc, frame)
 	case *NewTokenFrame:
 		return encodeNewTokenFrame(enc, frame)
+	case *NewTokenFrameInfo:
+		return encodeNewTokenFrameInfo(enc, frame)
 	case *StreamFrame:
 		return encodeStreamFrame(enc, frame)
 	case *MaxDataFrame:
@@ -258,6 +266,20 @@ func encodeNewTokenFrame(enc *jsontext.Encoder, f *NewTokenFrame) error {
 	if err := (Token{Raw: f.Token}).encode(enc); err != nil {
 		return err
 	}
+	h.WriteToken(jsontext.EndObject)
+	return h.err
+}
+
+func encodeNewTokenFrameInfo(enc *jsontext.Encoder, f *NewTokenFrameInfo) error {
+	h := encoderHelper{enc: enc}
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("frame_type"))
+	h.WriteToken(jsontext.String("new_token"))
+	h.WriteToken(jsontext.String("token"))
+	h.WriteToken(jsontext.BeginObject)
+	h.WriteToken(jsontext.String("length"))
+	h.WriteToken(jsontext.Int(int64(f.Length)))
+	h.WriteToken(jsontext.EndObject)
 	h.WriteToken(jsontext.EndObject)
 	return h.err
 }

@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -42,7 +41,8 @@ type framer struct {
 	streamGeneration        atomic.Pointer[streamGeneration] // swaps under both metadata locks
 
 	controlFrameMutex          sync.Mutex
-	controlFrames              []wire.Frame
+	controlFrames              []queuedFrameEntry
+	controlStore               framerControlStorage
 	pathResponses              []queuedPathResponse
 	pathResponsesSealed        bool // protected by controlFrameMutex
 	connFlowController         flowcontrol.ConnectionFlowController
@@ -50,14 +50,25 @@ type framer struct {
 }
 
 func newFramer(connFlowController flowcontrol.ConnectionFlowController) *framer {
-	return &framer{
-		activeStreams:            make(map[protocol.StreamID]streamFrameGetter),
-		streamsWithControlFrames: make(map[protocol.StreamID]streamControlFrameGetter),
-		connFlowController:       connFlowController,
+	f := &framer{}
+	f.init(connFlowController, nil)
+	return f
+}
+
+func (f *framer) init(controller flowcontrol.ConnectionFlowController, wake chan<- struct{}) {
+	if f.controlStore.owner != nil || f.activeStreams != nil || f.streamsWithControlFrames != nil {
+		panic(errFramerControlState)
 	}
+	f.controlStore.owner, f.controlStore.wake = f, wake
+	f.connFlowController = controller
+	f.activeStreams = make(map[protocol.StreamID]streamFrameGetter)
+	f.streamsWithControlFrames = make(map[protocol.StreamID]streamControlFrameGetter)
 }
 
 func (f *framer) HasData() bool {
+	if f.controlFailure() != nil {
+		return false
+	}
 	f.mutex.Lock()
 	if f.sealed {
 		f.mutex.Unlock()
@@ -76,11 +87,15 @@ func (f *framer) HasData() bool {
 func (f *framer) QueueControlFrame(frame wire.Frame) {
 	f.controlFrameMutex.Lock()
 	defer f.controlFrameMutex.Unlock()
-	if f.sealed {
+	if f.sealed || f.controlFailure() != nil {
 		return
 	}
 
 	if pr, ok := frame.(*wire.PathResponseFrame); ok {
+		if pr == nil {
+			f.failControlLocked(framerControlUncertain)
+			return
+		}
 		if f.pathResponsesSealed {
 			return // terminal retirement cannot be refilled by a late legacy producer
 		}
@@ -93,12 +108,7 @@ func (f *framer) QueueControlFrame(frame wire.Frame) {
 		f.pathResponses = append(f.pathResponses, queuedPathResponse{frame: pr})
 		return
 	}
-	// This is a hack.
-	if len(f.controlFrames) >= maxControlFrames {
-		f.queuedTooManyControlFrames.Store(true)
-		return
-	}
-	f.controlFrames = append(f.controlFrames, frame)
+	f.queueControlFrameLocked(frame)
 }
 
 func (f *framer) Append(
@@ -109,8 +119,13 @@ func (f *framer) Append(
 	v protocol.Version,
 ) ([]ackhandler.Frame, []ackhandler.StreamFrame, protocol.ByteCount) {
 	f.controlFrameMutex.Lock()
-	if f.sealed {
-		f.controlFrameMutex.Unlock()
+	controlLocked := true
+	defer func() {
+		if controlLocked {
+			f.controlFrameMutex.Unlock()
+		}
+	}()
+	if f.sealed || f.controlFailure() != nil {
 		return frames, streamFrames, 0
 	}
 	frames, controlFrameLen := f.appendControlFrames(frames, maxLen, now, v)
@@ -119,6 +134,12 @@ func (f *framer) Append(
 	var lastFrame ackhandler.StreamFrame
 	var streamFrameLen protocol.ByteCount
 	f.mutex.Lock()
+	streamsLocked := true
+	defer func() {
+		if streamsLocked {
+			f.mutex.Unlock()
+		}
+	}()
 	// pop STREAM frames, until less than 128 bytes are left in the packet
 	numActiveStreams := f.streamQueue.Len()
 	for i := 0; i < numActiveStreams; i++ {
@@ -138,7 +159,7 @@ func (f *framer) Append(
 			l := blocked.Length(v)
 			// In case it doesn't fit, queue it for the next packet.
 			if maxLen < l {
-				f.controlFrames = append(f.controlFrames, blocked)
+				f.queueControlFrameLocked(blocked)
 				break
 			}
 			frames = append(frames, ackhandler.Frame{Frame: blocked})
@@ -156,12 +177,14 @@ func (f *framer) Append(
 			frames = append(frames, ackhandler.Frame{Frame: blocked})
 			controlFrameLen += l
 		} else {
-			f.controlFrames = append(f.controlFrames, blocked)
+			f.queueControlFrameLocked(blocked)
 		}
 	}
 
 	f.mutex.Unlock()
+	streamsLocked = false
 	f.controlFrameMutex.Unlock()
+	controlLocked = false
 
 	if lastFrame.Frame != nil {
 		// account for the smaller size of the last STREAM frame
@@ -216,24 +239,19 @@ func (f *framer) appendControlFrames(
 	}
 
 	for len(f.controlFrames) > 0 {
-		frame := f.controlFrames[len(f.controlFrames)-1]
-		frameLen := frame.Length(v)
-		if length+frameLen > maxLen {
+		next, frameLen, ok := f.appendQueuedControlLocked(frames, maxLen-length, v)
+		if !ok {
 			break
 		}
-		frames = append(frames, ackhandler.Frame{Frame: frame})
+		frames = next
 		length += frameLen
-		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
 
 	return frames, length
 }
 
-// QueuedTooManyControlFrames says if the control frame queue exceeded its maximum queue length.
-// This is a hack.
-// It is easier to implement than propagating an error return value in QueueControlFrame.
-// The correct solution would be to queue frames with their respective structs.
-// See https://github.com/quic-go/quic-go/issues/4271 for the queueing of stream-related control frames.
+// QueuedTooManyControlFrames is the legacy capacity flag. Native Conn also
+// observes the original typed controlFailure, including uncertain metadata.
 func (f *framer) QueuedTooManyControlFrames() bool {
 	return f.queuedTooManyControlFrames.Load()
 }
@@ -326,24 +344,15 @@ func (f *framer) Handle0RTTRejection(original, generation *streamGeneration) err
 	if f.sealed || f.metadataRetired || f.streamGeneration.Load() != original {
 		return errStreamMapUncertain
 	}
+	if !f.filterControl0RTTLocked() {
+		return errFramerControlState
+	}
 
 	f.streamQueue.Clear()
 	for id := range f.activeStreams {
 		delete(f.activeStreams, id)
 	}
 	clear(f.streamsWithControlFrames)
-	var j int
-	for i, frame := range f.controlFrames {
-		switch frame.(type) {
-		case *wire.MaxDataFrame, *wire.MaxStreamDataFrame, *wire.MaxStreamsFrame,
-			*wire.DataBlockedFrame, *wire.StreamDataBlockedFrame, *wire.StreamsBlockedFrame:
-			continue
-		default:
-			f.controlFrames[j] = f.controlFrames[i]
-			j++
-		}
-	}
-	f.controlFrames = slices.Delete(f.controlFrames, j, len(f.controlFrames))
 	f.streamGeneration.Store(generation)
 	return nil
 }

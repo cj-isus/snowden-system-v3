@@ -50,12 +50,15 @@ func (c *clientCloseCall) start() {
 
 func newClientQUICConnection(parent context.Context) *clientQUICConnection {
 	ctx, cancel := common.ContextWithCancelCause(parent)
-	return &clientQUICConnection{
+	conn := &clientQUICConnection{
 		ctx: ctx, cancel: cancel, initializing: true,
 		connDone: make(chan struct{}), initialDone: make(chan struct{}), retired: make(chan struct{}),
 		udpConnMap: make(map[uint32]*udpPacketConn),
 		tcpStreams: make(map[*clientConn]struct{}), tcpDone: make(chan struct{}),
 	}
+	conn.receiveBudget.onFailure = conn.markUncertain
+	conn.sendBudget.onFailure = conn.markUncertain
+	return conn
 }
 
 // Only the original initializer attaches these resources. The owner exists
@@ -203,6 +206,17 @@ func (c *clientQUICConnection) finishClose() {
 		}
 		c.lifeAccess.Lock()
 		c.closeErr = errors.Join(closeErr, c.failure)
+		if returned && c.closeErr == nil {
+			// Handoff already ended all writes to udpConnMap. Only this finalizer
+			// accesses retired fields; no UDP mutex is held over a life callback.
+			if c.udpConnMap != nil || c.udpConstructing != nil || c.udpRetiringCurrent != nil {
+				c.closeErr = errClientUncertain
+			} else {
+				c.udpRetiring = nil
+				c.udpRetiringID = 0
+				c.udpConstructionRetiring = nil
+			}
+		}
 		c.lifeAccess.Unlock()
 		close(c.retired)
 	}()
@@ -211,14 +225,28 @@ func (c *clientQUICConnection) finishClose() {
 	calls := [4]*clientCloseCall{c.rawClose, c.quicClose, c.transportClose, c.http3Wait}
 	opening := c.opening
 	c.lifeAccess.Unlock()
-	// No new UDP publication after connDone is observed; an earlier constructor
-	// holds udpAccess and is included in this exact captured map.
-	c.udpAccess.Lock()
-	udpConnections := c.udpConnMap
-	c.udpConnMap = nil
-	c.udpAccess.Unlock()
-	for _, udpConn := range udpConnections {
-		udpConn.closeWithError(c.connErr)
+	// Closing and publication share lifeAccess. An earlier constructor holds
+	// udpAccess; hand off both the exact map and its unpublished original owner.
+	func() {
+		c.udpAccess.Lock()
+		defer c.udpAccess.Unlock()
+		if c.udpRetiring != nil || c.udpConstructionRetiring != nil || c.udpConnMap == nil || len(c.udpConnMap) > maxUDPReceiveSessions {
+			panic(errClientUncertain)
+		}
+		c.udpRetiring, c.udpConnMap = c.udpConnMap, nil
+		c.udpConstructionRetiring, c.udpConstructing = c.udpConstructing, nil
+	}()
+	if c.udpConstructionRetiring != nil {
+		closeErr = errors.Join(closeErr, c.udpConstructionRetiring.abort())
+	}
+	for id, udpConn := range c.udpRetiring {
+		c.udpRetiringID, c.udpRetiringCurrent = id, udpConn
+		if udpConn == nil {
+			panic(errClientUncertain)
+		}
+		closeErr = errors.Join(closeErr, udpConn.closeAndDestroy(c.connErr))
+		c.udpRetiringCurrent = nil
+		c.udpRetiringID = 0
 	}
 	for _, call := range calls {
 		if call != nil {
@@ -237,6 +265,9 @@ func (c *clientQUICConnection) finishClose() {
 		}
 	}
 	c.tasks.Wait()
+	if !c.udpReceive.idle() {
+		closeErr = errors.Join(closeErr, errClientUncertain)
+	}
 	<-c.tcpDone
 	c.lifeAccess.Lock()
 	closeErr = errors.Join(closeErr, c.tcpFailure)

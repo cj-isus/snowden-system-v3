@@ -345,14 +345,15 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		return nil, fmt.Errorf("http3: failed to read response headers: %w", err)
 	}
 	decodeFn := s.decoder.Decode(headerBlock)
-	var hfs []qpack.HeaderField
+	var hfs *[]qpack.HeaderField
 	if s.str.qlogger != nil {
-		hfs = make([]qpack.HeaderField, 0, 16)
+		collected := make([]qpack.HeaderField, 0, 16)
+		hfs = &collected
 	}
 	res := s.response
-	err = updateResponseFromHeaders(res, decodeFn, s.maxHeaderBytes, &hfs)
+	err = updateResponseFromHeaders(res, decodeFn, s.maxHeaderBytes, hfs)
 	if s.str.qlogger != nil {
-		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, hfs)
+		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, *hfs)
 	}
 	if err != nil {
 		errCode := ErrCodeMessageError

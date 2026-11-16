@@ -9,8 +9,8 @@ const (
 
 var errReceiveFrameCapacity = errors.New("quic: receive stream frame capacity exceeded")
 
-// Only ReceiveStream enables this ledger. Crypto streams retain their original
-// callback-free Pop contract. The receive mutex owns all hold operations.
+// Only ReceiveStream enables this ledger; its mutex owns all hold operations.
+// Native CRYPTO uses separate original bounded cryptoReceiveStorage.
 func newReceiveFrameSorter(budget *streamReceiveBudget) *frameSorter {
 	s := &frameSorter{}
 	s.initReceiveFrameSorter(budget)
@@ -48,7 +48,8 @@ func (s *frameSorter) reserveHold(charge int) (*frameSorterHold, error) {
 }
 
 // Both ledgers reserve before clone allocation while the source remains held.
-// The generic crypto sorter keeps its original callback-free allocation path.
+// Standalone generic callers keep the callback-free path; native CRYPTO does not
+// use it or the generic sorter for reassembly.
 func (s *frameSorter) copyTrim(data []byte) ([]byte, func(), error) {
 	if s.owned == nil {
 		output := make([]byte, len(data))

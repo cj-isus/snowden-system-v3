@@ -34,6 +34,7 @@ type cryptoSetup struct {
 	eventBytes   int
 	eventFailure error
 	eventsSealed bool
+	keysRetired  bool // only after original Conn/native/data/history/TLS/event joins
 
 	version protocol.Version
 
@@ -205,6 +206,7 @@ func newCryptoSetupRetained(
 		ourParams:  tp, rttStats: rttStats, qlogger: qlogger, logger: logger,
 		perspective: perspective, version: version,
 	}
+	cs.closeState.owner = cs
 	*retained = cs
 	cs.initialSealer, cs.initialOpener = NewInitialAEAD(connID, perspective, version)
 	if qlogger != nil {
@@ -223,6 +225,9 @@ func newCryptoSetupRetained(
 }
 
 func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
+	if h.keysRetired {
+		return
+	}
 	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective, h.version)
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
@@ -239,6 +244,9 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
 }
 
 func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) error {
+	if h.keysRetired {
+		return ErrKeysDropped
+	}
 	return h.aead.SetLargestAcked(pn)
 }
 
@@ -298,6 +306,9 @@ func (h *cryptoSetup) handleMessage(data []byte, encLevel protocol.EncryptionLev
 }
 
 func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (err error) {
+	if err := h.cryptoEventQueueError(); err != nil {
+		return err // sealed before dispatch can touch retired key/parameter holders
+	}
 	defer func() {
 		if err == nil {
 			err = h.cryptoEventQueueError()
@@ -649,6 +660,9 @@ func (h *cryptoSetup) handshakeComplete() {
 }
 
 func (h *cryptoSetup) SetHandshakeConfirmed() {
+	if h.keysRetired {
+		return
+	}
 	h.aead.SetHandshakeConfirmed()
 	// drop Handshake keys
 	var dropped bool
@@ -691,6 +705,9 @@ func (h *cryptoSetup) GetHandshakeSealer() (LongHeaderSealer, error) {
 }
 
 func (h *cryptoSetup) Get1RTTSealer() (ShortHeaderSealer, error) {
+	if h.keysRetired {
+		return nil, ErrKeysDropped
+	}
 	if !h.has1RTTSealer {
 		return nil, ErrKeysNotYetAvailable
 	}
@@ -727,6 +744,9 @@ func (h *cryptoSetup) GetHandshakeOpener() (LongHeaderOpener, error) {
 }
 
 func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
+	if h.keysRetired {
+		return nil, ErrKeysDropped
+	}
 	if h.zeroRTTOpener != nil && time.Since(h.handshakeCompleteTime) > 3*h.rttStats.PTO(true) {
 		h.zeroRTTOpener = nil
 		h.logger.Debugf("Dropping 0-RTT keys.")

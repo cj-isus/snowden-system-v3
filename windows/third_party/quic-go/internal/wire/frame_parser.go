@@ -137,7 +137,27 @@ func (p *FrameParser) ParseDatagramFrameView(frameType FrameType, data []byte) (
 	return f, n, nil
 }
 
-// ParseLessCommonFrame parses everything except STREAM, ACK or DATAGRAM.
+// ParseCryptoFrameView borrows the current packet. Conn validates the range and
+// copies only unseen bytes into its original bounded storage before packet return.
+func (p *FrameParser) ParseCryptoFrameView(data []byte, v protocol.Version) (*CryptoFrame, int, error) {
+	frame, n, err := parseCryptoFrameView(data, v)
+	if err != nil {
+		return nil, 0, &qerr.TransportError{ErrorCode: qerr.FrameEncodingError, FrameType: uint64(FrameTypeCrypto), ErrorMessage: err.Error()}
+	}
+	return frame, n, nil
+}
+
+// ParseNewTokenFrameView borrows the pinned current packet. Native diagnostic
+// conversion stores only length; only an admitted independent copy reaches a cache.
+func (p *FrameParser) ParseNewTokenFrameView(data []byte) (*NewTokenFrame, int, error) {
+	frame, n, err := parseNewTokenFrameView(data)
+	if err != nil {
+		return nil, 0, &qerr.TransportError{ErrorCode: qerr.FrameEncodingError, FrameType: uint64(FrameTypeNewToken), ErrorMessage: err.Error()}
+	}
+	return frame, n, nil
+}
+
+// ParseLessCommonFrame parses everything except the native fast paths below.
 // These cases should be handled separately for performance reasons.
 func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v protocol.Version) (Frame, int, error) {
 	var frame Frame

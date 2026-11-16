@@ -61,6 +61,10 @@ func (f *framer) retireStreamMetadata() bool {
 	if f.sealed || !f.pathResponsesSealed || f.pathResponses != nil {
 		return false // prior path-response retirement must already have returned
 	}
+	if !f.controlMetadataReadyLocked() {
+		f.failControlLocked(framerControlUncertain)
+		return false
+	}
 	f.sealed = true
 	f.streamGeneration.Store(nil)
 	clear(f.activeStreams)
@@ -70,6 +74,8 @@ func (f *framer) retireStreamMetadata() bool {
 	f.streamsWithControlFrames = nil
 	clear(f.controlFrames)
 	f.controlFrames = nil
+	f.controlStore.bytes = 0
+	f.controlStore.wake = nil
 	f.connFlowController = nil
 	f.metadataRetired = true
 	return true

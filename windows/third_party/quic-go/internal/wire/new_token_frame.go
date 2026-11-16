@@ -14,6 +14,18 @@ type NewTokenFrame struct {
 }
 
 func parseNewTokenFrame(b []byte, _ protocol.Version) (*NewTokenFrame, int, error) {
+	frame, n, err := parseNewTokenFrameView(b)
+	if err != nil {
+		return nil, n, err
+	}
+	token := make([]byte, len(frame.Token))
+	copy(token, frame.Token)
+	frame.Token = token
+	return frame, n, nil
+}
+
+// The native caller retains the packet until optional cache admission/copy.
+func parseNewTokenFrameView(b []byte) (*NewTokenFrame, int, error) {
 	tokenLen, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return nil, 0, replaceUnexpectedEOF(err)
@@ -25,9 +37,8 @@ func parseNewTokenFrame(b []byte, _ protocol.Version) (*NewTokenFrame, int, erro
 	if uint64(len(b)) < tokenLen {
 		return nil, 0, io.EOF
 	}
-	token := make([]byte, int(tokenLen))
-	copy(token, b)
-	return &NewTokenFrame{Token: token}, l + int(tokenLen), nil
+	n := int(tokenLen) // tokenLen <= len(b), so the conversion/addition are bounded
+	return &NewTokenFrame{Token: b[:n:n]}, l + n, nil
 }
 
 func (f *NewTokenFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {

@@ -32,8 +32,13 @@ type rawConn struct {
 
 	enableDatagrams bool
 
-	streamMx sync.Mutex
-	streams  map[quic.StreamID]*stateTrackingStream
+	streamMx              sync.Mutex
+	streams               map[quic.StreamID]*stateTrackingStream
+	streamClosing         <-chan struct{}
+	streamAdmissionClosed bool
+	streamRegistryFailure error
+	streamClearOriginal   *stateTrackingStream // retained across original empty callback
+	streamRetirement      *streamRegistryRetirement
 
 	rcvdControlStr      atomic.Bool
 	rcvdQPACKEncoderStr atomic.Bool
@@ -67,6 +72,7 @@ func newRawConn(
 		enableDatagrams:   enableDatagrams,
 		receivedSettings:  make(chan struct{}),
 		streams:           make(map[quic.StreamID]*stateTrackingStream),
+		streamClosing:     quicConn.Closing(),
 		qlogger:           qlogger,
 		onStreamsEmpty:    onStreamsEmpty,
 		controlStrHandler: controlStrHandler,
@@ -92,7 +98,9 @@ func (c *rawConn) OpenUniStream() (*quic.SendStream, error) {
 // openControlStream opens the control stream and sends the SETTINGS frame.
 // It returns the control stream (needed by the server for sending GOAWAY later).
 func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, error) {
-	c.qloggerWG.Add(1)
+	if !c.beginQloggerTask() {
+		return nil, errStreamTrackingStopped
+	}
 	defer c.qloggerWG.Done()
 
 	str, err := c.conn.OpenUniStream()
@@ -125,21 +133,6 @@ func (c *rawConn) openControlStream(settings *settingsFrame) (*quic.SendStream, 
 	return str, nil
 }
 
-func (c *rawConn) TrackStream(str *quic.Stream) (*stateTrackingStream, error) {
-	// Reserve the original stream context callback before allocating/registering
-	// it. The parent API/worker remains registered through map publication.
-	if c.clientTasks != nil && !c.clientTasks.begin() {
-		return nil, c.clientTasks.admissionError()
-	}
-	hstr := newStateTrackingStream(str, c, func(b []byte) error { return c.sendDatagram(str.StreamID(), b) }, c.clientTasks)
-
-	c.streamMx.Lock()
-	c.streams[str.StreamID()] = hstr
-	c.qloggerWG.Add(1)
-	c.streamMx.Unlock()
-	return hstr, nil
-}
-
 func (c *rawConn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
@@ -148,17 +141,31 @@ func (c *rawConn) ConnectionState() quic.ConnectionState {
 	return c.conn.ConnectionState()
 }
 
-func (c *rawConn) clearStream(id quic.StreamID) {
+func (c *rawConn) clearStream(id quic.StreamID, original *stateTrackingStream) {
 	c.streamMx.Lock()
 	defer c.streamMx.Unlock()
 
-	if _, ok := c.streams[id]; ok {
-		delete(c.streams, id)
-		c.qloggerWG.Done()
+	if current, ok := c.streams[id]; !ok || original == nil || current != original {
+		return
 	}
-	if len(c.streams) == 0 {
+	if c.streamClearOriginal != nil {
+		c.failStreamRegistryLocked()
+		return // never replace an uncertain original clear
+	}
+	c.streamClearOriginal = original
+	returned := false
+	defer func() {
+		if !returned {
+			c.failStreamRegistryLocked()
+		}
+	}()
+	delete(c.streams, id)
+	c.qloggerWG.Done()
+	if len(c.streams) == 0 && c.onStreamsEmpty != nil {
 		c.onStreamsEmpty()
 	}
+	c.streamClearOriginal = nil
+	returned = true
 }
 
 func (c *rawConn) hasActiveStreams() bool {
@@ -173,7 +180,10 @@ func (c *rawConn) CloseWithError(code quic.ApplicationErrorCode, msg string) err
 }
 
 func (c *rawConn) handleUnidirectionalStream(str *quic.ReceiveStream, isServer bool) {
-	c.qloggerWG.Add(1)
+	if !c.beginQloggerTask() {
+		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		return
+	}
 	defer c.qloggerWG.Done()
 
 	streamType, err := quicvarint.Read(quicvarint.NewReader(str))
@@ -250,7 +260,9 @@ func (c *rawConn) handleControlStream(str *quic.ReceiveStream) {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeSettingsError), "missing QUIC Datagram support")
 			return
 		}
-		c.qloggerWG.Add(1)
+		if !c.beginQloggerTask() {
+			return
+		}
 		work := func() {
 			defer c.qloggerWG.Done()
 			if err := c.receiveDatagrams(); err != nil {
@@ -320,7 +332,9 @@ func (c *rawConn) receiveDatagrams() error {
 		if !ok {
 			continue
 		}
-		dg.enqueueDatagram(b[n:])
+		// The lower queue returns its own allocation. Charge its full capacity,
+		// including the stripped quarter-stream ID, before retaining a view.
+		dg.enqueueDatagramWithSize(b[n:len(b):len(b)], cap(b))
 	}
 }
 
@@ -335,6 +349,7 @@ func (c *rawConn) Settings() *Settings { return c.settings }
 // closeQlogger waits for all goroutines that may produce qlog events to finish,
 // then closes the qlogger.
 func (c *rawConn) closeQlogger() {
+	c.sealStreamAdmission()
 	if c.qlogger == nil {
 		return
 	}
@@ -353,6 +368,7 @@ func (c *rawConn) finishClientQlogger() {
 		}
 		close(c.qloggerDone)
 	}()
+	c.sealStreamAdmission()
 	_ = c.clientTasks.wait()
 	c.qloggerWG.Wait()
 	c.qloggerErr = c.qlogger.Close()

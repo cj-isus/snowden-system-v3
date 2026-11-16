@@ -25,6 +25,25 @@ func (e *qpackError) Unwrap() error { return e.err }
 
 var errHeaderTooLarge = errors.New("http3: headers too large")
 
+// Charge decoded fields before retaining them in a header map or qlog list.
+// Subtraction avoids overflowing int on a custom decoder's field lengths.
+// QPACK has already produced this field; this is not a decoder allocation cap.
+func consumeHeaderSize(remaining int, field qpack.HeaderField) (int, error) {
+	// RFC 9114, section 4.2.2: name + value + 32 bytes per field.
+	if remaining < 32 {
+		return 0, errHeaderTooLarge
+	}
+	remaining -= 32
+	if len(field.Name) > remaining {
+		return 0, errHeaderTooLarge
+	}
+	remaining -= len(field.Name)
+	if len(field.Value) > remaining {
+		return 0, errHeaderTooLarge
+	}
+	return remaining - len(field.Value), nil
+}
+
 type header struct {
 	// Pseudo header fields defined in RFC 9114
 	Path      string
@@ -61,15 +80,12 @@ func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, sizeLimit int, head
 			}
 			return header{}, &qpackError{err}
 		}
+		sizeLimit, err = consumeHeaderSize(sizeLimit, h)
+		if err != nil {
+			return header{}, err
+		}
 		if headerFields != nil {
 			*headerFields = append(*headerFields, h)
-		}
-		// RFC 9114, section 4.2.2:
-		// The size of a field list is calculated based on the uncompressed size of fields,
-		// including the length of the name and value in bytes plus an overhead of 32 bytes for each field.
-		sizeLimit -= len(h.Name) + len(h.Value) + 32
-		if sizeLimit < 0 {
-			return header{}, errHeaderTooLarge
 		}
 		// field names need to be lowercase, see section 4.2 of RFC 9114
 		if strings.ToLower(h.Name) != h.Name {
@@ -159,6 +175,12 @@ func parseHeaders(decodeFn qpack.DecodeFunc, isRequest bool, sizeLimit int, head
 }
 
 func parseTrailers(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField) (http.Header, error) {
+	// Retain the private decoder entry with a bounded default. Wire paths use
+	// parseTrailersWithLimit with their original request / response limit.
+	return parseTrailersWithLimit(decodeFn, http.DefaultMaxHeaderBytes, headerFields)
+}
+
+func parseTrailersWithLimit(decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *[]qpack.HeaderField) (http.Header, error) {
 	h := make(http.Header)
 	for {
 		hf, err := decodeFn()
@@ -167,6 +189,10 @@ func parseTrailers(decodeFn qpack.DecodeFunc, headerFields *[]qpack.HeaderField)
 				break
 			}
 			return nil, &qpackError{err}
+		}
+		sizeLimit, err = consumeHeaderSize(sizeLimit, hf)
+		if err != nil {
+			return nil, err
 		}
 		if headerFields != nil {
 			*headerFields = append(*headerFields, hf)
@@ -353,7 +379,7 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 }
 
 func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *qpack.Decoder, qlogger qlogwriter.Recorder, streamID quic.StreamID) (http.Header, error) {
-	if hf.Length > uint64(maxHeaderBytes) {
+	if maxHeaderBytes < 0 || hf.Length > uint64(maxHeaderBytes) {
 		maybeQlogInvalidHeadersFrame(qlogger, streamID, hf.Length)
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, maxHeaderBytes)
 	}
@@ -363,17 +389,18 @@ func decodeTrailers(r io.Reader, hf *headersFrame, maxHeaderBytes int, decoder *
 		return nil, err
 	}
 	decodeFn := decoder.Decode(b)
-	var fields []qpack.HeaderField
+	var fields *[]qpack.HeaderField
 	if qlogger != nil {
-		fields = make([]qpack.HeaderField, 0, 16)
+		collected := make([]qpack.HeaderField, 0, 16)
+		fields = &collected
 	}
-	trailers, err := parseTrailers(decodeFn, &fields)
+	trailers, err := parseTrailersWithLimit(decodeFn, maxHeaderBytes, fields)
 	if err != nil {
 		maybeQlogInvalidHeadersFrame(qlogger, streamID, hf.Length)
 		return nil, err
 	}
 	if qlogger != nil {
-		qlogParsedHeadersFrame(qlogger, streamID, hf, fields)
+		qlogParsedHeadersFrame(qlogger, streamID, hf, *fields)
 	}
 	return trailers, nil
 }

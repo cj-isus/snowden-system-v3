@@ -3,8 +3,6 @@ package quic
 import (
 	"errors"
 	"sync"
-
-	"github.com/sagernet/quic-go/internal/protocol"
 )
 
 var errCryptoQueueRetirement = errors.New("quic: original crypto queue retirement is uncertain")
@@ -15,6 +13,7 @@ const (
 	cryptoQueueJoining cryptoQueueRetirementStage = iota + 1
 	cryptoQueuePreflight
 	cryptoQueueEvents
+	cryptoQueueKeys
 	cryptoQueueClearing
 )
 
@@ -35,28 +34,6 @@ type cryptoQueueRetirement struct {
 	packer         *packetPacker
 }
 
-// Crypto uses the generic callback-free sorter, not STREAM budget/hold owners.
-// Validate all entries before dropping any head; never invoke generic Discard.
-func cryptoSorterMetadataReady(s *frameSorter) bool {
-	if s == nil || s.queue == nil || s.gapTree == nil || s.retirementUncertain ||
-		s.incomingActive || s.refusedActive || s.incoming.Data != nil || s.incoming.DoneCb != nil ||
-		s.refused.Data != nil || s.refused.DoneCb != nil || s.owned != nil ||
-		s.ownedCount != 0 || s.ownedBytes != 0 || s.connectionBudget != nil ||
-		len(s.queue) > int(protocol.MaxCryptoStreamOffset) {
-		return false
-	}
-	bytes := 0
-	for offset, entry := range s.queue {
-		if offset < 0 || len(entry.Data) == 0 || entry.DoneCb != nil ||
-			len(entry.Data) > int(protocol.MaxCryptoStreamOffset)-bytes ||
-			offset > protocol.MaxCryptoStreamOffset-protocol.ByteCount(len(entry.Data)) {
-			return false
-		}
-		bytes += len(entry.Data)
-	}
-	return true
-}
-
 func cryptoControlMetadataReady(f *framer) bool {
 	if f == nil {
 		return false
@@ -66,12 +43,12 @@ func cryptoControlMetadataReady(f *framer) bool {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	return f.sealed && f.metadataRetired && f.pathResponsesSealed &&
-		f.pathResponses == nil && f.controlFrames == nil
+		f.pathResponses == nil && f.controlFrames == nil && f.controlMetadataReadyLocked()
 }
 
 func (c *Conn) captureCryptoQueueRetirement(r *cryptoQueueRetirement) bool {
 	if c.initialStream == nil || c.handshakeStream == nil || c.oneRTTStream == nil ||
-		r.manager == nil || r.retransmission == nil || r.retransmission.retired ||
+		r.manager == nil || r.retransmission == nil || !r.retransmission.metadataReady() ||
 		r.manager.initialStream != c.initialStream || r.manager.handshakeStream != c.handshakeStream ||
 		r.manager.oneRTTStream != c.oneRTTStream {
 		return false
@@ -82,7 +59,7 @@ func (c *Conn) captureCryptoQueueRetirement(r *cryptoQueueRetirement) bool {
 	r.packer = p
 	if !ok || p == nil || !c.packetPackerQuiescent() || p.initialStream != c.initialStream ||
 		p.handshakeStream != c.handshakeStream || p.retransmissionQueue != r.retransmission ||
-		!cryptoControlMetadataReady(r.framer) ||
+		p.framer != r.framer || !cryptoControlMetadataReady(r.framer) || !c.clientTokenMetadataReady() ||
 		r.retransmission.initial != nil && r.retransmission.initial == r.retransmission.handshake {
 		return false
 	}
@@ -93,7 +70,7 @@ func (c *Conn) captureCryptoQueueRetirement(r *cryptoQueueRetirement) bool {
 				return false
 			}
 		}
-		if !cryptoSorterMetadataReady(&stream.queue) {
+		if !stream.cryptoReceiveMetadataReady() || !stream.cryptoWriteMetadataReady() {
 			return false
 		}
 	}
@@ -102,9 +79,9 @@ func (c *Conn) captureCryptoQueueRetirement(r *cryptoQueueRetirement) bool {
 
 // WaitForCryptoQueueRetirement joins the native/public-call/STREAM/DATAGRAM/
 // sent/received-history aggregate and original TLS Close receipt before dropping
-// LOCAL crypto stream/retransmission references. Never self-join a callback.
-// TLS handler/keys/events/ConnectionState, provider aliases and physical
-// native/OS/GC/RSS retirement remain separate. Bytes aren't wiped.
+// LOCAL crypto event/key/stream/retransmission references. Never self-join a
+// callback. Original TLS diagnostics, provider aliases and physical native/OS/
+// GC/RSS retirement remain separate. Bytes and key backing aren't wiped.
 func (c *Conn) WaitForCryptoQueueRetirement() (result error) {
 	if c == nil || c.ctx == nil {
 		return errCryptoQueueRetirement
@@ -167,18 +144,21 @@ func (c *Conn) WaitForCryptoQueueRetirement() (result error) {
 		returned = true
 		return errors.Join(errCryptoQueueRetirement, err)
 	}
+	r.stage = cryptoQueueKeys
+	if err := r.handler.RetireKeyReferences(); err != nil {
+		returned = true
+		return errors.Join(errCryptoQueueRetirement, err)
+	}
 	// All original identities/sorters passed before any local queue head changes.
 	r.stage = cryptoQueueClearing
-	r.retransmission.retired = true
-	r.retransmission.initial, r.retransmission.handshake = nil, nil
-	r.retransmission.appData = framesToRetransmit{}
+	r.retransmission.retireStorageReferences()
 	for i, stream := range r.streams {
 		r.index = i
-		stream.queue.closed = true
-		stream.queue.queue, stream.queue.gapTree = nil, nil
-		stream.writeBuf = nil
+		stream.retireCryptoReceiveStorage()
+		stream.retireCryptoWriteStorage()
 		stream.finished = true
 	}
+	c.retireClientTokenReferences(r.packer)
 	returned = true
 	return nil
 }

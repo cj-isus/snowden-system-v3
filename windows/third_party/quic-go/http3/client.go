@@ -367,6 +367,10 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 
 	rsp, err := c.doRequest(req, str)
 	if err != nil { // if any error occurred
+		// This caller still owns the failed stream. The cancellation watcher
+		// may select reqDone instead of Closing / request cancellation.
+		str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 		close(reqDone)
 		<-done
 		return nil, maybeReplaceError(err)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -41,7 +40,8 @@ type zeroRTTQueue struct {
 
 type rejectedPacket struct {
 	receivedPacket
-	hdr *wire.Header
+	hdr       wire.Header // message-owned metadata, token view belongs to receivedPacket
+	hasHeader bool
 }
 
 // A Listener of QUIC
@@ -527,7 +527,7 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 	}
 	// Short header packets should never end up here in the first place
 	if !wire.IsLongHeaderPacket(p.data[0]) {
-		panic(fmt.Sprintf("misrouted packet: %#v", p.data))
+		panic("quic: misrouted short-header packet")
 	}
 	v, err := wire.ParseVersion(p.data)
 	// drop the packet if we failed to parse the protocol version
@@ -587,7 +587,8 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 
 	// If we're creating a new connection, the packet will be passed to the connection.
 	// The header will then be parsed again.
-	hdr, _, _, err := wire.ParsePacket(p.data)
+	hdr, _, _, err := wire.ParsePacketView(p.data)
+	s.packetInput.header = hdr // original receive task retains the borrowed view
 	if err != nil {
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
@@ -764,6 +765,7 @@ func (s *baseServer) cleanupZeroRTTQueues(now monotime.Time) {
 // validateToken returns false if:
 //   - address is invalid
 //   - token is expired
+//   - token was issued in the future under the current wall clock
 //   - token is null
 func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
 	if token == nil {
@@ -772,10 +774,14 @@ func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
 	if !token.ValidateRemoteAddr(addr) {
 		return false
 	}
-	if !token.IsRetryToken && time.Since(token.SentTime) > s.maxTokenAge {
+	age := time.Since(token.SentTime) // sample after any address-provider callback
+	if age < 0 {
 		return false
 	}
-	if token.IsRetryToken && time.Since(token.SentTime) > s.config.maxRetryTokenAge() {
+	if !token.IsRetryToken && age > s.maxTokenAge {
+		return false
+	}
+	if token.IsRetryToken && age > s.config.maxRetryTokenAge() {
 		return false
 	}
 	return true
@@ -834,13 +840,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 				// For Retry tokens, we send an INVALID_ERROR if
 				// * the token is too old, or
 				// * the token is invalid, in case of a retry token.
-				select {
-				case s.invalidTokenQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
-				default:
-					// drop packet if we can't send out the  INVALID_TOKEN packets fast enough
-					s.releaseServerPacket()
-				}
-				s.packetInput.held = false
+				s.enqueueRejectedPacket(s.invalidTokenQueue, p, hdr)
 				return nil
 			}
 		}
@@ -849,13 +849,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	if token == nil && s.verifySourceAddress != nil && s.verifySourceAddress(p.remoteAddr) {
 		// Retry invalidates all 0-RTT packets sent.
 		s.discardZeroRTTQueue(hdr.DestConnectionID)
-		select {
-		case s.retryQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
-		default:
-			// drop packet if we can't send out Retry packets fast enough
-			s.releaseServerPacket()
-		}
-		s.packetInput.held = false
+		s.enqueueRejectedPacket(s.retryQueue, p, hdr)
 		return nil
 	}
 
@@ -1004,13 +998,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 
 func (s *baseServer) refuseNewConn(p receivedPacket, hdr *wire.Header) {
 	s.discardZeroRTTQueue(hdr.DestConnectionID)
-	select {
-	case s.connectionRefusedQueue <- rejectedPacket{receivedPacket: p, hdr: hdr}:
-	default:
-		// drop packet if we can't send out the CONNECTION_REFUSED fast enough
-		s.releaseServerPacket()
-	}
-	s.packetInput.held = false
+	s.enqueueRejectedPacket(s.connectionRefusedQueue, p, hdr)
 }
 
 func (s *baseServer) handleNewConn(conn *wrappedConn) {
@@ -1053,7 +1041,7 @@ func (s *baseServer) sendRetry(p rejectedPacket) {
 }
 
 func (s *baseServer) sendRetryPacket(p rejectedPacket) error {
-	hdr := p.hdr
+	hdr := &p.hdr
 	// Log the Initial packet now.
 	// If no Retry is sent, the packet will be logged by the connection.
 	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
@@ -1100,7 +1088,6 @@ func (s *baseServer) sendRetryPacket(p rejectedPacket) error {
 				SrcConnectionID:  replyHdr.SrcConnectionID,
 				DestConnectionID: replyHdr.DestConnectionID,
 				Version:          replyHdr.Version,
-				Token:            &qlog.Token{Raw: token},
 			},
 			Raw: qlog.RawInfo{
 				Length:        len(buf.Data),
@@ -1114,7 +1101,7 @@ func (s *baseServer) sendRetryPacket(p rejectedPacket) error {
 func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 	// Only send INVALID_TOKEN if we can unprotect the packet.
 	// This makes sure that we won't send it for packets that were corrupted.
-	hdr := p.hdr
+	hdr := &p.hdr
 	sealer, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer, hdr.Version)
 	data := p.data[:hdr.ParsedLen()+hdr.Length]
 	extHdr, err := unpackLongHeader(opener, hdr, data)
@@ -1158,7 +1145,7 @@ func (s *baseServer) maybeSendInvalidToken(p rejectedPacket) {
 
 func (s *baseServer) sendConnectionRefused(p rejectedPacket) {
 	sealer, _ := handshake.NewInitialAEAD(p.hdr.DestConnectionID, protocol.PerspectiveServer, p.hdr.Version)
-	if err := s.sendError(p.remoteAddr, p.hdr, sealer, ConnectionRefused, p.info); err != nil {
+	if err := s.sendError(p.remoteAddr, &p.hdr, sealer, ConnectionRefused, p.info); err != nil {
 		s.logger.Debugf("Error sending CONNECTION_REFUSED error: %s", err)
 	}
 }

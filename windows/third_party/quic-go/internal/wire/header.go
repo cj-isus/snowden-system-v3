@@ -132,20 +132,34 @@ type Header struct {
 // If we understand the version, the packet is parsed up unto the packet number.
 // Otherwise, only the invariant part of the header is parsed.
 func ParsePacket(data []byte) (*Header, []byte, []byte, error) {
+	return parsePacket(data, false)
+}
+
+// ParsePacketView borrows Initial/Retry tokens from the pinned packet. Only a
+// synchronously validated and admitted token may escape via an independent copy.
+func ParsePacketView(data []byte) (*Header, []byte, []byte, error) {
+	return parsePacket(data, true)
+}
+
+func parsePacket(data []byte, borrowToken bool) (*Header, []byte, []byte, error) {
 	if len(data) == 0 || !IsLongHeaderPacket(data[0]) {
 		return nil, nil, nil, errors.New("not a long header packet")
 	}
-	hdr, err := parseHeader(data)
+	hdr, err := parseHeaderWithTokenView(data, borrowToken)
 	if err != nil {
 		if errors.Is(err, ErrUnsupportedVersion) {
 			return hdr, nil, nil, err
 		}
 		return nil, nil, nil, err
 	}
-	if protocol.ByteCount(len(data)) < hdr.ParsedLen()+hdr.Length {
+	if hdr.ParsedLen() < 0 || hdr.ParsedLen() > protocol.ByteCount(len(data)) ||
+		hdr.Length < 0 || hdr.Length > protocol.ByteCount(len(data))-hdr.ParsedLen() {
 		return nil, nil, nil, fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)-int(hdr.ParsedLen()), hdr.Length)
 	}
 	packetLen := int(hdr.ParsedLen() + hdr.Length)
+	if borrowToken {
+		return hdr, data[:packetLen:packetLen], data[packetLen:len(data):len(data)], nil
+	}
 	return hdr, data[:packetLen], data[packetLen:], nil
 }
 
@@ -153,18 +167,26 @@ func ParsePacket(data []byte) (*Header, []byte, []byte, error) {
 // * if we understand the version: up to the packet number
 // * if not, only the invariant part of the header
 func parseHeader(b []byte) (*Header, error) {
+	return parseHeaderWithTokenView(b, false)
+}
+
+func parseHeaderWithTokenView(b []byte, borrowToken bool) (*Header, error) {
 	if len(b) == 0 {
 		return nil, io.EOF
 	}
 	typeByte := b[0]
 
 	h := &Header{typeByte: typeByte}
-	l, err := h.parseLongHeader(b[1:])
+	l, err := h.parseLongHeaderWithTokenView(b[1:], borrowToken)
 	h.parsedLen = protocol.ByteCount(l) + 1
 	return h, err
 }
 
 func (h *Header) parseLongHeader(b []byte) (int, error) {
+	return h.parseLongHeaderWithTokenView(b, false)
+}
+
+func (h *Header) parseLongHeaderWithTokenView(b []byte, borrowToken bool) (int, error) {
 	startLen := len(b)
 	if len(b) < 5 {
 		return 0, io.EOF
@@ -229,8 +251,12 @@ func (h *Header) parseLongHeader(b []byte) (int, error) {
 		if tokenLen <= 0 {
 			return startLen - len(b), io.EOF
 		}
-		h.Token = make([]byte, tokenLen)
-		copy(h.Token, b[:tokenLen])
+		if borrowToken {
+			h.Token = b[:tokenLen:tokenLen]
+		} else {
+			h.Token = make([]byte, tokenLen)
+			copy(h.Token, b[:tokenLen])
+		}
 		return startLen - len(b) + tokenLen + 16, nil
 	}
 
@@ -243,8 +269,12 @@ func (h *Header) parseLongHeader(b []byte) (int, error) {
 		if tokenLen > uint64(len(b)) {
 			return startLen - len(b), io.EOF
 		}
-		h.Token = make([]byte, tokenLen)
-		copy(h.Token, b[:tokenLen])
+		if borrowToken {
+			h.Token = b[:int(tokenLen):int(tokenLen)]
+		} else {
+			h.Token = make([]byte, tokenLen)
+			copy(h.Token, b[:tokenLen])
+		}
 		b = b[tokenLen:]
 	}
 

@@ -21,15 +21,53 @@ func (c *Client) loopMessages(conn *clientQUICConnection) {
 	}
 }
 
-func (c *Client) handleMessage(conn *clientQUICConnection, data []byte) error {
-	message, err := receiveUDPMessage(data, &conn.receiveBudget)
+// Only the original loopMessages task writes this slot. Its task join precedes
+// the carrier's final inspection. No per-packet worker, queue or allocation.
+type clientUDPReceive struct {
+	active   bool
+	failed   bool
+	data     []byte
+	message  *udpMessage
+	reserved bool
+	charge   int
+}
+
+func (r *clientUDPReceive) idle() bool {
+	return !r.active && !r.failed && r.data == nil && r.message == nil && !r.reserved && r.charge == 0
+}
+
+func (c *Client) handleMessage(conn *clientQUICConnection, data []byte) (err error) {
+	original := &conn.udpReceive
+	if !original.idle() {
+		original.failed = true
+		conn.receiveBudget.markUncertain()
+		return errClientUncertain
+	}
+	original.active, original.data = true, data
+	returned := false
+	defer func() {
+		if !returned || conn.receiveBudget.uncertain() {
+			// Keep even an ambiguous pool/handoff prefix without dereferencing or
+			// releasing it again. Notification occurs outside carrier/RX locks.
+			original.failed = true
+			conn.receiveBudget.markUncertain()
+			if returned {
+				err = errors.Join(err, errClientUncertain)
+			}
+		} else {
+			*original = clientUDPReceive{}
+		}
+	}()
+	message, err := receiveUDPMessageOwned(data, &conn.receiveBudget, original)
 	if err != nil {
+		returned = true
 		if errors.Is(err, errUDPReceiveCapacity) {
 			return nil // nonfatal overload; preserve neighboring sessions/carrier
 		}
 		return E.Cause(err, "decode UDP message")
 	}
 	conn.handleUDPMessage(message)
+	returned = true
 	return nil
 }
 

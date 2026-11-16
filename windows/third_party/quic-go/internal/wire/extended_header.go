@@ -131,7 +131,7 @@ func (h *ExtendedHeader) Log(logger utils.Logger) {
 		if len(h.Token) == 0 {
 			token = "Token: (empty), "
 		} else {
-			token = fmt.Sprintf("Token: %#x, ", h.Token)
+			token = fmt.Sprintf("TokenLength: %d, ", len(h.Token))
 		}
 		if h.Type == protocol.PacketTypeRetry {
 			logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sVersion: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.Version)

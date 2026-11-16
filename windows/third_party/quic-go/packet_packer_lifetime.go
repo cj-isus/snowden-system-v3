@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"errors"
+
 	"github.com/sagernet/quic-go/internal/ackhandler"
 	"github.com/sagernet/quic-go/internal/monotime"
 	"github.com/sagernet/quic-go/internal/protocol"
@@ -99,6 +101,30 @@ func (c *Conn) packetPackerQuiescent() bool {
 	return ok && !p.buffers.active && !p.buffers.failed && !p.buffers.releasing && p.buffers.original == nil && p.buffers.count == 0
 }
 
+// Void OnLost, control admission or split refusal must not look like "nothing to pack".
+// Ordinary pressure rejects known partial output with the existing owner;
+// inconsistent/abnormal queue state retains the original buffer instead.
+func (p *packetPacker) queuedFrameResult(err error) error {
+	queueErr := p.retransmissionQueue.failureError()
+	// frameSource deliberately has no lifecycle methods. Native packing requires
+	// the concrete original framer; an unsupported source cannot certify custody.
+	f, native := p.framer.(*framer)
+	controlErr := errFramerControlState
+	if native {
+		controlErr = f.controlFailure()
+	}
+	if queueErr == nil && controlErr == nil {
+		return err
+	}
+	if p.retransmissionQueue.stateError() != nil || !native || f.controlNativeStateError() != nil {
+		p.buffers.failed = true
+	}
+	if err == errNothingToPack {
+		err = nil
+	}
+	return errors.Join(queueErr, controlErr, err)
+}
+
 func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCount, now monotime.Time, v protocol.Version) (*coalescedPacket, error) {
 	if err := p.buffers.begin(nil, false); err != nil {
 		return nil, err
@@ -106,8 +132,12 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxSize protocol.ByteCo
 	returned := false
 	defer p.buffers.guard(&returned)
 	packet, err := p.packCoalescedPacket(onlyAck, maxSize, now, v)
+	err = p.queuedFrameResult(err)
 	if finishErr := p.buffers.finish(err == nil && packet != nil); finishErr != nil {
 		packet, err = nil, finishErr
+	}
+	if err != nil {
+		packet = nil
 	}
 	returned = true
 	return packet, err
@@ -152,8 +182,12 @@ func (p *packetPacker) AppendPacket(buf *packetBuffer, maxSize protocol.ByteCoun
 	returned := false
 	defer p.buffers.guard(&returned)
 	packet, err := p.appendPacket(buf, false, maxSize, now, v)
+	err = p.queuedFrameResult(err)
 	if finishErr := p.buffers.finish(err == nil); finishErr != nil {
 		packet, err = shortHeaderPacket{}, finishErr
+	}
+	if err != nil {
+		packet = shortHeaderPacket{}
 	}
 	returned = true
 	return packet, err
@@ -166,8 +200,12 @@ func (p *packetPacker) PackPTOProbePacket(encLevel protocol.EncryptionLevel, max
 	returned := false
 	defer p.buffers.guard(&returned)
 	packet, err := p.packPTOProbePacket(encLevel, maxSize, addPingIfEmpty, now, v)
+	err = p.queuedFrameResult(err)
 	if finishErr := p.buffers.finish(err == nil && packet != nil); finishErr != nil {
 		packet, err = nil, finishErr
+	}
+	if err != nil {
+		packet = nil
 	}
 	returned = true
 	return packet, err

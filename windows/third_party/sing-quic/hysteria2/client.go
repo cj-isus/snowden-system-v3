@@ -332,40 +332,11 @@ func (c *Client) ListenPacket(ctx context.Context) (net.PacketConn, error) {
 	if conn.udpDisabled {
 		return nil, E.New("UDP disabled by server")
 	}
-	conn.udpAccess.Lock()
-	defer conn.udpAccess.Unlock()
-	select {
-	case <-conn.connDone:
-		return nil, E.Errors(conn.connErr, os.ErrClosed)
-	default:
-	}
-	if len(conn.udpConnMap) >= maxUDPReceiveSessions {
-		conn.receiveBudget.drop()
-		return nil, errUDPReceiveCapacity
-	}
-	// Find a free ID across uint32 wrap without replacing a live session.
-	sessionID := conn.udpSessionID
-	for attempts := 0; attempts <= maxUDPReceiveSessions; attempts++ {
-		if _, present := conn.udpConnMap[sessionID]; !present {
-			break
-		}
-		sessionID++
-	}
-	conn.udpSessionID = sessionID + 1
-	var clientPacketConn *udpPacketConn
-	clientPacketConn, err = newUDPPacketConn(conn.ctx, conn.quicConn, &conn.receiveBudget, &conn.sendBudget, func() {
-		conn.udpAccess.Lock()
-		if conn.udpConnMap[sessionID] == clientPacketConn {
-			delete(conn.udpConnMap, sessionID)
-		}
-		conn.udpAccess.Unlock()
-	})
+	packet, err := conn.listenPacket(ctx)
 	if err != nil {
 		return nil, err
 	}
-	clientPacketConn.sessionID = sessionID // immutable before map publication
-	conn.udpConnMap[sessionID] = clientPacketConn
-	return clientPacketConn, nil
+	return packet, nil
 }
 
 func (c *Client) CloseWithError(err error) error {
@@ -412,41 +383,47 @@ type clientOffer struct {
 }
 
 type clientQUICConnection struct {
-	quicConn        *quic.Conn
-	lifeAccess      sync.Mutex
-	ctx             context.Context
-	cancel          func(error)
-	initialDone     chan struct{}
-	retired         chan struct{}
-	closing         bool
-	initializing    bool
-	failure         error
-	closeErr        error
-	rawClose        *clientCloseCall
-	quicClose       *clientCloseCall
-	transportClose  *clientCloseCall
-	http3Wait       *clientCloseCall
-	opening         *clientSocketDial
-	tasks           sync.WaitGroup
-	connDone        chan struct{}
-	connErr         error
-	udpDisabled     bool
-	udpAccess       sync.RWMutex
-	udpConnMap      map[uint32]*udpPacketConn
-	udpSessionID    uint32
-	receiveBudget   udpReceiveBudget
-	sendBudget      udpSendBudget
-	tcpStreams      map[*clientConn]struct{}
-	tcpDone         chan struct{}
-	tcpReported     bool
-	tcpFailure      error
-	tcpCalls        int
-	tcpControls     int
-	tcpStaging      int
-	tcpStageBytes   int
-	tcpVectors      [maxTCPVectorWrites]tcpVectorWrite
-	tcpVectorBytes  int
-	tcpVectorInputs int
+	quicConn                *quic.Conn
+	lifeAccess              sync.Mutex
+	ctx                     context.Context
+	cancel                  func(error)
+	initialDone             chan struct{}
+	retired                 chan struct{}
+	closing                 bool
+	initializing            bool
+	failure                 error
+	closeErr                error
+	rawClose                *clientCloseCall
+	quicClose               *clientCloseCall
+	transportClose          *clientCloseCall
+	http3Wait               *clientCloseCall
+	opening                 *clientSocketDial
+	tasks                   sync.WaitGroup
+	connDone                chan struct{}
+	connErr                 error
+	udpDisabled             bool
+	udpAccess               sync.RWMutex
+	udpConnMap              map[uint32]*udpPacketConn
+	udpConstructing         *udpPacketConstruction    // udpAccess; one original unpublished candidate
+	udpConstructionRetiring *udpPacketConstruction    // sole original finalizer after handoff
+	udpRetiring             map[uint32]*udpPacketConn // one original finalizer after udpAccess handoff
+	udpRetiringCurrent      *udpPacketConn
+	udpRetiringID           uint32
+	udpSessionID            uint32
+	receiveBudget           udpReceiveBudget
+	udpReceive              clientUDPReceive // original RX task prefix; inspected only after tasks.Wait
+	sendBudget              udpSendBudget
+	tcpStreams              map[*clientConn]struct{}
+	tcpDone                 chan struct{}
+	tcpReported             bool
+	tcpFailure              error
+	tcpCalls                int
+	tcpControls             int
+	tcpStaging              int
+	tcpStageBytes           int
+	tcpVectors              [maxTCPVectorWrites]tcpVectorWrite
+	tcpVectorBytes          int
+	tcpVectorInputs         int
 }
 
 func (c *clientQUICConnection) active() bool {

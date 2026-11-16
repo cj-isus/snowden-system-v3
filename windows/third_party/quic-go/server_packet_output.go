@@ -26,6 +26,16 @@ type serverPacketOutputState struct {
 	active, failed    bool
 }
 
+func emptyRejectedPacketMetadata(p rejectedPacket) bool {
+	return emptyPathInputMetadata(p.receivedPacket) && !p.hasHeader && p.hdr.Token == nil
+}
+
+func (o *serverPacketOutputState) metadataEmpty() bool {
+	return !o.active && !o.failed && emptyRejectedPacketMetadata(o.current) &&
+		emptyRejectedPacketMetadata(o.draining) && o.buffer == nil && o.backing == nil &&
+		o.data == nil && o.oob == nil && o.conn == nil
+}
+
 func (s *baseServer) responsePacketBuffer() (*packetBuffer, error) {
 	o := &s.packetOutput
 	if o.buffer != nil {
@@ -54,6 +64,17 @@ func (s *baseServer) processServerResponse(kind serverResponseKind, p rejectedPa
 	o.current, o.active = p, true
 	returned := false
 	defer s.finishServerResponse(&returned)
+	if p.buffer == nil || len(p.data) == 0 ||
+		(kind == serverVersionResponse && p.hasHeader) || (kind != serverVersionResponse && !p.hasHeader) {
+		o.failed = true
+		return false
+	}
+	if p.hasHeader && (p.hdr.Type != protocol.PacketTypeInitial || p.hdr.ParsedLen() <= 0 ||
+		p.hdr.ParsedLen() > protocol.ByteCount(len(p.data)) || p.hdr.Length < 0 ||
+		p.hdr.Length > protocol.ByteCount(len(p.data))-p.hdr.ParsedLen() || cap(p.hdr.Token) != len(p.hdr.Token)) {
+		o.failed = true
+		return false
+	}
 	switch kind {
 	case serverVersionResponse:
 		s.maybeSendVersionNegotiationPacket(p.receivedPacket)
@@ -89,6 +110,7 @@ func (s *baseServer) finishServerResponse(returned *bool) {
 		o.backing = nil
 	}
 	o.data, o.oob, o.conn = nil, nil, nil
+	o.current.hdr.Token = nil // drop view before the original raw input pool return
 	releaseClosedPacket(&o.current.receivedPacket)
 	o.current, o.active = rejectedPacket{}, false
 	cleanupReturned = true
@@ -111,6 +133,7 @@ func (s *baseServer) finishServerResponses(returned *bool) {
 		select {
 		case p := <-s.versionNegotiationQueue:
 			s.packetOutput.draining = rejectedPacket{receivedPacket: p}
+			s.packetOutput.draining.hdr.Token = nil
 			releaseClosedPacket(&s.packetOutput.draining.receivedPacket)
 			s.packetOutput.draining = rejectedPacket{}
 		default:
@@ -121,6 +144,9 @@ otherQueues:
 	for _, queue := range [3]chan rejectedPacket{s.invalidTokenQueue, s.connectionRefusedQueue, s.retryQueue} {
 		s.drainServerResponseQueue(queue)
 	}
+	if !s.packetOutput.metadataEmpty() {
+		return // no positive send receipt with a retained header/input/output prefix
+	}
 	s.sendReturned = true
 	cleanupReturned = true
 }
@@ -130,6 +156,7 @@ func (s *baseServer) drainServerResponseQueue(queue chan rejectedPacket) {
 		select {
 		case p := <-queue:
 			s.packetOutput.draining = p
+			s.packetOutput.draining.hdr.Token = nil
 			releaseClosedPacket(&s.packetOutput.draining.receivedPacket)
 			s.packetOutput.draining = rejectedPacket{}
 		default:

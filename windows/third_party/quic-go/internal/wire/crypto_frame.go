@@ -13,15 +13,28 @@ type CryptoFrame struct {
 	Data   []byte
 }
 
-func parseCryptoFrame(b []byte, _ protocol.Version) (*CryptoFrame, int, error) {
+func parseCryptoFrame(b []byte, v protocol.Version) (*CryptoFrame, int, error) {
+	frame, n, err := parseCryptoFrameView(b, v)
+	if err != nil {
+		return nil, n, err
+	}
+	if len(frame.Data) != 0 {
+		data := make([]byte, len(frame.Data))
+		copy(data, frame.Data)
+		frame.Data = data
+	}
+	return frame, n, nil
+}
+
+// The owning parser above preserves its independent-buffer contract. The
+// native Conn uses this view only while its original raw packet remains held.
+func parseCryptoFrameView(b []byte, _ protocol.Version) (*CryptoFrame, int, error) {
 	startLen := len(b)
-	frame := &CryptoFrame{}
 	offset, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	b = b[l:]
-	frame.Offset = protocol.ByteCount(offset)
 	dataLen, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return nil, 0, replaceUnexpectedEOF(err)
@@ -30,9 +43,9 @@ func parseCryptoFrame(b []byte, _ protocol.Version) (*CryptoFrame, int, error) {
 	if dataLen > uint64(len(b)) {
 		return nil, 0, io.EOF
 	}
+	frame := &CryptoFrame{Offset: protocol.ByteCount(offset)}
 	if dataLen != 0 {
-		frame.Data = make([]byte, dataLen)
-		copy(frame.Data, b)
+		frame.Data = b[:int(dataLen):int(dataLen)]
 	}
 	return frame, startLen - len(b) + int(dataLen), nil
 }

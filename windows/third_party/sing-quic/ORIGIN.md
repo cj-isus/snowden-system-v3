@@ -1,4 +1,4 @@
-# Windows sing-quic source bundle — revision 75
+# Windows sing-quic source bundle — revision 95
 
 Upstream module: `github.com/sagernet/sing-quic`.
 Frozen declared version: `v0.6.4-0.20260803041914-d83826c306d7`.
@@ -1085,3 +1085,295 @@ quic-go replace while this consumer requires NewDatagramSendScope, Closing and
 WaitForStreamReceiveShutdown/WaitForStreamCallsShutdown/WaitForStreamMapShutdown/WaitForStreamSendDataShutdown/WaitForPacketInputShutdown/WaitForStreamMapRetirement/WaitForCongestionControlShutdown/WaitForDatagramSendDataShutdown/WaitForPacketHistoryRetirement/WaitForCryptoQueueRetirement cannot compile
 against stock mod4. Rebuild only after explicit authorization for builds/checks.
 Retain source/evidence for review; do not overwrite module-cache sources.
+
+
+## Revision76 — pair with quic-go68 local key-reference retirement
+
+V2-466 source only; actual HY2 consumer code is unchanged. Its existing crypto
+retirement aggregate now includes the original local key/parameter reference
+pass after native/public/data/history/TLS/event/local-sorter receipts. Original
+TLS diagnostics and provider aliases remain; no key-byte wipe, physical cleanup,
+compiled compatibility, performance or whole-carrier retirement is claimed.
+Receipts: `.artifacts/memory/bootstrap-v466-key-references-`.
+No tests/build/native/live/network/Git or dependency graph execution.
+
+
+## Revision77 — pair with quic-go69 crypto transmit backing quotas
+
+V2-467 source only; actual HY2 consumer code is unchanged. Its existing crypto
+retirement aggregate now preflights original crypto transmit backing owners and
+retire references after known native/public/data/history/TLS/event/key receipts.
+Quotas apply to each stream store, not retransmission splitting, global/native/
+OS/RSS lifetime or a whole carrier. No runtime/performance compatibility claim.
+Receipts: `.artifacts/memory/bootstrap-v467-crypto-write-storage-`.
+No tests/build/native/live/network/Git or dependency graph execution.
+
+
+## Revision78 — pair with quic-go70 retransmission storage
+
+V2-468 source only; actual HY2 consumer code is unchanged. Original crypto
+retirement aggregate now preflights pending retransmission credits and lifetime
+split backing after native/history/TLS receipts; reference release follows
+event/key completion. Void-OnLost pressure is explicit in the native Conn path.
+No compiled compatibility/performance/global/whole-carrier/OS/RSS claim.
+Receipts: `.artifacts/memory/bootstrap-v468-retransmission-storage-`.
+No tests/build/native/live/network/Git or dependency execution.
+
+
+## Revision79 — pair with quic-go71 crypto receive storage
+
+V2-469 source only; actual HY2 consumer is unchanged. Native crypto receive
+reassembly is bounded by its existing16KiB domain with one lazy data+bitmap
+block. The existing native/history/TLS/event/key aggregate preflights metadata
+then drops local references; provider/TLS aliases remain. No compile/protocol/
+performance/global/whole-carrier/native/OS/RSS proof is claimed.
+Receipts: `.artifacts/memory/bootstrap-v469-crypto-receive-storage-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+
+## Revision80 — pair with quic-go72 generic control-frame storage
+
+V2-470 source only; actual HY2 consumer is unchanged. Generic framer admission
+now bounds pending payload views and closes internal blocked-frame bypasses.
+Original typed failure wakes native lifecycle/readiness/packing; no callback or
+new worker. Existing producer/framer/crypto aggregate checks immutable credit
+metadata and exact native packer/framer identity before reference release.
+Private frameSource remains unchanged; unknown sources fail native custody.
+No protocol/performance/global/native/OS/
+RSS proof or atomic cutoff of already-in-flight writes is claimed. Receipts:
+`.artifacts/memory/bootstrap-v470-framer-control-storage-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+
+## Revision81 — pair with quic-go73 client token storage
+
+V2-471 source only; actual HY2 consumer unchanged, no TokenStore activated.
+Native borrowed NEW_TOKEN parser copies only after optional cache admission;
+scalar diagnostics do not retain packet views. Original inline callback/copy
+custody and bounded default LRU preserve separate local/provider lifetimes.
+No protocol/performance/global/native/OS/RSS or whole-token secrecy proof.
+Receipts: `.artifacts/memory/bootstrap-v471-client-token-storage-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+
+## Revision82 — pair with quic-go74 bounded issuer tokens
+
+V2-472 source only; actual HY2 consumer unchanged. Local server-token size
+admission and decoded semantics are bounded, native Initial/Retry diagnostics
+no longer retain raw address-validation tokens. Client opaque token policy,
+Retry integrity/phase and standalone raw qlog API remain. Provider/global/
+protocol/performance/native/OS acceptance stays open. Receipts:
+`.artifacts/memory/bootstrap-v472-token-issuer-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+
+## Revision83 — pair with quic-go75 packet token admission
+
+V2-473 source only, actual HY2 consumer unchanged. Native Conn uses capped
+borrowed Initial/Retry parsing with admitted owned copies; old owning parser
+remains. Cached token fit and separate one-Retry original copy/callback custody
+precede state changes. Header tracing remains metadata-only for token payloads.
+No wire/whole-flight/MTU/provider/global/native/OS/performance acceptance.
+Receipts: `.artifacts/memory/bootstrap-v473-packet-token-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+
+## Revision84 — pair with quic-go76 server header custody
+
+V2-474 source only, actual HY2 client unchanged/no listener activated. Vendored
+QUIC server uses borrowed header parsing tied to original packet ownership and
+inline reject-message metadata. Token references clear before original pool
+return, unknown original operations retained. No protocol/concurrency/global/
+RSS/performance/native/OS acceptance. Receipts:
+`.artifacts/memory/bootstrap-v474-server-header-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+## Revision85 — pair with quic-go77 HTTP/3 decoded field limits
+
+V2-475 source only, HY2 source unchanged. Paired HTTP/3 skips field collectors
+when qlog is absent and applies overflow-safe decoded accounting before retention
+in headers/trailers. Both wire trailer consumers pass their original limits.
+Actual auth response uses64KiB headers; its unread body is closed, so the trailer
+change is a library-path improvement, not observed HY2 trailer execution.
+QPACK field construction, optional sink retention, bytes/time/global/RSS/native
+and wire/private fixture acceptance remain separate. No new API/dependency/worker.
+Receipts: `.artifacts/memory/bootstrap-v475-http3-fields-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+## Revision86 — pair with quic-go78 HTTP/3 DATAGRAM queue storage
+
+V2-476 source only, HY2 source unchanged and HTTP/3 datagrams remain disabled in
+the current auth ClientConn. Existing HTTP/3 stream queues use a lazy32-slot ring
+and1MiB original-capacity credit; popped cells clear references and queued data
+retains original drain order. Lazy close broadcast and data handoff wake original
+waiting receivers; no task/spawn/payload copy or native lifetime proof is added.
+Source-only library improvement, not an observed HY2 speed/resource benefit or
+activation of a competing datagram reader. Private shape/wire/pressure/Close/
+concurrency/global/RSS/native/OS acceptance remains open. Receipts:
+`.artifacts/memory/bootstrap-v476-http3-datagram-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+## Revision87 — pair with quic-go79 original HTTP/3 stream registry
+
+V2-477 source only, HY2 source unchanged. The auth ClientConn uses a separate
+64-entry registry ceiling, duplicate/closing admission before wrapper/callback,
+original wrapper map/WG ownership before watcher registration, and exact-owner
+removal. Qlogger Add/seal/Wait admission shares one mutex; the library server
+retains the original rawConn pointer instead of copying the callback owner.
+No HTTP/3 datagram/server activation or transport/dependency/public API change.
+Private fixture/constructor/pressure/Close/Goaway/wire/concurrency acceptance and
+external data borrowers/global/RSS/native/OS retirement remain open. Receipts:
+`.artifacts/memory/bootstrap-v477-http3-registry-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+## Revision88 — pair with quic-go80 qlog-independent HTTP/3 join
+
+V2-478 source only; HY2 unchanged. Existing original HTTP3 closeCall now also
+joins the original stream-registry WG without qlog and receives sticky registry
+uncertainty. Original Hysteria cleanup joins call.err and retains negative owners,
+without replacement. No wait starts a fresh close or purges pending map/data.
+Owned RoundTrip errors cancel both stream sides before ending their watcher;
+the returned response error is preserved and the original watcher still joins.
+Unfinished local stream borrowers can block; native/data/returned aliases/global/
+RSS/time/OS remain separate. No datagram/server activation or new public API.
+Source/API/private fixture/close/callback/qlog/concurrency/wire unverified. Receipts:
+`.artifacts/memory/bootstrap-v478-http3-join-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+## Revision89 — pair with quic-go81 native-confirmed HTTP/3 terminal metadata
+
+V2-479 source only; HY2 unchanged. Its original QUIC close already joins crypto/
+history/stream-map retirement. HTTP3 now observes that same original stream/map/
+call/data aggregate before ending residual local stream metadata and broadcasting
+receive closure. One retained finalizer/result handles repeated Wait, not a new
+native close or notification-based purge. Payload remains available for external
+drain; unknown/negative prefixes retain owner references and deny clean reuse.
+No datagram/server activation or dependency/public API signature change. Native/
+provider blocking, external aliases/global/RSS/time/OS and source/private fixture/
+wire/concurrency acceptance remain separate/unverified. Receipts:
+`.artifacts/memory/bootstrap-v479-http3-native-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+## Revision90 — original HY2 UDP shutdown/map/drain references and errors
+
+V2-480 source only. Carrier retirement retains its bounded original UDP map and
+current session/ID in fields until full positive close result. Parent/public
+session close joins the same original shutdown and destroy results; known errors
+are returned, abnormal prefixes retained and never retried as a fresh close.
+New packet_close.go keeps the current queued message through its pool release.
+Defragmenter keeps its original group/cell until release returns, latches failure
+and refuses a second release. RX budget poison preserves credits, and one client
+failure callback is installed before publication and invoked outside budget/RX
+locks by shutdown/destroy guards. Parent includes child errors and original destroy.
+No new goroutine/timer/queue, dependency change or wire change. Existing256-session/
+4096-owner/8MiB RX and64-group/256KiB defrag ceilings remain; Salamander password
+was already capacity-clamped. Scope.Close is only a seal, with native/send/reader
+and provider/global/OS retirement still separate. Service internal error consumption,
+reader/feed/assembly prefixes and private fixture/wire/concurrency/runtime/resource
+acceptance remain open. Pair quic-go82 is metadata-only, runtime source unchanged.
+Receipts: `.artifacts/memory/bootstrap-v480-hy2-udp-close-`.
+No tests/build/native/live/network/Git/dependency execution.
+
+## Revision91 — original client UDP decode/input/assembly prefixes
+
+V2-481 source only. One original client RX task owns a carrier slot retaining raw
+input, reserved charge and allocated message through decode/dispatch. Parent
+checks idle only after its existing task join; abnormal/poisoned input is retained
+and not reused. Existing receiveUDPMessage service/private signature is preserved.
+New packet_input.go serializes retained input/output handoffs under receiveAccess;
+failure poisons before unlock and notifies the original client after unlock.
+Unknown input refuses later feed/close cleanup rather than retrying a pool return.
+Defrag assembly charge/message remain rooted before allocation/copy/group removal;
+known feed return transfers the output to the child slot before dropping its alias.
+No extra per-packet operation object, worker, timer, queue, wire or ceiling change.
+This is not reader/WaitReadPacket/caller-output custody or full accounting-failure
+notification. Service has no original client RX slot or failure callback. Pool
+alias validity, allocator internals, runtime/concurrency/wire/resource/native/OS/
+provider acceptance remain open. Pair quic-go83 is metadata-only, runtime unchanged.
+Receipts: `.artifacts/memory/bootstrap-v481-hy2-rx-prefix-`.
+No tests/build/native/live/network/Git/dependency execution or performance proof.
+
+## Revision92 — original UDP read/message/output owners and full-copy checks
+
+V2-482 source only. Eight fixed original read slots per session and512 calls per
+carrier, nonwaiting admission under RX budget mutex. Budget roots a session with
+active/unknown reads even after public destroy; settlement requires reads/roots
+empty as well as owner/byte credits. Public Close seals readers without self-join;
+whole-carrier close retains its existing budget join. ReadPacket/ReadFrom/wait
+store dequeued message, caller outputs and allocated wait output/charge; unknown
+keeps original slot and notifies client outside locks, never replaying pool work.
+Read options are synchronized/snapshotted and validated before bounded allocation;
+wait copy charges <=65536 backing within existing8MiB RX budget before allocation.
+Pinned Buffer.Write can return a short n with nil: wait now checks full fit/copy,
+reports io.ErrShortBuffer and never returns a released output pointer. Ordinary
+ReadFrom truncation remains its original packet API behavior. No per-read operation
+object, new worker, timer, queue, wire or dependency. Six pinned SDK source files
+were read unchanged, not executed. Custom allocators/aliases/pool/RSS/time/native/
+OS/provider/runtime/wire/fixture/concurrency/API acceptance remain unverified.
+Pair quic-go84 is metadata-only. Receipts:
+`.artifacts/memory/bootstrap-v482-hy2-readers-`.
+No tests/build/native/live/network/Git/dependency execution or measured speed gain.
+
+## Revision93 — admitted HY2 TX original references and sequential fragments
+
+V2-483 source only. Existing8-owner/128KiB budget now has eight fixed original TX
+slots holding session/input backing/destination/main message/current fragment/
+packed frame/stage. Checked cap(input)+start charge is added before staging;
+whole-carrier positive settlement requires slots idle. One client failure callback
+is installed before publication and invoked outside send/RX locks. Abnormal Send,
+pack or cleanup retains original prefix, skips speculative release and does not
+refund uncertain credits. Known return releases each frame/view/main/input once.
+Actual fragment production is sequential, with at most one current borrowed view
+and frame; <=255 count, packet fields and one progressing size retry are retained
+in source. Existing private pack/bulk-fragment/counter helpers remain, without
+claiming their unowned path is accepted. No new worker/timer/queue/dependency.
+WritePacket still consumes input on admission refusal with guarded original
+caller cleanup. Admitted slots do not bound/root arbitrary rejected-buffer
+allocator callbacks; that boundary remains open. Retained-cap charging may refuse
+formerly accepted oversized-capacity slices. Custom allocator/alias/global/RSS/
+time/native/OS/provider/private fixture/wire/concurrency/API acceptance remains
+unverified. Pair quic-go85 is metadata-only. Receipts:
+`.artifacts/memory/bootstrap-v483-hy2-send-owners-`.
+No tests/build/native/live/network/Git/dependency execution or measured speed gain.
+
+## Revision94 — original UDP constructor, publication fence and shared abort
+
+V2-484 source only. One original pending candidate per client carrier is rooted
+before scope/context/queue/fragment/deadline initialization; stage and unknown
+initialization prefix remain reachable. Map publication uses udpAccess->lifeAccess
+metadata fence with requestClose, with no foreign Context/native/pool call under
+lifeAccess. Operation cancellation channel is checked before publication; Context
+methods/error handling are outside that fence. Failed public API returns nil
+PacketConn interface, not a typed nil candidate. A stale/unpublished candidate
+uses one original abort Once/result outside locks, no unpublished onDestroy.
+Retiring carrier hands off the pending owner with its original UDP map, joins
+the same scope/cancel abort, and drops references only on full positive result.
+Unknown abort is not retried; cleanup errors notify client outside locks. Shared
+initializer preserves the service/private signature, without persistent server
+custody/acceptance. No new worker/timer/queue/dependency. Existing controls can
+still create read-deadline timers after Close; control/rejected-buffer/preflight/
+provider/global/OS/runtime/wire/fixture/concurrency/API gates remain open.
+Pair quic-go86 is metadata-only. Receipts:
+`.artifacts/memory/bootstrap-v484-hy2-constructor-`.
+No tests/build/native/live/network/Git/dependency execution or measured speed gain.
+
+## Revision95 — original UDP controls, final read-timer clear and frozen LocalAddr
+
+V2-485 source only. RX budget has8 fixed original control slots/carrier and2
+calls/session, independent of waiting reads. A session mutex serializes setters
+and privileged shutdown timer clear; admission/seal is rechecked after acquiring
+it. Unknown setter poisons before unlock, retains owner/deadline/stage and notifies
+client after unlock. Positive carrier budget result requires control calls/slots
+empty. Close seals first, closes native scope/cancels, then invokes original
+pipe.Deadline.Set(zero) outside budget/RX locks before RX drain. Its pinned stop/
+closed-channel action semantics do not prove generic timer-thread/OS retirement.
+Existing packetaddr snapshot captures constructor-time local socket metadata;
+original provider address is retained through Capture. Public LocalAddr returns
+fresh standard/frozen metadata without native calls, not live route/egress facts.
+No extra worker/per-control object/timer/queue/dependency. Controls pressure can
+now return explicit capacity/closed errors; strict snapshot capture can reject
+invalid metadata during construction. Compatibility, concurrent timer reset/Close,
+provider/allocator/callee/global/RSS/time/native/OS/wire/fixture/runtime gates remain
+unverified. Pair quic-go87 is metadata-only. Receipts:
+`.artifacts/memory/bootstrap-v485-hy2-controls-`.
+No tests/build/native/live/network/Git/dependency execution or measured speed gain.

@@ -3,6 +3,7 @@ package handshake
 import (
 	"bytes"
 	"encoding/asn1"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -14,6 +15,13 @@ const (
 	tokenPrefixIP byte = iota
 	tokenPrefixString
 )
+
+const (
+	maxTokenAddressStringBytes = 512
+	maxTokenRTTMicroseconds    = int64((1<<63 - 1) / time.Microsecond)
+)
+
+var errTokenAddress = errors.New("token: invalid or oversized remote address")
 
 // A Token is derived from the client address and can be used to verify the ownership of this address.
 type Token struct {
@@ -29,7 +37,11 @@ type Token struct {
 
 // ValidateRemoteAddr validates the address, but does not check expiration
 func (t *Token) ValidateRemoteAddr(addr net.Addr) bool {
-	return bytes.Equal(encodeRemoteAddr(addr), t.encodedRemoteAddr)
+	if t == nil || !validEncodedTokenAddress(t.encodedRemoteAddr) {
+		return false
+	}
+	encoded, err := encodeRemoteAddrBounded(addr)
+	return err == nil && bytes.Equal(encoded, t.encodedRemoteAddr)
 }
 
 // token is the struct that is used for ASN1 serialization and deserialization
@@ -58,9 +70,16 @@ func (g *TokenGenerator) NewRetryToken(
 	origDestConnID protocol.ConnectionID,
 	retrySrcConnID protocol.ConnectionID,
 ) ([]byte, error) {
+	if g == nil {
+		return nil, errTokenSize
+	}
+	encoded, err := encodeRemoteAddrBounded(raddr)
+	if err != nil {
+		return nil, err
+	}
 	data, err := asn1.Marshal(token{
 		IsRetryToken:             true,
-		RemoteAddr:               encodeRemoteAddr(raddr),
+		RemoteAddr:               encoded,
 		OriginalDestConnectionID: origDestConnID.Bytes(),
 		RetrySrcConnectionID:     retrySrcConnID.Bytes(),
 		Timestamp:                time.Now().UnixNano(),
@@ -73,8 +92,15 @@ func (g *TokenGenerator) NewRetryToken(
 
 // NewToken generates a new token to be sent in a NEW_TOKEN frame
 func (g *TokenGenerator) NewToken(raddr net.Addr, rtt time.Duration) ([]byte, error) {
+	if g == nil || rtt < 0 {
+		return nil, errors.New("token: invalid generator or RTT")
+	}
+	encoded, err := encodeRemoteAddrBounded(raddr)
+	if err != nil {
+		return nil, err
+	}
 	data, err := asn1.Marshal(token{
-		RemoteAddr: encodeRemoteAddr(raddr),
+		RemoteAddr: encoded,
 		Timestamp:  time.Now().UnixNano(),
 		RTT:        rtt.Microseconds(),
 	})
@@ -90,6 +116,9 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 	if len(encrypted) == 0 {
 		return nil, nil
 	}
+	if g == nil {
+		return nil, errTokenSize
+	}
 
 	data, err := g.tokenProtector.DecodeToken(encrypted)
 	if err != nil {
@@ -102,6 +131,14 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 	}
 	if len(rest) != 0 {
 		return nil, fmt.Errorf("rest when unpacking token: %d", len(rest))
+	}
+	// Authenticated data can still be malformed or from an older issuer.
+	// Validate before the panic-on-oversize CID parser and duration arithmetic.
+	if !validEncodedTokenAddress(t.RemoteAddr) ||
+		len(t.OriginalDestConnectionID) > protocol.MaxConnIDLen ||
+		len(t.RetrySrcConnectionID) > protocol.MaxConnIDLen ||
+		t.RTT < 0 || t.RTT > maxTokenRTTMicroseconds {
+		return nil, errors.New("token: invalid authenticated fields")
 	}
 	token := &Token{
 		IsRetryToken:      t.IsRetryToken,
@@ -119,8 +156,45 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 
 // encodeRemoteAddr encodes a remote address such that it can be saved in the token
 func encodeRemoteAddr(remoteAddr net.Addr) []byte {
-	if udpAddr, ok := remoteAddr.(*net.UDPAddr); ok {
-		return append([]byte{tokenPrefixIP}, udpAddr.IP...)
+	encoded, _ := encodeRemoteAddrBounded(remoteAddr)
+	return encoded // legacy private helper; invalid addresses never match a token
+}
+
+func validEncodedTokenAddress(encoded []byte) bool {
+	if len(encoded) == 0 {
+		return false
 	}
-	return append([]byte{tokenPrefixString}, []byte(remoteAddr.String())...)
+	switch encoded[0] {
+	case tokenPrefixIP:
+		return len(encoded) == 1+net.IPv4len || len(encoded) == 1+net.IPv6len
+	case tokenPrefixString:
+		return len(encoded) > 1 && len(encoded) <= 1+maxTokenAddressStringBytes
+	default:
+		return false
+	}
+}
+
+func encodeRemoteAddrBounded(remoteAddr net.Addr) ([]byte, error) {
+	if remoteAddr == nil {
+		return nil, errTokenAddress
+	}
+	if udpAddr, ok := remoteAddr.(*net.UDPAddr); ok {
+		if udpAddr == nil || (len(udpAddr.IP) != net.IPv4len && len(udpAddr.IP) != net.IPv6len) {
+			return nil, errTokenAddress
+		}
+		encoded := make([]byte, 1+len(udpAddr.IP))
+		encoded[0] = tokenPrefixIP
+		copy(encoded[1:], udpAddr.IP)
+		return encoded, nil
+	}
+	// String is a provider callback; its own work/return must be accounted by
+	// that caller. Only our subsequent representation copy is bounded here.
+	text := remoteAddr.String()
+	if len(text) == 0 || len(text) > maxTokenAddressStringBytes {
+		return nil, errTokenAddress
+	}
+	encoded := make([]byte, 1+len(text))
+	encoded[0] = tokenPrefixString
+	copy(encoded[1:], text)
+	return encoded, nil
 }
