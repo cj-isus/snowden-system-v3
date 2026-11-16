@@ -265,14 +265,15 @@ h4 {
   background: #111b28;
   font-size: 12px;
 }
-.btn:hover:not(:disabled) {
+.btn:hover:not(:disabled):not([aria-disabled='true']) {
   border-color: #367091;
   background: #10283b;
 }
-.btn:disabled {
+.btn:disabled, .btn[aria-disabled='true'] {
   opacity: 0.5;
   cursor: default;
 }
+.btn[aria-disabled='true']:active { transform: none; }
 
 .btn.primary {
   min-height: 40px;
@@ -283,7 +284,7 @@ h4 {
   box-shadow: 0 3px 12px #ff622612;
   font-size: 12px;
 }
-.btn.primary:hover:not(:disabled) {
+.btn.primary:hover:not(:disabled):not([aria-disabled='true']) {
   filter: brightness(1.1);
 }
 
@@ -294,7 +295,7 @@ h4 {
   font-weight: 650;
   font-size: 13px;
 }
-.btn.success:hover:not(:disabled) {
+.btn.success:hover:not(:disabled):not([aria-disabled='true']) {
   background: #0a2637;
   box-shadow: 0 0 14px rgba(37, 227, 160, 0.12);
 }

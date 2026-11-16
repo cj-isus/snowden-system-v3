@@ -9,7 +9,7 @@
 #   the tag the app starts the same way but metrics report unavailable.
 #   - wintun.dll is placed next to the exe (TUN breaks on a clean machine without it);
 #   - no secrets go into the package (vault lives in %AppData%; the installer
-#     ships only the exe + wintun.dll).
+#     ships the exe + identical recovery copy + pinned native helper + wintun.dll).
 # NOTE: keep this file pure ASCII (PLAN V2-022: PS5.1 reads UTF-8 w/o BOM as ANSI).
 
 param(
@@ -18,6 +18,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot   # windows/
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    throw "This packaging entry point requires a Windows build host."
+}
 
 Write-Host "== snowden.system packaging ==" -ForegroundColor Cyan
 
@@ -38,19 +41,61 @@ try {
 Write-Host "[2/4] wails build (tags + version ldflags)..." -ForegroundColor Yellow
 Push-Location $root
 try {
+    # Build outside build/bin: Wails can replace that directory. The small
+    # native helper imports only the observation codec, never the VPN engine.
+    $probeStage = Join-Path $root ".artifacts\native-helper-build"
+    [System.IO.Directory]::CreateDirectory($probeStage) | Out-Null
+    $probeStaged = Join-Path $probeStage "snowden-native-probe.exe"
+    # This package ships amd64 wintun; both executable targets must match it.
+    # The codec-only helper needs no C toolchain. Restore caller environment
+    # before Wails runs and on every helper build failure.
+    $probePreviousGOOS = $env:GOOS
+    $probePreviousGOARCH = $env:GOARCH
+    $probePreviousCGO = $env:CGO_ENABLED
+    try {
+        $env:GOOS = "windows"
+        $env:GOARCH = "amd64"
+        $env:CGO_ENABLED = "0"
+        go build -trimpath -o $probeStaged ./cmd/snowden-native-probe
+        if ($LASTEXITCODE -ne 0) { throw "native helper build failed" }
+    } finally {
+        $env:GOOS = $probePreviousGOOS
+        $env:GOARCH = $probePreviousGOARCH
+        $env:CGO_ENABLED = $probePreviousCGO
+    }
+    $probeSHA = (Get-FileHash -LiteralPath $probeStaged -Algorithm SHA256).Hash.ToLowerInvariant()
+
     # F15 (V2-050): the running version must be machine-readable for the update
     # chain (strict-increase policy + anti-downgrade floor).
     $wailsJson0 = Get-Content (Join-Path $root "wails.json") -Raw | ConvertFrom-Json
     $appVersion = $wailsJson0.info.productVersion
     if (-not $appVersion) { $appVersion = "2.0.0" }
-    $ldflags = "-X main.runningVersion=$appVersion"
-    wails build -tags "with_utls,with_gvisor,with_quic,with_clash_api" -ldflags "$ldflags"
+    $ldflags = "-X main.runningVersion=$appVersion -X main.nativeProbeHelperSHA256=$probeSHA"
+    wails build -platform "windows/amd64" -tags "with_utls,with_gvisor,with_quic,with_clash_api" -ldflags "$ldflags"
     if ($LASTEXITCODE -ne 0) { throw "wails build failed" }
 } finally { Pop-Location }
 
 $bin = Join-Path $root "build\bin"
 $exe = Join-Path $bin "snowden-system.exe"
 if (-not (Test-Path $exe)) { throw "exe not found: $exe" }
+$recovery = Join-Path $bin "snowden-recovery.exe"
+# Protocol5 companion is an exact byte copy of this signed-application target,
+# not a separately built EXE or an old backup. Hash equality is packaging
+# identity only; the runtime still requires actual local update-role/SDK proof.
+$recoveryAppSHA = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+Copy-Item -LiteralPath $exe -Destination $recovery -Force
+if ((Get-FileHash -LiteralPath $recovery -Algorithm SHA256).Hash.ToLowerInvariant() -ne $recoveryAppSHA -or
+    (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $recoveryAppSHA) {
+    throw "recovery companion copy changed during packaging"
+}
+$probe = Join-Path $bin "snowden-native-probe.exe"
+if ((Get-FileHash -LiteralPath $probeStaged -Algorithm SHA256).Hash.ToLowerInvariant() -ne $probeSHA) {
+    throw "native helper changed after main application pinning"
+}
+Copy-Item -LiteralPath $probeStaged -Destination $probe -Force
+if ((Get-FileHash -LiteralPath $probe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $probeSHA) {
+    throw "packaged native helper differs from main application pin"
+}
 
 # --- 3. wintun.dll next to the exe ---
 Write-Host "[3/4] wintun.dll..." -ForegroundColor Yellow
@@ -60,7 +105,7 @@ if (-not (Test-Path $wintun)) {
 }
 Write-Host "     wintun.dll: $((Get-Item $wintun).Length) bytes"
 
-# --- 4. NSIS installer from our script (exe+wintun.dll, per-user) ---
+# --- 4. NSIS installer (exe+recovery copy+native helper+wintun.dll, per-user) ---
 if (-not $NoInstaller) {
     Write-Host "[4/4] NSIS installer..." -ForegroundColor Yellow
 
@@ -105,7 +150,7 @@ if (-not $NoInstaller) {
         [System.IO.File]::WriteAllBytes($nsi, [byte[]](0xEF,0xBB,0xBF) + $nsiBytes)
     }
 
-    & $makensisPath "/DAPP_VERSION=$version" "/DEXE_PATH=$exe" "/DWINTUN_PATH=$wintun" $nsi
+    & $makensisPath "/DAPP_VERSION=$version" "/DEXE_PATH=$exe" "/DRECOVERY_PATH=$recovery" "/DPROBE_PATH=$probe" "/DWINTUN_PATH=$wintun" $nsi
     if ($LASTEXITCODE -ne 0) { throw "makensis failed" }
 
     # remove a stray wails default installer if a previous -nsis run left one

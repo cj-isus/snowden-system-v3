@@ -1,68 +1,27 @@
-# STATE — продолжение Snowden System
+# STATE — public Windows source snapshot
 
-Снимок: 2026-10-21, V2-109. Нормативные статусы — PLAN §3/§5.1/§5.3.
+Current implementation: V465, source only. Full PC-00..09 and prior requirements remain open; no tests, build, native, VPN or release acceptance was performed for this publication. The private local state and historical operations records are preserved outside this update.
 
-## Текущий срез
+## V2-465 — владение TLS events и лимит ожидающих копий
 
-По запросу владельца: глубокая редакция CENSORSHIP-THEORY и поэтапный план.
-Документационный срез; код/сеть/профили в нём не менялись. V2-108 отдельно
-локально принят на synthetic данных; owner rollout не выполнялся.
+PC-06 source/unverified: [контракт](tasks/PC-06-HY2-RECEIVE.md#pc-v465-crypto-events).
+SDK гарантирует QUICEvent.Data лишь до следующего NextEvent; исходные writeRecord
+и GetSessionTicket удерживали borrowed slices дольше. Теперь write/ticket bytes
+копируются до продвижения SDK; queue резервирует128 slots/8MiB queued clone bytes
+до allocation. Погашенные event cells очищаются перед reslice, пустая head отпускается.
+Additive EventError/Err с прежней NextEvent signature достигает actual Conn error
+path. Go1.26 QUICErrorEvent/Err обрабатывается явно; fork minimum1.26 соответствует
+существующему Windows parent, dependency versions не менялись.
+RetireEventQueue использует original Close cell/result после native/data/history/
+TLS/local sorter receipts. Ordinary capacity может retire-иться после quiescence;
+inconsistent credit/unknown original retained/negative без retry. Нет payload/key
+wipe или provider callbacks. Existing Transport/HY2 source unchanged.
+q67/s75;6Go1manifest2origin4docs/manual8diff1new/gofmt6exit0;13reviewed3SDK/
+261cache201verbatim. No tests/build/native/network/Git. TLS keys/STREAM-crypto/
+retransmission lifetime budgets/provider/native/OS/UX/release/fullPC OPEN;
+100OPEN56NOT_RUN/TUN unavailable/schema2 unsupported.
 
-## Что изменено
 
-- Сохранены авторские §0–6 и номера подразделов, уточнены AND/allowlist/ECH,
-  entry≠exit, mux/volume, chunked/Range, QUIC CID, active probing и причинность
-  исторических инцидентов. Исходная копия — .artifacts/theory/2026-10-21-original.md.
-- Добавлены threat/dependency/observation model, uncertainty и bounded adaptation,
-  trust/update/offline recovery, speed/overhead model и экспериментальный протокол.
-- 27 источников с периодом/версией/границами, shortlist reuse; новые docs ядра
-  отделены от pinned sing-box1.13.19. XHTTP/splithttp в pin отсутствуют.
-- PLAN §5.3: TH-00…08, owners/dependencies/gates/stop criteria; THEORY §10:
-  E-01…08. Тесты/реализация/серверный доступ из плана автоматически не запускаются.
-- V2-108 остаётся отдельным evidence: explicit offline publisher IDs→signed
-  bindings, bounded/canonical JSON, no-overwrite output, temporary App import.
+## Next
 
-## Проверки и evidence
-
-- evidence/2026-10-21-theory-review.md; .artifacts/theory/verification.json.
-  Проверены номера прежних разделов, reference definitions, local links/anchors,
-  fenced blocks, фазы/опыты и границы STATE; harness record отдельно.
-  TH-00 принят только как документация; статическая обвязка exit0,
-  не проверка runtime, сервера или VPN-пути.
-- При чтении обнаружена параллельная доработка V2-108:4 Go inputs изменились
-  относительно начального snapshot, совпадают с новым migration manifest.
-  151 Go/mod input этого manifest сверены; unexplained drift нет. Это не
-  заявление «всё дерево неизменно» или новый запуск Go-проверок.
-- Прочитан final binding-focused JSON:335 leaf PASS,0fail; backend record exit0
-  и 105.95s — из отдельного V2-108 evidence, в V2-109 не перезапускались.
-- Product/UI/EXE/NSIS/race/live/admin в V2-109 не запускались; VPS/SSH/CF,
-  системные proxy/DNS/WFP/TUN и реальные vault/keys не затронуты.
-
-## Остаток и следующий шаг
-
-1. OFF-04: signed HY2 pin identity/content, delivery/rotation/revocation и ID/path
-   safety перед записью. Current owner pins не читались. Actual owner binding
-   rollout требует его keys/IDs; старые strict клиенты отвергают optional fields.
-2. OFF-04/06/07: power-loss/crash/reboot/ACL/reparse/interprocess/orphan cleanup.
-   Hard-link publication не гарантирует crash durability и требует FS support.
-   KDF gate — estimated active buffers, не RSS/GC/hard latency/API rate/несколько
-   процессов; forced cancellation не реализована.
-3. OFF-03/05: facade preflight и network-epoch/observer decision atomicity.
-   OFF-02/06: hard bound/process isolation non-cooperative Start/Close.
-4. OFF-01/02/05: running old helper/EXE migration, production subprocess;
-   isolated elevated corruption/IPv4/IPv6/UDP/DNS. Production TUN не принят.
-5. OFF-05/06: endpoint independence, actual DNS/UDP/IPv6, budgets, staged update.
-6. OFF-07/08: native WebView2 DPI/error/blocked, race/reproducible Wails/NSIS;
-   исторический runner exit201 без stdout имеет неизвестную причину.
-7. OFF-09: server IaC/live после оплаты и запроса; FR-012 same-input comparative
-   experiment/raw evidence. Превосходство и экономия токенов не измерены.
-
-Продолжение: STATE → PLAN §5.3 TH-01 / §5.1 OFF-04 signed pins/path safety → код.
-
-## Дополнительный срез GH-001
-
-Публикация выполнена: main dae1f3c,323 files, remote ref/tree проверены; history сохранена.
-Ни один старый repo агентом не удалён: владелец взял удаление на себя после
-GitHub sudo verification. Evidence: evidence/2026-10-21-github-publication.md.
-Следующий запрос: TH-01/OFF-04 signed HY2 pins/path safety; backlog сохраняется.
-
+Inspect TLS traffic-secret/AEAD ownership and diagnostic consumers before any key-reference retirement; crypto-stream/retransmission lifetime budgets remain open. TUN is unavailable and schema2 activation is unsupported. Follow the role-owned PC plan in `docs/planning/knowledge-application/PC-PLAN.md`.

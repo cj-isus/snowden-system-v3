@@ -1,405 +1,161 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import PageHeading from '../components/PageHeading.vue'
-/**
- * NetGuard: фактическое состояние авто-починки сети (tools/netguard).
- * Только факты из backend-биндинга: задачи планировщика (машинные статусы),
- * системный прокси, живость SOCKS:1080, последние события лога.
- * Нет данных — «нет данных». no-access — честный факт (SYSTEM-задача скрыта
- * от не-elevated процесса), а не «не найдена».
- */
-import { computed, ref } from 'vue'
+import HintBox from '../components/HintBox.vue'
 import Icon from '../components/Icon.vue'
-import type { IconName } from '../components/Icon.vue'
-import { netGuardStatus, runProxyHeal } from '../api/backend'
+import ProxyRecoveryPanel from '../components/ProxyRecoveryPanel.vue'
+import { netGuardStatus } from '../api/backend'
+import { fmtDateTime, fmtLoopbackObservation } from '../api/labels'
 import type { NetGuardTaskState } from '../api/contract'
-import { toast } from '../composables/toast'
 import { usePolling } from '../composables/polling'
+import { useNav } from '../composables/nav'
 
-const { data: status, loading, error: loadError, refresh } = usePolling(netGuardStatus, 15000)
-const healing = ref(false)
-
-async function healNow(): Promise<void> {
-  if (healing.value) return
-  healing.value = true
-  try {
-    const healed = await runProxyHeal()
-    if (healed === null) {
-      toast('warn', 'Heal недоступен: приложение запущено вне Wails')
-    } else if (healed) {
-      toast('ok', 'Зависший системный прокси отключён')
-    } else {
-      toast('info', 'Чинить нечего: прокси валиден или не наш формат')
-    }
-    await refresh()
-  } catch (e) {
-    toast('error', `Heal не выполнен: ${e instanceof Error ? e.message : String(e)}`)
-  } finally {
-    healing.value = false
-  }
-}
-
-
-const staleProxy = computed(() => status.value?.proxy.stale ?? false)
-const vpnActive = computed(() => status.value?.socksAlive ?? false)
-
-/** Честный вердикт героя — только из машинных статусов. Пока данных нет —
- * честная загрузка, не выдумка. */
-const hero = computed<{ icon: IconName; cls: string; state: string; sub: string }>(() => {
+const { data: status, loading, error: loadError, receivedAt, refresh } = usePolling(netGuardStatus, 15000, { pauseWhenHidden: true })
+const { navTo } = useNav()
+const hero = computed(() => {
   const s = status.value
-  if (!s) {
-    return { icon: loading.value ? 'refresh' : 'warn', cls: loading.value ? 'busy' : 'warning', state: loading.value ? 'Загрузка…' : 'Данные недоступны', sub: loadError.value || 'Откройте приложение Windows для диагностики сети.' }
+  if (!s) return {
+    tone: 'unknown',
+    title: loading.value ? 'Получаем локальные наблюдения…' : 'Состояние неизвестно',
+    detail: loading.value ? 'Ожидается ответ приложения Windows.' : loadError.value || 'Данные недоступны. Откройте приложение Windows и повторите загрузку.',
   }
-  const tasks = s.tasks
-  const anyMissing = tasks.some((t) => t.status === 'not-found')
-  const anyNoAccess = tasks.some((t) => t.status === 'no-access')
-  const allGone = tasks.every((t) => t.status === 'not-found')
-
-  if (staleProxy.value) {
-    return {
-      icon: 'shield-warn',
-      cls: 'err',
-      state: 'Обнаружен зависший прокси',
-      sub: 'Устраняется плановой задачей NetGuard-AutoHeal-User в течение 2 минут, при следующем запуске приложения — мгновенно. Можно устранить сейчас кнопкой ниже.',
-    }
+  if (s.proxy.stale) return { tone: 'warning', title: 'Сообщён сбой прокси', detail: 'Для исправления нужно подтверждение владения настройками. Ответ порта такого права не даёт.' }
+  if (!s.tasks.length) return { tone: 'unknown', title: 'Нет сведений о задачах', detail: 'Список задач пуст. Регистрация, выполнение и состояние восстановления не подтверждены.' }
+  if (s.tasks.every(task => task.status === 'not-found')) return { tone: 'unknown', title: 'Задачи NetGuard не найдены', detail: 'Автоматическое восстановление через эти задачи не подтверждено.' }
+  if (s.tasks.some(task => task.status === 'no-access' || task.status === 'not-found' || task.status.startsWith('unknown'))) {
+    return { tone: 'unknown', title: 'Наблюдение ограничено', detail: 'Часть задач не найдена, скрыта правами или имеет неизвестный статус. Это не доказывает наличие или отсутствие защиты.' }
   }
-  if (allGone) {
-    return {
-      icon: 'shield-warn',
-      cls: 'idle',
-      state: 'NetGuard не установлен',
-      sub: 'Плановые задачи не найдены. Установите: tools/netguard/install.ps1 (запуск от администратора).',
-    }
-  }
-  if (anyMissing || anyNoAccess) {
-    // Смешанный вид: часть задач видна, часть скрыта правами/отсутствует.
-    const missing = tasks.filter((t) => t.status === 'not-found').map((t) => t.name)
-    const hidden = tasks.filter((t) => t.status === 'no-access').map((t) => t.name)
-    const parts: string[] = []
-    if (hidden.length) parts.push(`скрыта правами: ${hidden.join(', ')}`)
-    if (missing.length) parts.push(`не найдена: ${missing.join(', ')}`)
-    return {
-      icon: 'info',
-      cls: 'busy',
-      state: 'Защита частично наблюдаема',
-      sub: `Процесс без прав администратора видит не все задачи (${parts.join('; ')}). SYSTEM-задача продолжает работать — это ограничение просмотра, не сбой.`,
-    }
-  }
-  const allEnabled = tasks.every((t) => t.status === 'ready' || t.status === 'running')
-  if (allEnabled && tasks.length > 0) {
-    return {
-      icon: 'shield',
-      cls: 'ok',
-      state: 'Защита активна',
-      sub: 'Плановые задачи auto-heal зарегистрированы и работают: зависший прокси и DNS-сбои устраняются автоматически.',
-    }
-  }
-  const degraded = tasks.filter((t) => t.status === 'disabled').map((t) => t.name)
-  return {
-    icon: 'warn',
-    cls: 'idle',
-    state: 'Защита не в рабочем состоянии',
-    sub: `Статусы задач: ${tasks.map((t) => `${t.name}=${t.status}`).join(', ')}. ${degraded.length ? 'Задачи отключены — включите в Планировщике задач или переустановите NetGuard.' : 'Проверьте планировщик задач.'}`,
-  }
+  if (s.tasks.some(task => task.status === 'disabled')) return { tone: 'warning', title: 'Есть отключённые задачи', detail: 'Изучите состояние ниже. Не включайте старые скрипты сброса без проверки их полномочий.' }
+  return { tone: 'observed', title: 'Локальные сведения получены', detail: 'Статусы планировщика и ответы портов не подтверждают защиту трафика, исправность DNS или результат восстановления.' }
 })
-
-const taskStateText: Record<string, string> = {
-  ready: 'готова',
-  running: 'выполняется',
-  disabled: 'отключена',
-  queued: 'в очереди',
-  'no-access': 'скрыта правами (SYSTEM)',
-  'not-found': 'не найдена — установите NetGuard',
-  unknown: 'статус неизвестен',
+const taskLabels: Record<string, string> = {
+  ready: 'Готова к запуску', running: 'Выполняется', disabled: 'Отключена', queued: 'В очереди',
+  'no-access': 'Недостаточно прав для наблюдения', 'not-found': 'Не найдена', unknown: 'Статус неизвестен',
 }
-
-function stateText(s: NetGuardTaskState): string {
-  return taskStateText[s] ?? s
-}
-
-function statePill(s: NetGuardTaskState): 'success' | 'warning' | 'danger' | '' {
-  if (s === 'ready' || s === 'running') return 'success'
-  if (s === 'no-access') return ''
-  if (s === 'disabled') return 'warning'
-  if (s === 'not-found' || s.startsWith('unknown')) return 'danger'
-  return ''
-}
-
-function fmtDate(iso: string): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
-
-function kindClass(kind: string): string {
-  return kind === 'PROBLEM' ? 'fail' : kind === 'HEALED' || kind === 'HEALING' ? 'pass' : ''
-}
+function taskLabel(state: NetGuardTaskState): string { return taskLabels[state] ?? `Статус неизвестен (${state})` }
+const eventLabels: Record<string, string> = { HEALED: 'Сообщение о восстановлении', HEALING: 'Попытка восстановления', PROBLEM: 'Сообщение о проблеме', WEEKLY: 'Плановое событие' }
+const logScope = computed(() => {
+  const log = status.value?.log
+  if (!log) return 'Границы чтения журнала не сообщены этой версией приложения. Полнота истории неизвестна.'
+  if (log.state === 'missing') return 'Файл журнала не найден. Это не устанавливает состояние установки или восстановления.'
+  if (log.state === 'busy') return 'Предыдущее чтение журнала ещё выполняется. Новое чтение не начато.'
+  if (log.state === 'unavailable') return 'Журнал прочитать не удалось либо закрытие предыдущего чтения не подтверждено. Остальные локальные наблюдения показаны отдельно.'
+  const omitted = log.truncated ? ' Более ранние записи не вошли в этот фрагмент.' : ''
+  const incomplete = log.incomplete ? ' Незавершённые, обрезанные краем фрагмента или слишком длинные записи исключены.' : ''
+  return `Прочитано ${log.bytesRead} байт, обработано строк: ${log.rows}. Лимит одного чтения — 64 КиБ фрагмента и 256 байт для определения кодировки; не более 256 полных строк.${omitted}${incomplete}`
+})
 </script>
 
 <template>
   <div class="view">
-    <PageHeading title="Восстановление сети" description="Проверка локального прокси и задач восстановления. Исправление запускается по вашему действию." ><button class="btn" :disabled="loading" @click="refresh">Обновить</button><button class="btn" :disabled="healing || loading" @click="healNow">{{ healing ? 'Восстановление…' : 'Исправить прокси' }}</button></PageHeading>
+    <PageHeading title="Локальное восстановление" description="Настройки прокси, задачи и история. Сначала — границы владения и доступное действие.">
+      <button class="btn" :disabled="loading" @click="refresh">{{ loading ? 'Обновление…' : 'Обновить наблюдения' }}</button>
+    </PageHeading>
 
-    <div v-if="status === null && !loading" class="empty-block card">
-      <Icon name="warn" :size="18" />
-      <p>
-        Данные NetGuard недоступны: биндинг не отвечает или NetGuard не установлен
-        (tools/netguard/install.ps1). Вымышленные статусы не показываются.
-      </p>
-    </div>
+    <section class="observation" :class="hero.tone">
+      <div class="observation-heading" role="status" aria-live="polite" aria-atomic="true">
+        <Icon name="info" :size="22" />
+        <div><h2>{{ hero.title }}</h2><p>{{ hero.detail }}</p></div>
+      </div>
+      <p class="receipt-time">Получено экраном: {{ fmtDateTime(receivedAt) }}. Это время ответа интерфейсу, а не время измерения Windows.</p>
+      <p v-if="status && loading" class="receipt-time">Наблюдения обновляются; показан предыдущий ответ.</p>
+    </section>
 
-    <template v-else-if="status">
-      <section class="hero" :class="hero.cls">
-        <Icon :name="hero.icon" :size="30" class="hero-ico" />
-        <div>
-          <div class="hero-state">{{ hero.state }}</div>
-          <div class="hero-sub">{{ hero.sub }}</div>
-        </div>
-      </section>
+    <section class="recovery-boundary">
+      <h2>Что можно восстановить</h2>
+      <dl class="recovery-facts">
+        <div><dt>Изменения текущей сессии</dt><dd>При обычной остановке backend может восстановить только собственные подтверждённые изменения. Конфликт с другой программой не даёт права перезаписать её настройки.</dd></div>
+        <div><dt>После аварии или нового запуска</dt><dd>Для записанных изменений Snowden можно подготовить отдельное подтверждение. При отсутствии проверенного журнала или неизвестном результате предыдущей операции восстановление недоступно.</dd></div>
+        <div><dt>Результат восстановления</dt><dd>Наблюдение порта, статус задачи и запись старого события не являются результатом текущей операции восстановления.</dd></div>
+      </dl>
+      <div class="actions-row">
+        <button class="btn" @click="navTo('dashboard')">Перейти к остановке VPN</button>
+        <button class="btn" @click="navTo('logs')">Изучить журнал</button>
+      </div>
+      <HintBox kind="info">Если настройки заняты другой программой, изучите причину конфликта. Не сбрасывайте proxy, DNS или системные правила по одному признаку недоступного порта.</HintBox>
+      <ProxyRecoveryPanel />
+    </section>
 
-      <div class="grid">
-        <section class="panel">
-          <h2>Плановые задачи</h2>
-          <div v-for="t in status.tasks" :key="t.name" class="kv task-row">
-            <span class="k mono">{{ t.name }}</span>
-            <span class="v">
-              <span :class="{ 'dim-text': t.status === 'no-access' }">{{ stateText(t.status) }}</span>
-              <span v-if="statePill(t.status)" :class="['pill', statePill(t.status)]">
-                {{ t.status === 'ready' || t.status === 'running' ? 'ок' : t.status }}
-              </span>
-              <template v-if="t.status !== 'not-found' && t.status !== 'no-access'">
-                <span v-if="t.lastRun" class="task-dates">прошлый: {{ fmtDate(t.lastRun) }}</span>
-                <span v-if="t.nextRun" class="task-dates">следующий: {{ fmtDate(t.nextRun) }}</span>
-                <span v-if="t.lastCode && t.lastCode !== '0'" class="pill warning">код {{ t.lastCode }}</span>
-              </template>
-            </span>
-          </div>
+    <template v-if="status">
+      <div class="observed-grid" :aria-busy="loading">
+        <section class="observed-section">
+          <h2>Системный прокси</h2>
+          <dl class="proxy-facts">
+            <div><dt>Настройка Windows</dt><dd>{{ status.proxy.enabled ? 'Включена' : 'Выключена' }}</dd></div>
+            <div><dt>Сообщённый адрес</dt><dd class="mono">{{ status.proxy.server || 'Не задан' }}</dd></div>
+            <div><dt>Порт из настройки</dt><dd>{{ status.proxy.port > 0 ? fmtLoopbackObservation(status.loopbacks, status.proxy.port) : 'Локальный порт не определён' }}</dd></div>
+            <div><dt>Порт 127.0.0.1:1080</dt><dd>{{ fmtLoopbackObservation(status.loopbacks, 1080) }}</dd></div>
+          </dl>
+          <p class="scope-note">Наблюдается только IPv4/TCP на локальном порту; повторяющийся порт проверяется один раз. Ответ не устанавливает владельца процесса, исправность прокси-протокола или доступность VPN-сервера. Отказ, истечение времени и неизвестный исход различаются. Время отдельных измерений не передано.</p>
         </section>
 
-        <section class="panel">
-          <h2>Системный прокси</h2>
-          <div class="proxy-facts">
-            <span class="k">Состояние</span>
-            <span class="v">
-              {{ status.proxy.enabled ? 'включён' : 'выключен' }}
-              <span v-if="status.proxy.enabled && status.proxy.listenerAlive" class="pill success">листенер жив</span>
-              <span v-if="staleProxy" class="pill danger">листенер мёртв (stale)</span>
-            </span>
-            <span class="k">Адрес</span>
-            <span class="v mono">{{ status.proxy.server || '—' }}</span>
-            <span class="k">SOCKS VPN :1080</span>
-            <span class="v">
-              <span :class="vpnActive ? 'ok-text' : 'dim-text'">{{ vpnActive ? 'локальный порт доступен' : 'локальный порт недоступен' }}</span>
-            </span>
-          </div>
+        <section class="observed-section">
+          <h2>Задачи планировщика</h2>
+          <p v-if="!status.tasks.length" class="scope-note">Список пуст: состояние задач неизвестно.</p>
+          <ul v-else class="task-list">
+            <li v-for="task in status.tasks" :key="task.name">
+              <div class="task-title"><strong class="mono">{{ task.name }}</strong><span :class="{ warning: task.status === 'disabled' }">{{ taskLabel(task.status) }}</span></div>
+              <dl v-if="task.status !== 'not-found' && task.status !== 'no-access'" class="task-dates">
+                <div><dt>Последний запуск</dt><dd>{{ fmtDateTime(task.lastRun) }}</dd></div>
+                <div><dt>Следующий запуск</dt><dd>{{ fmtDateTime(task.nextRun) }}</dd></div>
+                <div><dt>Код прошлого запуска</dt><dd>{{ task.lastCode || 'Не сообщён' }}</dd></div>
+              </dl>
+            </li>
+          </ul>
+          <p class="scope-note">«Готова» и код 0 описывают планировщик, а не результат восстановления или защиту трафика.</p>
         </section>
       </div>
 
-      <section class="panel">
-        <h2>Последние события</h2>
-        <div v-if="status.events.length === 0" class="dim-text">
-          Существенных событий нет: сбоев auto-heal не зафиксировано
-          <span v-if="status.dohDisabled"> (лог NetGuard не найден)</span>.
-        </div>
-        <ul v-else class="steps">
-          <li v-for="(e, i) in status.events" :key="i" class="step" :class="kindClass(e.kind)">
-            <span class="st mono">{{ e.time }}</span>
-            <span class="st badge-kind">{{ e.kind }}</span>
-            <span class="step-status">{{ e.text }}</span>
+      <details class="event-history">
+        <summary>Сообщения журнала<span v-if="status.log?.state === 'observed' || status.events.length"> · {{ status.events.length }}</span></summary>
+        <p class="scope-note">{{ logScope }}</p>
+        <p v-if="!status.events.length" class="scope-note">Значимые сообщения не получены. Это не доказывает отсутствие сбоев.</p>
+        <ol v-else class="event-list">
+          <li v-for="(event, index) in status.events" :key="index">
+            <span class="event-time mono">{{ event.time }}</span>
+            <span class="event-kind">{{ eventLabels[event.kind] ?? 'Событие неизвестного типа' }}</span>
+            <p>{{ event.text }}</p>
           </li>
-        </ul>
-        <p v-if="status.lastRun" class="last-at mono">последний запуск: {{ status.lastRun }}</p>
-      </section>
+        </ol>
+        <p v-if="status.lastRun" class="scope-note">Последняя запись о запуске в полученном фрагменте: {{ status.lastRun }}</p>
+        <p class="scope-note">Исторические сообщения не подтверждают состояние текущей сессии.</p>
+      </details>
     </template>
   </div>
 </template>
 
 <style scoped>
-.view {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.actions-row {
-  margin-top: 10px;
-}
-
-/* Hero-вердикт */
-.hero {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: linear-gradient(145deg, rgba(11, 29, 45, 0.96), rgba(7, 20, 33, 0.96));
-  box-shadow: var(--shadow);
-}
-.hero-ico {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--muted);
-}
-.hero.ok {
-  border-color: var(--green-border);
-}
-.hero.ok .hero-ico {
-  color: var(--green);
-}
-.hero.err {
-  border-color: var(--red-border);
-}
-.hero.err .hero-ico {
-  color: var(--red);
-}
-.hero.busy .hero-ico {
-  color: var(--blue-bright);
-}
-.hero.idle .hero-ico {
-  color: var(--yellow);
-}
-.hero-state {
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--text);
-}
-.hero.ok .hero-state {
-  color: var(--green-bright);
-}
-.hero.err .hero-state {
-  color: #ff8a90;
-}
-.hero-sub {
-  margin-top: 4px;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--muted);
-  max-width: 640px;
-}
-
-/* Панели */
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.panel {
-  padding: 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: linear-gradient(145deg, rgba(11, 29, 45, 0.96), rgba(7, 20, 33, 0.96));
-  box-shadow: var(--shadow);
-}
-.panel h2 {
-  font-size: 13.5px;
-  color: #eef4f8;
-}
-.panel + .grid,
-section.panel {
-  min-width: 0;
-}
-
-/* Ключ-значение */
-.kv {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-height: 28px;
-  padding: 4px 0;
-  border-bottom: 1px solid #142d40;
-  font-size: 11px;
-}
-.kv:last-child {
-  border-bottom: 0;
-}
-.kv .k {
-  flex: 0 0 auto;
-  color: var(--muted);
-}
-.kv .v {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  color: #dce7ee;
-  text-align: right;
-  margin-left: auto;
-}
-
-.proxy-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 20px; margin-top: 16px; font-size: 13px; }
-.proxy-facts .k { color: var(--muted); }
-.proxy-facts .v { text-align: right; overflow-wrap: anywhere; }
-
-/* События */
-.steps {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.step {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 9px;
-  border-radius: 6px;
-  background: rgba(7, 21, 34, 0.6);
-  font-size: 11px;
-}
-.step .st {
-  flex: 0 0 auto;
-  color: var(--muted-2);
-  font-size: 12px;
-}
-.step-status {
-  color: var(--text-soft);
-  word-break: break-word;
-}
-.last-at {
-  margin: 8px 0 0;
-  color: var(--muted-2);
-  font-size: 12px;
-}
-
-.task-row {
-  margin-bottom: 8px;
-}
-.task-dates {
-  display: inline-block;
-  margin-left: 10px;
-  font-size: 11.5px;
-  color: var(--text-faint);
-}
-.ok-text {
-  color: var(--ok);
-}
-.dim-text {
-  color: var(--text-dim);
-  font-size: 12.5px;
-}
-.badge-kind {
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--bg-hover);
-  font-size: 12px;
-  font-family: var(--mono);
-}
-.step.pass .badge-kind {
-  color: var(--ok);
-}
-.step.fail .badge-kind {
-  color: var(--danger);
-}
-.mono {
-  font-family: var(--mono);
-}
-
-@media (max-width: 1000px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
+.view { display: flex; flex-direction: column; gap: 20px; min-width: 0; overflow-wrap: anywhere; }
+h2 { margin: 0; font-size: 17px; }
+.observation, .recovery-boundary { min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.observation { border-left: 2px solid var(--accent); }
+.observation.warning { border-left-color: var(--yellow); }
+.observation-heading { display: flex; align-items: flex-start; gap: 12px; }
+.observation-heading :deep(svg) { flex: 0 0 auto; color: var(--accent); margin-top: 2px; }
+.observation-heading p { margin: 8px 0 0; color: var(--text-soft); line-height: 1.6; }
+.receipt-time, .scope-note { margin: 12px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.recovery-facts, .proxy-facts { margin: 12px 0 0; }
+.recovery-facts > div, .proxy-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px 20px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+dt { color: var(--muted); font-size: 12.5px; }
+dd { margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.6; }
+.actions-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.btn { min-height: 40px; white-space: normal; }
+.observed-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.observed-section { min-width: 0; padding: 6px 0; }
+.task-list { list-style: none; padding: 0; margin: 12px 0 0; }
+.task-list > li { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.task-title { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; font-size: 12.5px; }
+.task-title strong { font-weight: 500; color: var(--text); }
+.task-title span { color: var(--muted); }
+.task-title .warning { color: var(--yellow); }
+.task-dates { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.task-dates dt, .task-dates dd { font-size: 11.5px; }
+.event-history { border-top: 1px solid var(--border); padding-top: 12px; }
+.event-history summary { padding: 8px 0; color: var(--text-soft); cursor: pointer; }
+.event-list { list-style: none; padding: 0; margin: 8px 0; }
+.event-list li { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.event-time, .event-kind { font-size: 12px; color: var(--muted); margin-right: 12px; }
+.event-list p { color: var(--text-soft); margin: 6px 0 0; font-size: 13px; line-height: 1.6; }
+@media (max-width: 1180px) { .observed-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; } }
+@media (max-width: 760px) { .recovery-facts > div, .proxy-facts > div { grid-template-columns: minmax(0, 1fr); gap: 6px; } .observation, .recovery-boundary { padding: 16px; } }
 </style>

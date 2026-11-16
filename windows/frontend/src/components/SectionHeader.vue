@@ -2,21 +2,21 @@
 import { computed } from 'vue'
 import { lifecycleLabels } from '../api/labels'
 import { useBackendState } from '../composables/backendState'
-import type { NavId } from './NavRail.vue'
+import type { SectionId } from '../composables/navigation'
 
-const props = defineProps<{ section: NavId }>()
-const { lifecycle, tunMode } = useBackendState()
+const props = defineProps<{ section: SectionId }>()
+const { lifecycle, processModeLabel } = useBackendState()
 
-const copy: Partial<Record<NavId, { eyebrow: string; title: string; subtitle: string }>> = {
+const copy: Record<SectionId, { eyebrow: string; title: string; subtitle: string }> = {
   dashboard: { eyebrow: 'COMMAND CENTER', title: 'Центр защиты', subtitle: 'Главное состояние, активный маршрут и последнее доказательство защищённого пути' },
   network: { eyebrow: 'SYSTEM STATUS', title: 'Состояние', subtitle: 'Контекст сети, здоровье каналов и работа адаптивной защиты' },
   channels: { eyebrow: 'ROUTING', title: 'Каналы', subtitle: 'Доступные маршруты, уровень их проверки и безопасное переключение' },
-  tests: { eyebrow: 'VERIFICATION', title: 'Проверки', subtitle: 'Диагностика DNS, HTTPS, egress и отсутствия прямых утечек' },
+  tests: { eyebrow: 'VERIFICATION', title: 'Проверки', subtitle: 'Наблюдения HTTPS, DoH и выходного IP с явной областью проверки' },
   logs: { eyebrow: 'EVIDENCE', title: 'Журнал', subtitle: 'Фактические события приложения, ядра и защищённых проверок' },
   settings: { eyebrow: 'CONFIGURATION', title: 'Настройки', subtitle: 'Системное поведение, профиль доставки и локальные секреты' },
 }
 
-const current = computed(() => copy[props.section] ?? copy.dashboard!)
+const current = computed(() => copy[props.section])
 const stateLabel = computed(() => lifecycle.value ? lifecycleLabels[lifecycle.value] : 'Нет данных')
 const stateTone = computed(() => lifecycle.value === 'running' ? 'running' : lifecycle.value === 'error' ? 'error' : 'idle')
 </script>
@@ -25,14 +25,14 @@ const stateTone = computed(() => lifecycle.value === 'running' ? 'running' : lif
   <header class="section-header">
     <div class="section-copy">
       <span class="eyebrow">{{ current.eyebrow }}</span>
-      <h1>{{ current.title }}</h1>
+      <h1 :id="'section-' + section">{{ current.title }}</h1>
       <p>{{ current.subtitle }}</p>
     </div>
     <div class="section-state" :class="stateTone">
       <span class="signal"></span>
       <span>
         <strong>{{ stateLabel }}</strong>
-        <small>{{ lifecycle === 'running' ? (tunMode ? 'TUN · путь проверен' : 'SOCKS · приложения с прокси') : 'защищённый путь не подтверждён' }}</small>
+        <small>{{ lifecycle === 'running' ? processModeLabel + ' · область проверки указана в отчёте' : 'защищённый путь не подтверждён' }}</small>
       </span>
     </div>
   </header>
@@ -45,6 +45,7 @@ const stateTone = computed(() => lifecycle.value === 'running' ? 'running' : lif
   margin: 0 auto;
   padding: 18px 22px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -66,20 +67,22 @@ const stateTone = computed(() => lifecycle.value === 'running' ? 'running' : lif
   background: linear-gradient(90deg, transparent, #ff6226, transparent);
   box-shadow: 0 0 12px rgba(255, 98, 38, .45);
 }
-.section-copy { min-width: 0; }
+.section-copy { flex: 1 1 18rem; min-width: 0; }
 .eyebrow { color: #ff7541; font-family: var(--mono); font-size: 12px; letter-spacing: .22em; }
 h1 { margin: 5px 0 4px; font-size: clamp(24px, 2.2vw, 30px); letter-spacing: -.025em; }
 p { margin: 0; color: #8394a6; font-size: 12.5px; }
 .section-state {
-  min-width: 200px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   gap: 13px;
   padding: 10px 15px;
   border-left: 2px solid #405062;
 }
-.signal { width: 13px; height: 13px; border-radius: 50%; background: #637386; box-shadow: 0 0 12px rgba(99,115,134,.35); }
-.section-state > span:last-child { display: flex; flex-direction: column; }
+.signal { width: 13px; height: 13px; flex: 0 0 13px; border-radius: 50%; background: #637386; box-shadow: 0 0 12px rgba(99,115,134,.35); }
+.section-state > span:last-child { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .section-state strong { font-size: 11.5px; font-weight: 600; }
 .section-state small { color: var(--muted); font-size: 11px; margin-top: 2px; }
 .section-state.running { border-left-color: #ff6226; }
@@ -89,13 +92,13 @@ p { margin: 0; color: #8394a6; font-size: 12.5px; }
 
 @media (max-width: 900px) {
   .section-header { min-height: 86px; padding: 15px 17px; }
-  .section-copy p, .section-state small, .eyebrow { display: none; }
+  .section-copy p, .eyebrow { display: none; }
   .section-state { min-width: 0; padding-right: 0; }
   h1 { font-size: 24px; }
 }
 
 @media (max-width: 560px) {
-  .section-header { min-height: 72px; padding: 12px 14px; }
+  .section-header { min-height: 72px; padding: 12px 14px; gap: 10px; }
   .section-state { padding: 8px 0 8px 11px; }
   .section-state strong { font-size: 12px; }
   h1 { font-size: 21px; }

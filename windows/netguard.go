@@ -1,7 +1,7 @@
 package main
 
 // netguard.go — фактическое состояние NetGuard (tools/netguard) для UI-страницы
-// и ручной запуск stale-proxy heal из UI. Только чтение источников и честные
+// и legacy recovery API (без original receipt недоступен). Только честные
 // факты: «нет доступа», «не найдена», «нет данных» — никогда не выдумка.
 //
 // Задачи планировщика читаются через Task Scheduler COM API (Schedule.Service):
@@ -15,16 +15,11 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
-	"golang.org/x/sys/windows/registry"
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/snowden-system/windows/backend/core"
@@ -34,8 +29,8 @@ import (
 type NetGuardTask struct {
 	Name     string `json:"name"`
 	Status   string `json:"status"`   // машинный: ready/running/disabled/queued/hidden/no-access/not-found/unknown:<n>
-	LastRun  string `json:"lastRun"`  // RFC3339, пусто = не запускалась
-	NextRun  string `json:"nextRun"`  // RFC3339, пусто = расписания нет
+	LastRun  string `json:"lastRun"`  // RFC3339 conversion; empty = no reported date, not history proof
+	NextRun  string `json:"nextRun"`  // RFC3339 conversion; empty does not prove no schedule
 	LastCode string `json:"lastCode"` // код возврата последнего запуска (десятичный)
 }
 
@@ -45,7 +40,8 @@ type NetGuardProxy struct {
 	Server        string `json:"server"`
 	Port          int    `json:"port"`          // 0 = не loopback-формат
 	ListenerAlive bool   `json:"listenerAlive"` // актуально только при Port>0
-	Stale         bool   `json:"stale"`         // включён + наш формат + листенер мёртв
+	Stale         bool   `json:"stale"`         // legacy field; no ownership assertion from port reachability
+	readErr       error  // internal only: an unknown registry read is not disabled
 }
 
 // NetGuardEvent — событие из лога auto-heal.
@@ -57,19 +53,22 @@ type NetGuardEvent struct {
 
 // NetGuardStatus — всё, что показывает страница NetGuard.
 type NetGuardStatus struct {
-	Tasks       []NetGuardTask  `json:"tasks"`
-	Proxy       NetGuardProxy   `json:"proxy"`
-	SocksAlive  bool            `json:"socksAlive"` // листенер VPN на 1080
-	Events      []NetGuardEvent `json:"events"`
-	LastRun     string          `json:"lastRun"`
-	DoHDisabled bool            `json:"dohDisabled"` // true = лога нет (netguard не установлен)
+	Tasks       []NetGuardTask             `json:"tasks"`
+	Proxy       NetGuardProxy              `json:"proxy"`
+	SocksAlive  bool                       `json:"socksAlive"` // legacy local TCP fact, never VPN identity
+	Events      []NetGuardEvent            `json:"events"`
+	LastRun     string                     `json:"lastRun"`
+	DoHDisabled bool                       `json:"dohDisabled"` // legacy field; log absence cannot prove DNS policy
+	Log         NetGuardLogObservation     `json:"log"`
+	Loopbacks   []core.LoopbackObservation `json:"loopbacks"`
 }
 
 // netguardTaskNames — плановые задачи auto-heal в порядке отображения.
-var netguardTaskNames = []string{"NetGuard-AutoHeal", "NetGuard-AutoHeal-User"}
+var netguardTaskNames = []string{"NetGuard-AutoHeal", "NetGuard-AutoHeal-User", "NetGuard-AutoHeal-NetEvent"}
 
 // NetGuardStatus — биндинг для UI (Wails).
 func (a *App) NetGuardStatus() (*NetGuardStatus, error) {
+	parent := a.observationParent() // before COM/registry/log waits, never recapture
 	st := &NetGuardStatus{Tasks: []NetGuardTask{}, Events: []NetGuardEvent{}}
 
 	// 1. Плановые задачи (COM API; каждая ошибка — отдельный честный факт).
@@ -77,16 +76,24 @@ func (a *App) NetGuardStatus() (*NetGuardStatus, error) {
 
 	// 2. Системный прокси (HKCU) + живость SOCKS:1080.
 	st.Proxy = netguardProxyState()
-	st.SocksAlive = LoopbackAlive(1080)
-
-	// 3. Лог и события.
-	logFile := filepath.Join(os.Getenv("ProgramData"), "netguard", "netguard.log")
-	data, err := os.ReadFile(logFile)
-	if err != nil {
-		st.DoHDisabled = true
-		return st, nil // лога нет — это факт, не ошибка
+	if st.Proxy.readErr != nil {
+		return nil, fmt.Errorf("system proxy observation unavailable: %w", st.Proxy.readErr)
 	}
-	lines := netguardLogLines(data)
+	ports := [2]int{1080, st.Proxy.Port}
+	count := 1
+	if st.Proxy.Port > 0 && st.Proxy.Port != 1080 {
+		count = 2
+	}
+	probeParent := parent
+	if !a.observationParentCurrent(parent) {
+		probeParent = nil
+	}
+	st.Loopbacks = core.ObserveLoopback(probeParent, ports[:count]...)
+
+	// 3. Only a bounded, read-only log fragment. Its failure does not discard
+	// independent scheduler/proxy observations or authorize any repair.
+	lines, observation := readNetguardLog()
+	st.Log = observation
 	st.Events = netguardEvents(lines, 12)
 	for i := len(lines) - 1; i >= 0; i-- {
 		if strings.Contains(lines[i], "RUN COMPLETE") || strings.Contains(lines[i], "skipping all heals") {
@@ -94,13 +101,30 @@ func (a *App) NetGuardStatus() (*NetGuardStatus, error) {
 			break
 		}
 	}
+	if parent != nil && !a.observationParentCurrent(parent) {
+		for index := range st.Loopbacks {
+			switch st.Loopbacks[index].Outcome {
+			case core.LoopbackReachable, core.LoopbackRefused, core.LoopbackTimeout:
+				st.Loopbacks[index].Outcome = core.LoopbackCanceled
+			}
+		}
+	}
+	for _, fact := range st.Loopbacks {
+		if fact.Outcome != core.LoopbackReachable {
+			continue
+		}
+		if fact.Port == 1080 {
+			st.SocksAlive = true
+		}
+		if fact.Port == st.Proxy.Port {
+			st.Proxy.ListenerAlive = true
+		}
+	}
 	return st, nil
 }
 
-// RunProxyHeal — ручной heal зависшего системного прокси из UI (кнопка
-// «Починить сейчас»). Тот же код, что startup self-heal
-// (core.HealStaleSystemProxy), поэтому правила консервативны: только наш
-// loopback-формат при мёртвом листенере; PAC/внешние/живые прокси не трогаются.
+// RunProxyHeal retains the old wire API. Without a persistent verified original
+// receipt it returns unavailable and cannot infer ownership from a local port.
 func (a *App) RunProxyHeal() (bool, error) {
 	healed, err := core.HealStaleSystemProxy()
 	if err != nil {
@@ -110,7 +134,7 @@ func (a *App) RunProxyHeal() (bool, error) {
 	if healed {
 		a.appendLog("info", "proxy heal (ручной): зависший системный прокси отключён")
 	} else {
-		a.appendLog("info", "proxy heal (ручной): чинить нечего (прокси валиден или не наш формат)")
+		a.appendLog("info", "proxy heal (ручной): восстановление не выполнялось")
 	}
 	return healed, nil
 }
@@ -126,20 +150,7 @@ func (a *App) RunProxyHeal() (bool, error) {
 func netguardLogLines(data []byte) []string {
 	// UTF-16LE BOM или характерный чередующийся NUL — вся строка в UTF-16LE.
 	hasBOM16 := len(data) >= 2 && data[0] == 0xFF && data[1] == 0xFE
-	everySecondNul := func() bool {
-		if len(data) == 0 || len(data)%2 != 0 {
-			return false
-		}
-		nuls, samples := 0, 0
-		for i := 1; i < len(data) && i < 256; i += 2 {
-			samples++
-			if data[i] == 0 {
-				nuls++
-			}
-		}
-		return samples > 0 && nuls == samples
-	}
-	if hasBOM16 || everySecondNul() {
+	if netguardUTF16LE(data) {
 		if hasBOM16 {
 			data = data[2:]
 		}
@@ -166,15 +177,28 @@ func netguardLogLines(data []byte) []string {
 	return out
 }
 
+// Shared legacy encoding heuristic; a bounded prefix can select code-unit
+// alignment before the recent record window is decoded. Not a format proof.
+func netguardUTF16LE(data []byte) bool {
+	if len(data) >= 2 && data[0] == 0xFF && data[1] == 0xFE {
+		return true
+	}
+	if len(data) == 0 || len(data)%2 != 0 {
+		return false
+	}
+	for i := 1; i < len(data) && i < 256; i += 2 {
+		if data[i] != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // ---------- задачи планировщика (COM, locale-independent) --------------------
 
 // netguardAllTasks — факты по списку задач: одна строка-факт на задачу.
 func netguardAllTasks(names []string) []NetGuardTask {
-	out := make([]NetGuardTask, 0, len(names))
-	for _, name := range names {
-		out = append(out, netguardTaskInfo(name))
-	}
-	return out
+	return collectNetguardTasks(names)
 }
 
 // netguardTaskState — машинный статус из COM-значения State.
@@ -238,18 +262,27 @@ func netguardScode(err error) (uint32, bool) {
 
 // netguardTaskInfo — одна задача через COM; каждая ошибка — честный факт.
 func netguardTaskInfo(name string) NetGuardTask {
-	notFound := NetGuardTask{Name: name, Status: "not-found"}
 	t, err := comGetTask(name)
+	return netguardTaskOutcome(name, t, err)
+}
+
+func netguardTaskOutcome(name string, t *NetGuardTask, err error) NetGuardTask {
 	if err != nil {
 		if sc, ok := netguardScode(err); ok {
 			switch sc {
 			case hrTaskNotFound:
-				return notFound
+				return NetGuardTask{Name: name, Status: "not-found"}
 			case hrTaskAccessDeny:
 				return NetGuardTask{Name: name, Status: "no-access"}
 			}
 		}
-		return NetGuardTask{Name: name, Status: fmt.Sprintf("unknown:0x%08x", errCodeOf(err))}
+		if code := errCodeOf(err); code != 0 {
+			return NetGuardTask{Name: name, Status: fmt.Sprintf("unknown:0x%08x", code)}
+		}
+		return NetGuardTask{Name: name, Status: "unknown"}
+	}
+	if t == nil {
+		return NetGuardTask{Name: name, Status: "unknown"}
 	}
 	return *t
 }
@@ -259,90 +292,6 @@ func errCodeOf(err error) uint32 {
 		return uint32(oe.Code())
 	}
 	return 0
-}
-
-// comGetTask — GetTask + чтение фактических полей задачи.
-func comGetTask(name string) (*NetGuardTask, error) {
-	_ = ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED)
-	defer ole.CoUninitialize()
-
-	svc, err := oleutil.CreateObject("Schedule.Service")
-	if err != nil {
-		return nil, fmt.Errorf("schedule.service: %w", err)
-	}
-	defer svc.Release()
-	disp, err := svc.QueryInterface(ole.IID_IDispatch)
-	if err != nil {
-		return nil, fmt.Errorf("schedule.service QI: %w", err)
-	}
-	defer disp.Release()
-	if _, err := oleutil.CallMethod(disp, "Connect"); err != nil {
-		return nil, fmt.Errorf("connect: %w", err)
-	}
-	folderV, err := oleutil.CallMethod(disp, "GetFolder", `\`)
-	if err != nil {
-		return nil, fmt.Errorf("root folder: %w", err)
-	}
-	folder := folderV.ToIDispatch()
-	defer folder.Release()
-
-	tv, err := oleutil.CallMethod(folder, "GetTask", name)
-	if err != nil {
-		return nil, err // scode-факт обрабатывает вызывающий
-	}
-	// ToIDispatch отдаёт тот же указатель без AddRef; освобождаем РОВНО один
-	// раз через t.Release(). tv.Clear() здесь нельзя: для VT_DISPATCH он тоже
-	// вызовет Release → двойное освобождение → crash (поймано live-тестом).
-	t := tv.ToIDispatch()
-	defer t.Release()
-
-	var lastErr error
-	get := func(prop string) (string, bool) {
-		v, err := oleutil.GetProperty(t, prop)
-		if err != nil {
-			lastErr = err
-			return "", false
-		}
-		val := v.Value()
-		v.Clear() // Value() уже скопировал данные; Clear освобождает BSTR/дату
-		switch x := val.(type) {
-		case string:
-			return x, true
-		case time.Time:
-			return x.Format(time.RFC3339), true
-		case float64:
-			return fmt.Sprintf("%d", int64(x)), true
-		case int64:
-			return fmt.Sprintf("%d", x), true
-		case int32:
-			return fmt.Sprintf("%d", x), true
-		case bool:
-			return fmt.Sprintf("%v", x), true
-		default:
-			return fmt.Sprintf("%v", val), true
-		}
-	}
-
-	stateRaw, okS := get("State")
-	resRaw, okR := get("LastTaskResult")
-	lastRun, okL := get("LastRunTime")
-	nextRun, okN := get("NextRunTime")
-	if lastErr != nil || !okS || !okR || !okL || !okN {
-		if lastErr == nil {
-			lastErr = fmt.Errorf("поля задачи недоступны")
-		}
-		return nil, lastErr
-	}
-
-	st, _ := atoi32(stateRaw) // State: маленькое неотрицательное число
-	out := &NetGuardTask{
-		Name:     name,
-		Status:   netguardTaskState(st),
-		LastRun:  lastRun,
-		NextRun:  nextRun,
-		LastCode: resRaw,
-	}
-	return out, nil
 }
 
 func atoi32(s string) (int32, bool) {
@@ -365,35 +314,26 @@ func atoi32(s string) (int32, bool) {
 
 // ---------- прокси и лог ------------------------------------------------------
 
-// netguardProxyState — ProxyEnable/ProxyServer из HKCU + живость листенера.
-// Парсер формата и живость порта — общие с ядром (proxyheal_windows.go):
-// core.LoopbackProxyPort / core.LoopbackAlive.
+// Port reachability is separate from ownership/protection. Stale cannot be
+// asserted without a persistent original receipt; registry failures propagate.
 func netguardProxyState() NetGuardProxy {
 	p := NetGuardProxy{}
-	k, err := registry.OpenKey(registry.CURRENT_USER,
-		`Software\Microsoft\Windows\CurrentVersion\Internet Settings`, registry.QUERY_VALUE)
+	snapshot, err := core.ReadSystemProxySnapshot()
 	if err != nil {
+		p.readErr = err
 		return p
 	}
-	defer k.Close()
-	if enable, _, err := k.GetIntegerValue("ProxyEnable"); err == nil {
-		p.Enabled = enable == 1
+	p.Enabled, p.Server = snapshot.ProxyEnable != 0, snapshot.ProxyServer
+	if port, ok := core.LoopbackProxyPort(snapshot.ProxyServer); ok {
+		p.Port = port
 	}
-	if server, _, err := k.GetStringValue("ProxyServer"); err == nil {
-		p.Server = server
-		if port, ok := core.LoopbackProxyPort(server); ok {
-			p.Port = port
-		}
-	}
-	if p.Port > 0 {
-		p.ListenerAlive = core.LoopbackAlive(p.Port)
-		p.Stale = p.Enabled && !p.ListenerAlive
-	}
+	// TCP observations are collected once in NetGuardStatus with its original
+	// App lifetime. Registry decoding alone must not launch a second dial.
 	return p
 }
 
 // LoopbackAlive — есть ли TCP-листенер на 127.0.0.1:<port>. Тонкая обёртка
-// над ядром (та же проверка, что в HealStaleSystemProxy — единый факт).
+// над ядром: только наблюдение TCP, без права reset или вывода VPN healthy.
 func LoopbackAlive(port int) bool {
 	return core.LoopbackAlive(port)
 }

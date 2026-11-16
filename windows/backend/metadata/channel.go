@@ -12,7 +12,8 @@ import (
 )
 
 // Channel — дескриптор канала во встроенном формате render (schema 1/2:
-// tcp-reality несёт uuid_ref/reality_*_ref). Только ссылки на секреты.
+// tcp-reality несёт uuid_ref/reality_*_ref). Secret values remain references;
+// optional HY2 pins contain public certificates only.
 type Channel struct {
 	ID                   string   `json:"id"`
 	Protocol             string   `json:"protocol"`
@@ -36,6 +37,7 @@ type Channel struct {
 	// ProbePrimaryHost binds the first HTTPS target; independence needs separate proof.
 	ProbeTargets     []string `json:"probe_targets,omitempty"`
 	ProbePrimaryHost string   `json:"probe_primary_host,omitempty"`
+	DNSProbeTargets  []string `json:"dns_probe_targets,omitempty"`
 	// HY2 port ranges/interval and declared bandwidth (zero preserves BBR).
 	ServerPorts []string `json:"server_ports,omitempty"`
 	HopInterval string   `json:"hop_interval,omitempty"`
@@ -47,6 +49,11 @@ type Channel struct {
 	DiagnosticURL string `json:"diagnostic_url,omitempty"`
 	// omitzero (Go 1.26 toolchain) preserves canonical bytes of legacy profiles.
 	FD FailureDomain `json:"fd,omitempty,omitzero"`
+	// Public leaf certificates, authenticated with the channel identity/hostname.
+	HY2Pins *HY2PinSet `json:"hy2_pins,omitempty"`
+	// A value (not nullable pointer) lets the exact decoder reject explicit null.
+	// Omission preserves legacy signed bytes; Clone owns any nested TLS policy.
+	WS WebSocketOptions `json:"ws,omitempty,omitzero"`
 }
 
 // Clone isolates runtime edits from the signed object, including every mutable field.
@@ -54,7 +61,10 @@ func (ch Channel) Clone() Channel {
 	ch.CredentialRefs = slices.Clone(ch.CredentialRefs)
 	ch.SecretIDs = maps.Clone(ch.SecretIDs)
 	ch.ProbeTargets = slices.Clone(ch.ProbeTargets)
+	ch.DNSProbeTargets = slices.Clone(ch.DNSProbeTargets)
 	ch.ServerPorts = slices.Clone(ch.ServerPorts)
+	ch.HY2Pins = ch.HY2Pins.Clone()
+	ch.WS = ch.WS.Clone()
 	if ch.ValidatedAt != nil {
 		value := *ch.ValidatedAt
 		ch.ValidatedAt = &value
@@ -78,15 +88,15 @@ func validateCredentialRefs(ch Channel) error {
 	return ValidateSecretIDs(ch.CredentialRefs, ch.SecretIDs)
 }
 
-// FailureDomain — наблюдаемые домены отказа канала (данные, не гипотезы).
+// FailureDomain contains owner-declared configuration identities. Presence or
+// difference of labels is not live evidence of physical independence.
 type FailureDomain struct {
 	// TransportFamily — протокол+транспорт ("vless+ws", "vless+tcp-reality",
 	// "vless+shadowtls", "hysteria2+quic"). Деривируется из Protocol/Transport;
 	// явное переопределение fd.transport_family допустимо.
 	TransportFamily string `json:"transport_family,omitempty"`
-	// Carrier — инфраструктурный носитель front-пути: "cloudflare", "" (origin
-	// direct) или точное имя CDN. Для tcp-reality carrier = "" (TLS к донору,
-	// не к CDN), донор фиксируется в fd.donor_sni.
+	// Carrier is explicitly declared. Empty means unknown, never an inferred
+	// CDN or proof of an origin-direct route from the transport name alone.
 	Carrier string `json:"carrier,omitempty"`
 	// Origin — IP/хост origin-сервера (по умолчанию деривируется из
 	// OriginServer; задать вручную имеет смысл только для маппинга за LB).
@@ -103,6 +113,11 @@ type FailureDomain struct {
 	// DonorSNI — SNI-донор для tcp-reality (свой домен отказа: снос донора
 	// ломает канал независимо от VPS).
 	DonorSNI string `json:"donor_sni,omitempty"`
+	Exit     string `json:"exit,omitempty"`
+	ExitASN  string `json:"exit_asn,omitempty"`
+	Resolver string `json:"resolver,omitempty"`
+	// Account is a public hosting-account pseudonym, never a login/token.
+	Account string `json:"account,omitempty"`
 }
 
 // ValidateFailureDomain — форма явных FD-полей (schema 2, все optional; «current не мешает
@@ -110,20 +125,20 @@ type FailureDomain struct {
 // перечень допустимых значений зашит здесь же: словарь домена — часть контракта,
 // опечатки ловим при парсинге, а не при первом failover.
 func ValidateFailureDomain(fd FailureDomain) error {
+	for name, value := range map[string]string{"origin": fd.Origin, "carrier": fd.Carrier, "donor_sni": fd.DonorSNI, "exit": fd.Exit, "resolver": fd.Resolver, "account": fd.Account} {
+		if !ValidDependencyLabel(value) {
+			return fmt.Errorf("fd.%s: expected bounded public dependency identifier", name)
+		}
+	}
+	if fd.ExitASN != "" && !validDependencyASN(fd.ExitASN) {
+		return fmt.Errorf("fd.exit_asn: expected AS followed by digits")
+	}
+	if !ValidDependencyAccount(fd.Account) {
+		return fmt.Errorf("fd.account: expected public provider:pseudonym identity")
+	}
 	// ASN — либо пусто, либо "AS" + 1..10 цифр.
-	if fd.ASN != "" {
-		ok := len(fd.ASN) >= 3 && len(fd.ASN) <= 12 && fd.ASN[0] == 'A' && fd.ASN[1] == 'S'
-		if ok {
-			for _, c := range fd.ASN[2:] {
-				if c < '0' || c > '9' {
-					ok = false
-					break
-				}
-			}
-		}
-		if !ok {
-			return fmt.Errorf("fd.asn: ожидалась форма AS<цифры> (например AS12345), получено %q", fd.ASN)
-		}
+	if fd.ASN != "" && !validDependencyASN(fd.ASN) {
+		return fmt.Errorf("fd.asn: expected AS followed by digits")
 	}
 	switch fd.PortFamily {
 	case "", "443", "other":
@@ -138,11 +153,40 @@ func ValidateFailureDomain(fd FailureDomain) error {
 	return nil
 }
 
+func validDependencyASN(value string) bool {
+	if len(value) < 3 || len(value) > 12 || value[:2] != "AS" {
+		return false
+	}
+	for _, c := range []byte(value[2:]) {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // ValidateChannel — правила одного дескриптора (общие для встроенных и
 // envelope-каналов). Ошибка предваряется префиксом descriptors[%s].
 func ValidateChannel(ch Channel) error {
-	if ch.ID == "" {
-		return fmt.Errorf("channel: empty id")
+	if !ValidChannelID(ch.ID) {
+		return fmt.Errorf("channel: invalid portable id")
+	}
+	if !ch.WS.IsZero() && (ch.Protocol != "vless" || ch.Transport != "ws") {
+		return ErrWebSocketOptions
+	}
+	if err := ch.WS.Validate(); err != nil {
+		return err
+	}
+	if identity := ch.WS.TLS; identity != nil && (identity.ChannelID != ch.ID || identity.Hostname != ch.Hostname) {
+		return ErrWebSocketTLSIdentity
+	}
+	if ch.HY2Pins != nil {
+		if ch.Protocol != "hysteria2" || ch.Transport != "quic" {
+			return fmt.Errorf("channel: hy2_pins requires hysteria2/quic")
+		}
+		if _, err := ch.HY2Pins.validate(ch.Hostname); err != nil {
+			return err
+		}
 	}
 	if err := validateCredentialRefs(ch); err != nil {
 		return fmt.Errorf("descriptors[%s]: %w", ch.ID, err)
@@ -215,6 +259,9 @@ func ValidateChannel(ch Channel) error {
 
 // validateChannelExtras — правила V2-037 (probe-цели/hopping/brutal/mux).
 func validateChannelExtras(ch Channel) error {
+	if err := ValidateDNSProbeTargets(ch.DNSProbeTargets); err != nil {
+		return fmt.Errorf("descriptors[%s]: %w", ch.ID, err)
+	}
 	if len(ch.ProbeTargets) > 0 {
 		if len(ch.ProbeTargets) < 2 {
 			return fmt.Errorf("descriptors[%s]: probe_targets requires at least 2 entries (consistency check)", ch.ID)

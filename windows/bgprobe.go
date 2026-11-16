@@ -9,8 +9,9 @@ package main
 // «скорее жив / скорее мёртв» заранее.
 //
 // Честные границы (AGENTS §2.1/§3.3):
-//   - probe идёт ВНЕ туннеля (direct TCP к origin:port из дескриптора) — это
-//     бюджетная проверка доступности origin, НЕ защищённый путь. Успех фона
+//   - обычный TCP к origin:port без явного proxy использует маршрут ОС;
+//     внешний VPN/перехват не исключены, physical independence не доказана.
+//     Это бюджетное наблюдение origin, НЕ защищённый путь. Успех фона
 //     фактов в health НЕ пишет (открытый порт ≠ живой защищённый канал);
 //   - отказ подтверждённой серией (2 подряд — анти-мерцание V2-037) пишет
 //     FAIL-факт с LastSrc=background: данные для ПОРЯДКА кандидатов (C2,
@@ -42,8 +43,8 @@ import (
 // канала (бюджет plan_gpt §41: реже сторожа, который тикает раз в 30с).
 const bgChanMinInterval = 10 * time.Minute
 
-// bgDialTimeout — бюджет одного dial; таймаут трактуем как port_blackholed
-// (порт-эвристика THEORY §2.4a: тишина на порту ≠ «сервер умер»).
+// bgDialTimeout — бюджет одного dial; timeout не определяет причину
+// блокировки и остаётся unknown.
 const bgDialTimeout = 5 * time.Second
 
 // bgStartDelay — пауза перед первым раундом после старта приложения:
@@ -55,7 +56,7 @@ const bgRoundInterval = time.Minute
 
 // reBgRefused — форма активного отказа соединения. Шире словарной
 // reConnRefused: Windows-диалер пишет «actively refused it» без слова
-// «connection» (форма та же — цель отвергла, AGENTS §3.3 ServerUnreachable).
+// «connection». Это форма ошибки ОС, не доказательство источника отказа.
 var reBgRefused = regexp.MustCompile(`refused`)
 
 // bgTarget — один фоновый probe: TCP-хендшейк к origin:port канала.
@@ -182,22 +183,21 @@ func bgTargets(descs []render.ChannelDescriptor, activeID string) []bgTarget {
 
 // classifyBgError — класс отказа dial по словарю failclass. Формы строк
 // диалера ОС, не отчёта probe: refused (включая Windows «actively refused»)
-// = server_unreachable (цель отвергла — не сеть, AGENTS §3.3); таймаут
-// (строкой или net.Error.Timeout) = port_blackholed (тишина на порту);
-// прочее — честный unknown.
+// = legacy server_unreachable; actor/причина этим не устанавливаются. Таймаут
+// Timeout не определяет причину или блокировку порта; это unknown.
 func classifyBgError(err error) string {
 	if err == nil {
 		return ""
 	}
 	if ne, ok := err.(net.Error); ok && ne.Timeout() {
-		return fcPortBlackholed
+		return fcUnknown
 	}
 	d := strings.ToLower(err.Error())
 	switch {
 	case reBgRefused.MatchString(d):
 		return fcServerUnreach
 	case reTimeout.MatchString(d):
-		return fcPortBlackholed
+		return fcUnknown
 	default:
 		return fcUnknown
 	}
@@ -208,54 +208,41 @@ func classifyBgError(err error) string {
 // Отказ: класс из словаря; подтверждённая серия (2-й подряд) пишет
 // FAIL-факт LastSrc=background через chanHealth.observeBg.
 func (a *App) bgProbeChannel(t *bgTarget) {
-	epoch := currentChannelEpoch()
-	defer bgMarkDone(epoch, t.ChannelID, time.Now())
-	if t.QUIC {
-		// HY2 молчит на мусорные UDP: пробы нет, бюджет есть (V2-042).
-		return
+	scope, err := a.captureBackgroundProbeScope()
+	if err == nil && t != nil {
+		scope.probe(*t)
 	}
-	addr := net.JoinHostPort(t.Host, t.Port)
-	conn, err := net.DialTimeout("tcp", addr, bgDialTimeout)
-	if err == nil {
-		conn.Close()
-		bgReg.resetConsec(epoch)
-		bgReg.markOK(epoch, t.ChannelID, time.Now())
-		return
-	}
-	cls := classifyBgError(err)
-	if bgReg.confirmFail(epoch, t.ChannelID, time.Now()) {
-		chanHealth.observeBg(epoch, t.ChannelID, cls, time.Now())
-		a.appendLog("warn", "фон: "+t.ChannelID+" не отвечает ("+addr+"): "+cls+
-			" — фоновый факт для порядка кандидатов, не решение (решает probe на переключении)")
-	}
-}
-
-// bgStopCh — стоп-канал цикла (nil в тестах: select с default безопасен).
-func (a *App) bgStopCh() <-chan struct{} {
-	bgReg.mu.Lock()
-	defer bgReg.mu.Unlock()
-	return bgReg.stop
 }
 
 // bgProbeLoop — цикл фоновых проверок: после стартовой паузы каждые
 // bgRoundInterval выбираются созревшие таргеты и probe'ятся по одному.
-// Стоп-канал проверяется до раунда и между dial'ами — горутина не переживает
-// остановку приложения даже до истечения bgStartDelay.
+// Original stop/context wake waits; task done separately observes actual return.
 // TUN-режим: физическая сеть не видна (V2-054a) — цикл спит, сторожа достаточно.
 func (a *App) bgProbeLoop(stop <-chan struct{}) {
+	owner := a.backgroundProbeOwner()
+	if owner == nil || owner.stop != stop {
+		return
+	}
+	ctx := owner.ctx
 	select {
+	case <-ctx.Done():
+		return
 	case <-stop:
 		return
 	case <-time.After(bgStartDelay):
 	}
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-stop:
 			return
 		default:
 		}
 		if tunRequested() {
 			select {
+			case <-ctx.Done():
+				return
 			case <-stop:
 				return
 			case <-time.After(bgRoundInterval):
@@ -263,9 +250,14 @@ func (a *App) bgProbeLoop(stop <-chan struct{}) {
 			continue
 		}
 		if err := a.runBgRound(); err != nil {
-			a.appendLog("warn", "фон: раунд пропущен: "+err.Error())
+			if !owner.available() {
+				return // retain original failed task/attempt; no replacement loop
+			}
+			a.appendLog("warn", "фон: раунд не выполнен; причина отказа каналов не установлена")
 		}
 		select {
+		case <-ctx.Done():
+			return
 		case <-stop:
 			return
 		case <-time.After(bgRoundInterval):
@@ -276,21 +268,29 @@ func (a *App) bgProbeLoop(stop <-chan struct{}) {
 // runBgRound — один раунд: созревшие по бюджету таргеты probe'ятся подряд.
 // Дескрипторы нечитаемы → ошибка (раунд честно пропущен, не «нет каналов»).
 func (a *App) runBgRound() error {
-	a.mu.Lock()
-	active := a.state.ActiveID
-	a.mu.Unlock()
+	scope, err := a.captureBackgroundProbeScope()
+	if err != nil {
+		return err
+	}
 	descs, err := bgDescriptorsAt()
 	if err != nil {
 		return err
 	}
-	due := bgDueTargets(bgTargets(descs, active))
+	if !scope.current() {
+		return nil
+	}
+	due := bgDueTargetsInEpoch(bgTargets(descs, scope.activeID), scope.epoch)
 	for i := range due {
-		select {
-		case <-a.bgStopCh():
+		if !scope.current() {
+			if !scope.owner.available() {
+				return errBackgroundProbeUnavailable
+			}
 			return nil
-		default:
 		}
-		a.bgProbeChannel(&due[i])
+		scope.probe(due[i])
+		if !scope.owner.available() {
+			return errBackgroundProbeUnavailable
+		}
 	}
 	return nil
 }
@@ -298,8 +298,11 @@ func (a *App) runBgRound() error {
 // bgDueTargets — фильтр бюджета: непроверенный в текущей эпохе канал
 // созревает сразу, проверенный — через bgChanMinInterval.
 func bgDueTargets(targets []bgTarget) []bgTarget {
+	return bgDueTargetsInEpoch(targets, currentChannelEpoch())
+}
+
+func bgDueTargetsInEpoch(targets []bgTarget, epoch int) []bgTarget {
 	now := time.Now()
-	epoch := currentChannelEpoch()
 	out := make([]bgTarget, 0, len(targets))
 	bgReg.mu.Lock()
 	defer bgReg.mu.Unlock()
@@ -314,28 +317,6 @@ func bgDueTargets(targets []bgTarget) []bgTarget {
 // bgDescriptorsAt — подменяемая точка загрузки дескрипторов (герметичность
 // тестов от AppData/репозитория; по практике V2-037).
 var bgDescriptorsAt = render.LoadDescriptors
-
-// startBgProbes — запустить фоновый цикл ровно один раз (из app.startup).
-func (a *App) startBgProbes() {
-	bgReg.mu.Lock()
-	defer bgReg.mu.Unlock()
-	if bgReg.started {
-		return
-	}
-	bgReg.started = true
-	bgReg.stop = make(chan struct{})
-	go a.bgProbeLoop(bgReg.stop)
-}
-
-// stopBgProbes — остановить фоновый цикл (закрытие окна). Повтор безопасен.
-func (a *App) stopBgProbes() {
-	bgReg.mu.Lock()
-	ch := bgReg.stop
-	bgReg.mu.Unlock()
-	if ch != nil {
-		bgReg.stopOnce.Do(func() { close(ch) })
-	}
-}
 
 // markOK — фоновый ответ канала (в ЕГО эпоху) — слабое доказательство живости
 // для D2-recovery (quarantine.go).

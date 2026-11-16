@@ -1,377 +1,182 @@
 <script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import PageHeading from '../components/PageHeading.vue'
-/**
- * Сеть (concept): сетевая информация из фактов ОС (GetNetworkFacts), NetGuard
- * и диагностика. Пустой факт = «нет данных», никаких выдуманных провайдеров.
- * Поллинг фактов — общий useInfoFacts (один PowerShell-опрос на всё приложение).
- */
-import { computed, onMounted, ref } from 'vue'
-import Icon from '../components/Icon.vue'
-import type { IconName } from '../components/Icon.vue'
+import ActionButton from '../components/ActionButton.vue'
 import HintBox from '../components/HintBox.vue'
-import { api, isBuildPhase, netGuardStatus } from '../api/backend'
+import { api, netGuardStatus } from '../api/backend'
+import { fmtDateTime, fmtLoopbackObservation, fmtEgressObservation, fmtEgressObservationTime } from '../api/labels'
 import { usePolling } from '../composables/polling'
-import { initBackendState } from '../composables/backendState'
+import { useBackendState, initBackendState } from '../composables/backendState'
 import { useInfoFacts } from '../composables/infoFacts'
 import { useNav } from '../composables/nav'
-import { fmtDateTime } from '../api/labels'
 
-const { facts, refresh: refreshFacts } = useInfoFacts()
+const { state, isRunning, isBusy, switching } = useBackendState()
+const { facts, factsLoading, factsError, factsReceivedAt, refreshFacts } = useInfoFacts({ facts: true })
+const { data: netGuard, loading: guardLoading, error: guardError, refresh: refreshGuard } = usePolling(netGuardStatus, 30000, { pauseWhenHidden: true })
+const { data: splitData, loading: splitLoading, error: splitError, refresh: refreshSplit } = usePolling(api.getSplitDirect, 30000, { pauseWhenHidden: true })
+const { data: adaptive, loading: sitesLoading, error: sitesError, refresh: refreshSites, invalidate: invalidateSites, hasInterest: hasSitesInterest } = usePolling(api.getAdaptiveStatus, 30000, { pauseWhenHidden: true })
 const { navTo } = useNav()
-
-const factsError = ref('')
-const adaptiveBusy = ref(false)
-const { data: netGuard, refresh: refreshGuard } = usePolling(netGuardStatus, 30000)
-const { data: splitData, refresh: refreshSplit } = usePolling(api.getSplitDirect, 30000)
-const splitList = computed(() => splitData.value ?? [])
-const { data: adaptive, refresh: refreshAdaptive } = usePolling(api.getAdaptiveStatus, 30000)
-const loading = ref(false)
-async function refresh() {
-  if (loading.value) return
-  loading.value = true
-  await Promise.all([refreshFacts(), refreshGuard(), refreshSplit(), refreshAdaptive()])
-  factsError.value = isBuildPhase() ? 'Данные сети доступны в приложении Windows.' : ''
-  loading.value = false
-}
-
-async function runAdaptive(): Promise<void> {
-  if (adaptiveBusy.value) return
-  adaptiveBusy.value = true
-  try {
-    adaptive.value = await api.runAdaptiveCheck()
-  } catch (e) {
-    factsError.value = e instanceof Error ? e.message : String(e)
-  }
-  adaptiveBusy.value = false
-}
-
+const refreshBusy = ref(false)
+const actionBusy = ref(false)
+const actionError = ref('')
+const actionNote = ref('')
+const refreshError = ref('')
+let owner = true
 onMounted(() => { void initBackendState() })
-
-const netClassLabel = computed(() => {
-  switch (facts.value?.netClass) {
-    case 'mobile':
-      return 'мобильная сеть (CGNAT: предпочитается QUIC/HY2)'
-    case 'wifi':
-      return 'Wi-Fi (предпочитается VLESS+WS через CDN)'
-    case 'ethernet':
-      return 'Ethernet (предпочитается VLESS+WS через CDN)'
-    default:
-      return null
-  }
-})
-
-const rows = computed<{ icon: IconName; label: string; value: string | null }[]>(() => {
+onUnmounted(() => { owner = false })
+const loading = computed(() => refreshBusy.value || factsLoading.value || guardLoading.value || splitLoading.value || sitesLoading.value)
+const observationSources = {
+  facts: { loading: factsLoading, refresh: refreshFacts },
+  guard: { loading: guardLoading, refresh: refreshGuard },
+  split: { loading: splitLoading, refresh: refreshSplit },
+  sites: { loading: sitesLoading, refresh: refreshSites },
+}
+function refreshSource(source: keyof typeof observationSources): void {
+  const selected = observationSources[source]
+  if (owner && !selected.loading.value) void selected.refresh()
+}
+const canCheckSites = computed(() => isRunning.value && !isBusy.value && !switching.value && !actionBusy.value)
+async function refresh(): Promise<void> {
+  if (refreshBusy.value) return
+  refreshBusy.value = true
+  refreshError.value = ''
+  try { await Promise.all([refreshFacts(), refreshGuard(), refreshSplit(), refreshSites()]) }
+  catch { if (owner) refreshError.value = 'Не удалось обновить все сведения. Смотрите состояние каждого источника ниже.' }
+  finally { if (owner) refreshBusy.value = false }
+}
+async function runSites(): Promise<void> {
+  if (!canCheckSites.value) return
+  actionBusy.value = true
+  actionError.value = ''
+  actionNote.value = ''
+  try {
+    const result = await api.runAdaptiveCheck()
+    if (!owner) return
+    if (result === null) { actionError.value = 'Результат проверки сайтов недоступен.'; return }
+    if (!result.sites.length) {
+      actionError.value = result.note || 'Новая выборка не получена. Сохранённые ответы относятся к прошлым наблюдениям.'
+      return
+    }
+    actionNote.value = result.note
+    // Retire any GetAdaptiveStatus begun before completion; never assign its ref directly.
+    await invalidateSites()
+    if (owner && hasSitesInterest() && !sitesLoading.value && adaptive.value === null) actionError.value = 'Команда завершилась, но обновлённый отчёт не получен. Повторите загрузку.'
+  } catch { if (owner) actionError.value = 'Проверка сайтов не завершена. Состояние сервера и причина ошибки не установлены.' }
+  finally { if (owner) actionBusy.value = false }
+}
+const classLabels: Record<string, string> = { mobile: 'Мобильный интерфейс', wifi: 'Wi-Fi', ethernet: 'Ethernet' }
+const controlObservation = computed(() => facts.value?.egress === null ? null : facts.value?.egress?.osControl)
+const socksObservation = computed(() => facts.value?.egress === null ? null : facts.value?.egress?.socks)
+const rows = computed(() => {
   const f = facts.value
   return [
-    { icon: 'pulse', label: 'Тип соединения', value: f?.connectionType || null },
-    { icon: 'pulse', label: 'Класс сети (автовыбор транспорта)', value: netClassLabel.value },
-    { icon: 'pulse', label: 'Название сети', value: f?.ssid || null },
-    { icon: 'server', label: 'Локальный IP', value: f?.localIP || null },
-    { icon: 'key', label: 'Провайдер прямой сети', value: f?.isp || null },
-    { icon: 'key', label: 'Публичный IP (прямой egress)', value: f?.publicIP || null },
-    { icon: 'shield', label: 'IP защищённого пути', value: f?.tunnelIP || null },
-    { icon: 'shield', label: 'Страна прямого egress', value: f?.country || null },
-    { icon: 'pulse', label: 'Путь через туннель', value: f ? (f.dnsViaTunnel ? 'работает (socks5h)' : 'не работает / VPN выключен') : null },
-    { icon: 'pulse', label: 'Проверено', value: f?.checkedAt ? fmtDateTime(f.checkedAt) : null },
+    { label: 'Подключение', value: f?.connectionType, source: 'Снимок интерфейса Windows' },
+    { label: 'Класс интерфейса', value: f?.netClass ? classLabels[f.netClass] ?? f.netClass : '', source: 'Тип адаптера; не оценка транспорта или CGNAT' },
+    { label: 'Название Wi-Fi', value: f?.ssid, source: 'Локальное наблюдение Windows' },
+    { label: 'Локальный IP', value: f?.localIP, source: f?.localRouteTarget ? `Локальный выбор маршрута ОС к ${f.localRouteTarget}` : 'Привязка маршрута не передана' },
+    { label: 'IP контрольного HTTPS-ответа', value: f?.publicIP || fmtEgressObservation(controlObservation.value), source: `${f?.publicIP ? `${fmtEgressObservation(controlObservation.value)}. ` : ''}${fmtEgressObservationTime(controlObservation.value)}. Используется маршрут ОС; внешний VPN не исключён.` },
+    { label: 'Организация для этого IP', value: f?.isp, source: 'Ответ внешнего сервиса; не идентификация провайдера Wi-Fi' },
+    { label: 'Страна для этого IP', value: f?.country, source: f?.countryOrigin || 'Источник страны не передан' },
+    { label: 'IP HTTPS-ответа через прокси', value: f?.tunnelIP || fmtEgressObservation(socksObservation.value), source: `${f?.tunnelIP ? `${fmtEgressObservation(socksObservation.value)}. ` : ''}${fmtEgressObservationTime(socksObservation.value)}.` },
   ]
 })
-
-const countryOriginNote = computed(() => facts.value?.countryOrigin || '')
 </script>
 
 <template>
   <div class="view">
-    <PageHeading title="Контекст сети" description="Текущее подключение, адреса и доступность сервисов. Пустое значение означает отсутствие измерения." ><button class="btn" :disabled="loading" @click="refresh">Обновить факты</button></PageHeading>
+    <PageHeading title="Контекст сети" description="Наблюдения Windows и ответы отдельных сервисов. Тип интерфейса не определяет лучший транспорт.">
+      <ActionButton :disabled="loading" :busy="refreshBusy" @click="refresh">{{ loading ? 'Обновление…' : 'Обновить наблюдения' }}</ActionButton>
+    </PageHeading>
+    <p v-if="refreshError" class="error" role="status">{{ refreshError }}</p>
 
-    <div class="grid">
-      <section class="card netinfo">
-        <div class="card-header">
-          <h2>Сетевая информация</h2>
-          <span class="connection-pill" :class="{ wifi: facts?.connectionType === 'Wi-Fi' }">
-            {{ facts?.connectionType || 'нет данных' }}
-          </span>
-        </div>
+    <section class="network-observations">
+      <div class="section-heading"><h2>Снимок подключения</h2><ActionButton :disabled="factsLoading" :busy="factsLoading" @click="refreshSource('facts')">{{ factsLoading ? 'Ожидается ответ…' : 'Обновить снимок' }}</ActionButton></div>
+      <p v-if="!facts" class="state-note" role="status">{{ factsLoading ? 'Получаем сетевые сведения…' : factsError || 'Сетевой снимок недоступен.' }}</p>
+      <p class="source-time">Начало сбора: {{ fmtDateTime(facts?.checkedAt) }} · Получено экраном: {{ fmtDateTime(factsReceivedAt) }}. Возраст отдельных попыток указан на момент передачи; срок применимости и сетевая эпоха не переданы.</p>
+      <dl class="facts-list">
+        <div v-for="row in rows" :key="row.label"><dt>{{ row.label }}</dt><dd>{{ row.value || 'Нет данных' }}<small>{{ row.source }}</small></dd></div>
+      </dl>
+      <p class="state-note">Исходы относятся к отдельным HTTPS-попыткам. Их длительность не является RTT или скоростью VPN. Системный DNS, UDP, IPv6 и защита остальных приложений этими ответами не подтверждаются.</p>
+    </section>
 
-        <div v-if="factsError" class="empty-block">{{ factsError }}</div>
-
-        <div class="network-list">
-          <div v-for="r in rows" :key="r.label" class="network-row">
-            <span class="net-ico"><Icon :name="r.icon" :size="12" /></span>
-            <span class="net-label">{{ r.label }}</span>
-            <strong :class="{ 'no-data': !r.value }">{{ r.value ?? 'нет данных' }}</strong>
-          </div>
-        </div>
-
-        <p v-if="countryOriginNote" class="origin-note mono">источник страны: {{ countryOriginNote }}</p>
-
-        <div class="split-panel">
-          <div>
-            <strong>Прямой обход процессов</strong>
-            <small v-if="splitList.length">Исключения из подписанного профиля</small>
-            <small v-else>{{ splitData === null ? 'Список исключений недоступен' : 'Исключения процессов не настроены' }}</small>
-          </div>
-          <div class="split-chips">
-            <span v-for="p in splitList" :key="p" class="adapter-pill mono">{{ p }}</span>
-            <span v-if="!splitList.length" class="split-empty">{{ splitData === null ? 'нет данных' : 'нет исключений' }}</span>
-          </div>
-        </div>
+    <div class="context-grid">
+      <section class="local-context">
+        <div class="section-heading"><h2>Локальные настройки</h2><ActionButton :disabled="guardLoading" :busy="guardLoading" @click="refreshSource('guard')">Обновить локальные сведения</ActionButton></div>
+        <p v-if="!netGuard" class="state-note">{{ guardLoading ? 'Получаем наблюдения прокси…' : guardError || 'Наблюдения прокси недоступны.' }}</p>
+        <dl v-else class="facts-list">
+          <div><dt>Системный прокси</dt><dd>{{ netGuard.proxy.enabled ? netGuard.proxy.server || 'Включён, адрес не передан' : 'Выключен' }}</dd></div>
+          <div><dt>Порт из настройки</dt><dd>{{ netGuard.proxy.port > 0 ? fmtLoopbackObservation(netGuard.loopbacks, netGuard.proxy.port) : 'Порт не определён' }}</dd></div>
+          <div><dt>Порт 127.0.0.1:1080</dt><dd>{{ fmtLoopbackObservation(netGuard.loopbacks, 1080) }}</dd></div>
+        </dl>
+        <p class="state-note">Источник — наблюдение локального IPv4/TCP. Неизвестный исход не означает отсутствие ответа. Порт не устанавливает владельца процесса, работоспособность протокола или защиту трафика.</p>
+        <button class="btn" @click="navTo('netguard')">Локальное восстановление</button>
       </section>
-
-      <section class="card netguard">
-        <div class="card-header">
-          <h2>NetGuard</h2>
-          <button class="btn" @click="navTo('netguard')">Открыть раздел ›</button>
-        </div>
-
-        <template v-if="netGuard">
-          <div class="network-list">
-            <div class="network-row">
-              <span class="net-ico"><Icon name="pulse" :size="12" /></span>
-              <span class="net-label">Системный прокси</span>
-              <strong>{{ netGuard.proxy.enabled ? `Включён · ${netGuard.proxy.server}:${netGuard.proxy.port}` : 'Выключен' }}</strong>
-            </div>
-            <div class="network-row">
-              <span class="net-ico"><Icon name="pulse" :size="12" /></span>
-              <span class="net-label">Listener</span>
-              <strong :class="netGuard.proxy.listenerAlive ? 'green-value' : 'red-value'">
-                {{ netGuard.proxy.listenerAlive ? '● активен' : '○ не отвечает' }}
-              </strong>
-            </div>
-            <div class="network-row">
-              <span class="net-ico"><Icon name="pulse" :size="12" /></span>
-              <span class="net-label">SOCKS VPN :1080</span>
-              <strong :class="netGuard.socksAlive ? 'green-value' : ''">{{ netGuard.socksAlive ? 'слушается' : 'не слушается' }}</strong>
-            </div>
-            <div class="network-row">
-              <span class="net-ico"><Icon name="warn" :size="12" /></span>
-              <span class="net-label">Stale-прокси</span>
-              <strong :class="netGuard.proxy.stale ? 'red-value' : 'green-value'">{{ netGuard.proxy.stale ? 'обнаружен' : 'нет' }}</strong>
-            </div>
-          </div>
-
-          <div v-if="netGuard.events.length" class="netguard-events">
-            <div v-for="(e, i) in netGuard.events.slice(0, 2)" :key="i" class="netguard-event" :class="e.kind === 'PROBLEM' ? 'problem' : 'healed'">
-              <span>{{ e.kind === 'PROBLEM' ? '⚠' : '✓' }}</span>
-              <div>
-                <time>{{ e.time }}</time>
-                <strong>{{ e.kind }} · {{ e.text }}</strong>
-              </div>
-            </div>
-          </div>
-        </template>
-        <div v-else class="empty-block">Данные NetGuard недоступны (биндинг не отвечает или NetGuard не установлен).</div>
-      </section>
-
-      <section class="card adaptive">
-        <div class="card-header">
-          <h2>Адаптивный обход</h2>
-          <button class="btn" :disabled="adaptiveBusy" @click="runAdaptive">
-            {{ adaptiveBusy ? 'Проверка…' : 'Проверить сайты' }}
-          </button>
-        </div>
-        <p class="sub adaptive-note">{{ adaptive?.note || 'Проверка доступности популярных сайтов через туннель и классификация блоков egress-IP.' }}</p>
-        <template v-if="adaptive?.sites?.length">
-          <div class="network-list">
-            <div v-for="s in adaptive.sites" :key="s.domain" class="network-row">
-              <span class="net-ico"><Icon :name="s.ok ? 'check' : s.challenge ? 'warn' : 'pulse'" :size="12" /></span>
-              <span class="net-label">{{ s.domain }}</span>
-              <strong :class="s.ok ? 'green-value' : s.challenge ? 'red-value' : 'no-data'">{{ s.detail }}</strong>
-            </div>
-          </div>
-          <p class="origin-note mono">через WARP-egress на сервере: {{ adaptive.warpDomains.join(', ') }}</p>
-        </template>
-        <div v-else class="empty-block">Пока не проверялось — нажмите «Проверить сайты» при включённом VPN.</div>
+      <section class="split-context">
+        <div class="section-heading"><h2>Имена процессов в исключениях</h2><ActionButton :disabled="splitLoading" :busy="splitLoading" @click="refreshSource('split')">Обновить список</ActionButton></div>
+        <p v-if="splitData === null" class="state-note">{{ splitLoading ? 'Получаем список…' : splitError || 'Список недоступен.' }}</p>
+        <ul v-else-if="splitData.length" class="process-list"><li v-for="name in splitData" :key="name" class="mono">{{ name }}</li></ul>
+        <p v-else class="state-note">Получен пустой список. Этот API не различает отсутствие правил и ошибку чтения профиля.</p>
+        <p class="state-note">Имена не подтверждают фактический охват процессов. Список может описывать применённую или загруженную конфигурацию; идентификатор сессии и effective policy не переданы.</p>
+        <p class="state-note">Режим процесса: {{ state?.proxyMode ?? 'не сообщён' }}. В режиме прокси перехват всех приложений не обещается.</p>
       </section>
     </div>
 
-    <HintBox kind="info" title="Почему «страна» может быть пустой">
-      Страна egress берётся из эха сервиса наблюдения (ipapi.co). Если сервис недоступен или
-      запрос заблокирован — честно «нет данных», без подстановки предполагаемой страны.
-    </HintBox>
-    <HintBox kind="warn" title="Приватность">
-      Прямой egress-IP запрашивается с явно отключённым системным прокси. IP защищённого
-      пути отдельно проверяется через SOCKS5h; пустое значение означает, что backend не
-      смог доказать живой туннельный путь.
-    </HintBox>
+    <section class="sites-section">
+      <div class="section-heading"><h2>Последние ответы сайтов</h2><div class="section-actions">
+        <ActionButton :disabled="sitesLoading" :busy="sitesLoading" @click="refreshSource('sites')">Обновить сведения об отчёте</ActionButton>
+        <ActionButton :disabled="!canCheckSites" :busy="actionBusy" @click="runSites">{{ actionBusy ? 'Проверка выполняется…' : 'Проверить через канал' }}</ActionButton>
+      </div></div>
+      <p class="state-note">Это отдельные HTTPS-запросы через прокси. Привязка к текущим сети, каналу и срок действия не переданы. Таймаут или HTTP 403 не устанавливают DPI и не подтверждают необходимость другого выхода.</p>
+      <p v-if="!isRunning" class="state-note">Для новой проверки подключите VPN на главной странице.</p>
+      <p v-if="actionError" class="error" role="status">{{ actionError }}</p>
+      <p v-if="actionNote" class="state-note" role="status">{{ actionNote }}</p>
+      <p v-if="adaptive === null" class="state-note">{{ sitesLoading ? 'Получаем сохранённые ответы…' : sitesError || 'Сохранённые ответы недоступны.' }}</p>
+      <ul v-else-if="adaptive.sites.length" class="site-list" :aria-busy="actionBusy || sitesLoading">
+        <li v-for="site in adaptive.sites" :key="site.domain">
+          <div class="site-title"><strong>{{ site.domain }}</strong><span>{{ site.code === null ? 'Код не передан' : site.code === 0 ? 'HTTP-ответ не получен' : `HTTP ${site.code}` }}</span></div>
+          <p>{{ site.detail || 'Подробности не переданы.' }}</p>
+          <small>{{ fmtDateTime(site.checkedAt) }}<template v-if="site.challenge"> · Сообщён маркер challenge; причина ограничения не установлена</template></small>
+        </li>
+      </ul>
+      <p v-else class="state-note">Список ответов пуст. Измеренные результаты отсутствуют.</p>
+      <details v-if="adaptive" class="declared-routing">
+        <summary>Заявленная конфигурация дополнительного выхода</summary>
+        <p class="state-note">Список WARP-доменов возвращает приложение. Соответствие текущему серверу и применение этих правил не измерены.</p>
+        <p class="mono">{{ adaptive.warpDomains.length ? adaptive.warpDomains.join(', ') : 'Домены не перечислены' }}</p>
+        <p v-if="adaptive.note" class="state-note">Сообщение приложения: {{ adaptive.note }}</p>
+      </details>
+    </section>
+    <HintBox kind="info">Контрольный запрос без системного прокси всё равно использует маршрут ОС. Совпадение или различие внешних IP не подтверждает обход внешнего VPN или отсутствие локальных утечек.</HintBox>
   </div>
 </template>
 
 <style scoped>
-.view {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.head h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 650;
-}
-.sub {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 11.5px;
-  max-width: 720px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 10px;
-}
-
-.netinfo,
-.netguard {
-  padding: 13px;
-}
-
-.adaptive {
-  padding: 13px;
-  grid-column: 1 / -1;
-}
-.adaptive-note {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-.adaptive .card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.connection-pill {
-  margin-left: auto;
-  padding: 3px 9px;
-  border-radius: 5px;
-  font-size: 12px;
-  color: #a1b2c0;
-  border: 1px solid var(--gray-border);
-  background: var(--gray-soft);
-}
-.connection-pill.wifi {
-  color: #42e8ad;
-  border-color: var(--green-border);
-  background: var(--green-soft);
-}
-
-.network-list {
-  margin-top: 8px;
-}
-.network-row {
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-bottom: 1px solid #142d40;
-  font-size: 12px;
-}
-.network-row .net-ico {
-  width: 16px;
-  color: #d2e0e9;
-  display: inline-flex;
-}
-.network-row .net-label {
-  flex: 1;
-  color: #8399ad;
-}
-.network-row strong {
-  color: #dce7ee;
-  font-weight: 500;
-  white-space: normal;
-  max-width: 55%;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-.network-row strong.no-data {
-  color: #55708a;
-  font-weight: 400;
-}
-
-.origin-note {
-  margin: 8px 0 0;
-  color: #55708a;
-  font-size: 8.5px;
-}
-
-.split-panel {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 98, 38, .18);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-.split-panel > div:first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.split-panel strong { color: #d8e2e9; font-size: 11px; }
-.split-panel small { color: #66798a; font-size: 12px; }
-.split-empty { color: #647789; font-size: 12px; }
-
-.netguard-events {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.netguard-event {
-  min-height: 48px;
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid #1b374d;
-  border-radius: 6px;
-  background: #091b2a;
-}
-.netguard-event > span {
-  font-size: 13px;
-}
-.netguard-event.healed > span {
-  color: var(--green);
-}
-.netguard-event.problem > span {
-  color: var(--yellow);
-}
-.netguard-event div {
-  display: flex;
-  flex-direction: column;
-}
-.netguard-event time {
-  color: #6f879a;
-  font-size: 8px;
-}
-.netguard-event strong {
-  margin-top: 3px;
-  color: #cbd8e2;
-  font-size: 8.5px;
-  font-weight: 500;
-}
-
-.empty-block {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px dashed var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-@media (max-width: 1000px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-  .split-panel { align-items: flex-start; flex-direction: column; }
-}
-</style>
-<style scoped>
-.split-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
+.view { display: flex; flex-direction: column; gap: 20px; min-width: 0; overflow-wrap: anywhere; }
+h2 { margin: 0; font-size: 17px; }
+.network-observations, .sites-section { padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); min-width: 0; }
+.section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px; }
+.source-time, .state-note, .muted { color: var(--muted); font-size: 12.5px; line-height: 1.65; }
+.source-time { margin: 12px 0; }
+.facts-list { margin: 12px 0; }
+.facts-list > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px 20px; border-bottom: 1px solid var(--border); padding: 12px 0; }
+dt { color: var(--muted); font-size: 12.5px; }
+dd { color: var(--text); margin: 0; font-size: 13px; }
+dd small { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.6; margin-top: 5px; }
+.context-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.context-grid > section { min-width: 0; }
+.process-list { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.process-list li { background: var(--panel-2); padding: 5px 10px; border-radius: 4px; }
+.site-list { list-style: none; padding: 0; margin: 12px 0; }
+.site-list li { border-bottom: 1px solid var(--border); padding: 14px 0; }
+.site-title { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; font-size: 13px; }
+.site-title span, .site-list small { color: var(--muted); font-size: 12px; }
+.site-list p { font-size: 13px; line-height: 1.6; color: var(--text-soft); margin: 8px 0; }
+.declared-routing { margin-top: 16px; }
+summary { padding: 8px 0; cursor: pointer; color: var(--text-soft); }
+.btn { min-height: 40px; white-space: normal; }
+.section-heading { flex-wrap: wrap; }
+.section-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.error { color: var(--red); font-size: 13px; line-height: 1.6; }
+@media (max-width: 1180px) { .context-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
+@media (max-width: 760px) { .facts-list > div { grid-template-columns: minmax(0, 1fr); gap: 6px; } .network-observations, .sites-section { padding: 16px; } }
 </style>

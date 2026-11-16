@@ -1,38 +1,27 @@
 package main
 
-// adaptive.go — адаптивный слой против IP-блоков датацентра (V2-041).
-//
-// Контекст: AI-сервисы (chatgpt.com, claude.ai) и подобные им отдают 403
-// JS-challenge на egress-IP хостера независимо от канала — чинится только
-// сменой egress. Серверная часть (V2-041): sing-box endpoint warp-ep
-// (Cloudflare WARP) + route rule domain_suffix → warp-ep. Клиентская часть
-// здесь: детектор «сайт отдаёт challenge/блок через туннель», классификация
-// ответа, статус для UI и персистентная карта доменов (факт, не гадание).
-//
-// Правило фактов (AGENTS §3.6): nil/пусто = «не проверялось», никогда ноль
-// вместо отсутствия измерения. Значения секретов здесь не участвуют.
+// Explicit optional HTTP observations, not an adaptive policy or egress proof.
+// Status/challenge markers do not establish DPI, a datacenter-IP ban, server
+// routing or the remedy. Task retirement and historical storage are separate
+// components; neither can change mandatory health or protection intent.
 
 import (
-	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
 // SiteStatus — класс ответа сайта через туннель (факт последней проверки).
 type SiteStatus struct {
 	Domain    string `json:"domain"`    // проверенный домен
-	Code      int    `json:"code"`      // HTTP-код (0 = не дошло)
-	OK        bool   `json:"ok"`        // 2xx/3xx = доступен
-	Challenge bool   `json:"challenge"` // 403 + маркер челленджа = блок IP датацентра
+	Code      int    `json:"code"`      // HTTP-код; 0 = ответ HTTP не получен
+	OK        bool   `json:"ok"`        // 2xx/3xx и прочитанный prefix; не полная страница
+	Challenge bool   `json:"challenge"` // 403/429 + маркер; причина не установлена
 	Detail    string `json:"detail"`    // человеческое пояснение (рус.)
 	CheckedAt string `json:"checkedAt"` // RFC3339
 }
@@ -40,7 +29,7 @@ type SiteStatus struct {
 // adaptiveState — общий статус адаптивного слоя для UI.
 type AdaptiveStatus struct {
 	Sites       []SiteStatus `json:"sites"`       // последние проверки
-	WarpDomains []string     `json:"warpDomains"` // домены, обслуживаемые через WARP (server rule, V2-041)
+	WarpDomains []string     `json:"warpDomains"` // пусто без подтверждённого источника маршрутизации
 	Note        string       `json:"note"`        // пояснение границы (рус.)
 }
 
@@ -67,21 +56,6 @@ var adaptiveCheckTargets = []string{
 	"vk.com",
 }
 
-// warpDomainsServer — зеркало server-route rule (V2-041): что реально уходит
-// через WARP egress на сервере. Константа договора с /etc/sing-box/config.json;
-// рассинхрон ловит live-тест chatgpt (200 = правило работает).
-var warpDomainsServer = []string{
-	"chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com",
-	"claude.ai", "anthropic.com", "gemini.google.com", "x.ai", "grok.com",
-	// V2-044: расширение по результатам live-матриц (сервисы, известные
-	// challenge'ами на датацентровых IP).
-	"perplexity.ai", "poe.com", "copilot.microsoft.com", "character.ai",
-	"chat.deepseek.com",
-}
-
-var adaptiveMu sync.Mutex
-var adaptiveLast []SiteStatus
-
 // isChallengeBody — в теле ответа есть признак anti-bot челленджа.
 func isChallengeBody(body []byte) bool {
 	lower := strings.ToLower(string(body))
@@ -95,38 +69,46 @@ func isChallengeBody(body []byte) bool {
 
 // classifySite — один запрос через туннель → классификация.
 // h1-only: детектору не нужен h2 (меньше поверхности, тот же факт).
-func classifySite(ctx context.Context, socksAddr, domain string) SiteStatus {
+func classifySite(task *manualDiagnosticTask, socksAddr, domain string) SiteStatus {
 	st := SiteStatus{Domain: domain, CheckedAt: time.Now().Format(time.RFC3339)}
 	u := "https://" + domain + "/"
+	var dialer net.Dialer // preserve Transport's previous zero-dialer behavior
 	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{NextProtos: []string{"http/1.1"}},
-		Proxy:           http.ProxyURL(&url.URL{Scheme: "socks5h", Host: socksAddr}),
+		DisableCompression:     true,
+		MaxResponseHeaderBytes: 16 << 10,
+		MaxConnsPerHost:        1,
+		TLSClientConfig:        &tls.Config{NextProtos: []string{"http/1.1"}},
+		Proxy:                  http.ProxyURL(&url.URL{Scheme: "socks5h", Host: socksAddr}),
+		DialContext:            task.ownedDialer(dialer.DialContext),
 	}
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 12 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	client := &http.Client{Transport: transport, Timeout: 12 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	req, err := http.NewRequestWithContext(task.ctx, http.MethodGet, u, nil)
 	if err != nil {
-		st.Detail = "запрос не собран: " + err.Error()
+		st.Detail = "запрос не создан; HTTP-наблюдение недоступно"
 		return st
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
 	resp, err := client.Do(req)
 	if err != nil {
-		// Сеть/туннель не живы — это не «сайт блокирует», это «нет данных».
-		st.Detail = "нет ответа (туннель/сеть): " + err.Error()
+		st.Detail = "HTTP-ответ не получен; причина по этому наблюдению не установлена"
 		return st
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
 	st.Code = resp.StatusCode
+	if readErr != nil {
+		st.Detail = fmt.Sprintf("получен HTTP %d, чтение body prefix прервано; полная загрузка не подтверждена", resp.StatusCode)
+		return st
+	}
 	switch {
 	case resp.StatusCode >= 200 && resp.StatusCode < 400:
 		st.OK = true
-		st.Detail = fmt.Sprintf("доступен (HTTP %d)", resp.StatusCode)
+		st.Detail = fmt.Sprintf("получен HTTP %d и prefix ответа ≤16 KiB; полная загрузка страницы не проверялась", resp.StatusCode)
 	case resp.StatusCode == 403 || resp.StatusCode == 429:
 		if isChallengeBody(body) {
 			st.Challenge = true
-			st.Detail = "блок egress-IP (anti-bot challenge) — обслуживается через WARP-egress (V2-041)"
+			st.Detail = "получена challenge-страница; причина и серверный egress-маршрут не подтверждены"
 			return st
 		}
 		st.Detail = fmt.Sprintf("отказ HTTP %d (без маркера челленджа)", resp.StatusCode)
@@ -136,89 +118,34 @@ func classifySite(ctx context.Context, socksAddr, domain string) SiteStatus {
 	return st
 }
 
-// RunAdaptiveCheck — проверка всех целей через живой туннель. Параллельно,
-// с общим бюджетом 30с; результат кешируется в памяти и на диск (AppData).
-func (a *App) RunAdaptiveCheck() AdaptiveStatus {
-	runtime_.mu.Lock()
-	running := runtime_.manager != nil && runtime_.cc != nil
-	runtime_.mu.Unlock()
-
-	out := AdaptiveStatus{WarpDomains: append([]string(nil), warpDomainsServer...),
-		Note: "AI-сервисы блокируют IP датацентра challenge-страницей. Сервер (V2-041) направляет их через Cloudflare WARP — отдельный egress с лучшей репутацией. Остальной трафик идёт напрямую с VPS."}
-
-	if !running {
-		out.Note = "VPN не запущен — проверка через туннель невозможна (включите VPN и повторите). " + out.Note
-		return out
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	results := make([]SiteStatus, len(adaptiveCheckTargets))
-	for i, dom := range adaptiveCheckTargets {
-		wg.Add(1)
-		go func(slot int, domain string) {
-			defer wg.Done()
-			results[slot] = classifySite(ctx, "127.0.0.1:1080", domain)
-		}(i, dom)
-	}
-	wg.Wait()
-
-	adaptiveMu.Lock()
-	adaptiveLast = results
-	adaptiveMu.Unlock()
-	persistAdaptive(results)
-
-	out.Sites = results
-	return out
+// RunAdaptiveCheck preserves the Wails result shape; all optional work belongs
+// to one original manual task. No Background context or independent retry.
+func (a *App) RunAdaptiveCheck() (out AdaptiveStatus) {
+	returned := false
+	defer func() {
+		if payload := recover(); payload != nil || !returned {
+			out = adaptiveCheckUnavailable()
+		}
+	}()
+	out = a.runAdaptiveCheck()
+	returned = true
+	return
 }
 
 // GetAdaptiveStatus — последние сохранённые результаты (без новых запросов).
-func (a *App) GetAdaptiveStatus() AdaptiveStatus {
-	out := AdaptiveStatus{WarpDomains: append([]string(nil), warpDomainsServer...),
-		Note: "AI-сервисы блокируют IP датацентра challenge-страницей. Сервер (V2-041) направляет их через Cloudflare WARP — отдельный egress с лучшей репутацией. Остальной трафик идёт напрямую с VPS."}
-	if cached := loadAdaptive(); cached != nil {
-		out.Sites = cached
-	}
-	adaptiveMu.Lock()
-	if adaptiveLast != nil {
-		out.Sites = adaptiveLast
-	}
-	adaptiveMu.Unlock()
-	return out
+func (a *App) GetAdaptiveStatus() (out AdaptiveStatus) {
+	returned := false
+	defer func() {
+		if payload := recover(); payload != nil || !returned {
+			out = adaptiveStatusBase()
+			out.Note = "История ответов недоступна; новый запрос к сайтам не выполнялся. " + out.Note
+		}
+	}()
+	out = readAdaptiveHistory()
+	returned = true
+	return
 }
 
-// ---------- персистентность (AppData, атомарная запись) ----------
-
-func adaptivePath() string {
-	return filepath.Join(appDataDir(), "adaptive-sites.json")
-}
-
-func persistAdaptive(sites []SiteStatus) {
-	p := adaptivePath()
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return
-	}
-	data, err := json.MarshalIndent(sites, "", "  ")
-	if err != nil {
-		return
-	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, p)
-}
-
-func loadAdaptive() []SiteStatus {
-	data, err := os.ReadFile(adaptivePath())
-	if err != nil {
-		return nil
-	}
-	var sites []SiteStatus
-	if json.Unmarshal(data, &sites) != nil {
-		return nil
-	}
-	return sites
+func adaptiveStatusBase() AdaptiveStatus {
+	return AdaptiveStatus{Sites: []SiteStatus{}, WarpDomains: []string{}, Note: "HTTP-наблюдения через туннель относятся к отдельным целям. Challenge не определяет причину отказа; текущая серверная маршрутизация и использование WARP не подтверждены."}
 }

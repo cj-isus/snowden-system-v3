@@ -1,17 +1,27 @@
 module github.com/snowden-system/windows
 
+// Frozen Windows-only source fork; see third_party/sing-quic/ORIGIN.md.
+replace github.com/sagernet/sing-quic => ./third_party/sing-quic
+
+replace github.com/sagernet/quic-go => ./third_party/quic-go
+
 go 1.26
 
 require (
 	github.com/getlantern/systray v1.2.2
 	github.com/go-ole/go-ole v1.3.0
 	github.com/sagernet/sing-box v1.13.19
+	github.com/secure-systems-lab/go-securesystemslib v0.11.0
+	github.com/sigstore/sigstore v1.10.6
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/tailscale/wf v0.0.0-20240214030419-6fbb0a674ee6
+	github.com/theupdateframework/go-tuf/v2 v2.4.2
 	github.com/wailsapp/wails/v2 v2.13.0
 	golang.org/x/crypto v0.51.0
+	golang.org/x/net v0.54.0
 	golang.org/x/sys v0.44.0
 	golang.org/x/text v0.37.0
+	golang.org/x/time v0.11.0
 )
 
 require (
@@ -174,11 +184,9 @@ require (
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
 	golang.org/x/mod v0.35.0 // indirect
-	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
-	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect

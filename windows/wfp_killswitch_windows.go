@@ -11,15 +11,19 @@ package main
 // stops. Local shape checks do not replace OS/live acceptance (PLAN OFF-05).
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
 	"unsafe"
 
+	"github.com/snowden-system/windows/backend/core"
+	"github.com/snowden-system/windows/backend/render"
 	"github.com/tailscale/wf"
 	"golang.org/x/sys/windows"
 )
@@ -27,7 +31,7 @@ import (
 const (
 	wfpProviderName = "Snowden System TUN kill switch"
 	wfpSublayerName = "Snowden System protected TUN"
-	wfpTunName      = "snowden0"
+	wfpTunName      = render.TUNInterfaceName
 )
 
 var (
@@ -102,175 +106,126 @@ func wfpTunRuleSpecs(luid uint64) []wfpRuleSpec {
 	}
 }
 
-func addWFPRule(s *wf.Session, spec wfpRuleSpec) error {
-	rule := &wf.Rule{
-		ID:          wf.RuleID(wfpStableGUID(spec.id)),
-		Name:        spec.name,
-		Description: "Snowden System fail-closed TUN policy",
-		Layer:       spec.layer,
-		Sublayer:    wfpSublayerID,
-		Weight:      spec.weight,
-		Conditions:  spec.conditions,
-		Action:      spec.action,
-		// A soft catch-all block is required here. ALE may classify a flow
-		// before and again after Windows routes it onto the TUN; making the
-		// first block final prevents the later, more specific LUID permit from
-		// taking effect. The block still wins over all lower-weight rules in
-		// this top-weight owned sublayer.
-		HardAction: false,
-		Persistent: true,
-		Provider:   wfpProviderID,
-	}
-	if err := s.AddRule(rule); err != nil {
-		return fmt.Errorf("WFP add %q: %w", spec.name, err)
-	}
-	return nil
-}
-
-// applyWFPBase installs the lockdown before starting the TUN engine. The
-// application itself remains able to establish protected transport sockets;
-// all other new outbound connections are blocked until the TUN LUID permit is
-// attached.
-func applyWFPBase(exePath string) error {
-	appID, err := wf.AppID(exePath)
-	if err != nil {
-		return fmt.Errorf("WFP app id: %w", err)
-	}
-	s, err := wf.New(&wf.Options{Name: wfpProviderName, Description: "persistent strict TUN kill switch"})
-	if err != nil {
-		return fmt.Errorf("WFP open: %w", err)
-	}
-	defer s.Close()
-	rules, err := s.Rules()
-	if err != nil {
-		return err
-	}
-	for _, rule := range rules {
-		if rule.Provider == wfpProviderID {
-			// Never tear down a live barrier just to retry/reconnect. A damaged
-			// owned policy requires explicit Disconnect before a fresh install.
-			if err := verifyWFPPolicy(false); err != nil {
-				return err
-			}
-			return revokeWFPTUN()
-		}
-	}
-	if err := s.AddProvider(&wf.Provider{
-		ID:          wfpProviderID,
-		Name:        wfpProviderName,
-		Description: "Owned only by Snowden System",
-		Persistent:  true,
-	}); err != nil {
-		return fmt.Errorf("WFP provider: %w", err)
-	}
-	if err := s.AddSublayer(&wf.Sublayer{
-		ID:          wfpSublayerID,
-		Name:        wfpSublayerName,
-		Description: "Specific permits followed by direct-traffic catch-all block",
-		Persistent:  true,
-		Provider:    wfpProviderID,
-		Weight:      ^uint16(0),
-	}); err != nil {
-		return fmt.Errorf("WFP sublayer: %w", err)
-	}
-	for _, spec := range wfpBaseRuleSpecs(appID) {
-		if err := addWFPRule(s, spec); err != nil {
-			return err
-		}
-	}
-	if err := verifyWFPPolicy(false); err != nil {
-		return err
-	}
-	return nil
-}
-
-// permitWFPTUN waits for the adapter created by sing-box, resolves its LUID,
-// adds the only general egress permit and verifies the effective owned set.
-func permitWFPTUN(name string, timeout time.Duration) error {
-	luid, err := waitInterfaceLUID(name, timeout)
-	if err != nil {
-		return err
-	}
-	s, err := wf.New(&wf.Options{Name: wfpProviderName})
-	if err != nil {
-		return fmt.Errorf("WFP open for TUN permit: %w", err)
-	}
-	defer s.Close()
-	for _, spec := range wfpTunRuleSpecs(luid) {
-		// A prior partial attempt may have installed one family.
-		_ = s.DeleteRule(wf.RuleID(wfpStableGUID(spec.id)))
-		if err := addWFPRule(s, spec); err != nil {
-			return err
-		}
-	}
-	return verifyWFPPolicy(true)
-}
-
 func waitInterfaceLUID(name string, timeout time.Duration) (uint64, error) {
-	deadline := time.Now().Add(timeout)
+	return waitInterfaceLUIDContext(context.Background(), name, timeout)
+}
+
+func waitInterfaceLUIDContext(parent context.Context, name string, timeout time.Duration) (uint64, error) {
+	if parent == nil || timeout <= 0 || timeout > 30*time.Second || name != wfpTunName {
+		return 0, fmt.Errorf("invalid TUN interface wait configuration")
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
 	var last string
 	for {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
 		interfaces, err := net.Interfaces()
 		if err != nil {
 			last = err.Error()
 		} else {
+			var found uint64
 			for _, iface := range interfaces {
-				if strings.EqualFold(iface.Name, name) {
+				if strings.EqualFold(iface.Name, name) && iface.Flags&net.FlagUp != 0 {
 					var luid uint64
 					ret, _, _ := procConvertInterfaceIndexToLUID.Call(uintptr(uint32(iface.Index)), uintptr(unsafe.Pointer(&luid)))
 					if ret == 0 && luid != 0 {
-						return luid, nil
+						if found != 0 {
+							return 0, fmt.Errorf("ambiguous TUN interface identity")
+						}
+						found = luid
 					}
 					last = fmt.Sprintf("ConvertInterfaceIndexToLuid=%d", ret)
 				}
 			}
+			if found != 0 && ctx.Err() == nil {
+				return found, nil
+			}
 		}
-		if time.Now().After(deadline) {
-			return 0, fmt.Errorf("WFP: интерфейс %s не появился за %s (%s)", name, timeout, last)
+		select {
+		case <-ctx.Done():
+			return 0, fmt.Errorf("WFP: TUN interface unavailable (%s): %w", last, ctx.Err())
+		case <-time.After(100 * time.Millisecond):
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
 func verifyWFPPolicy(requireTUN bool) error {
-	s, err := wf.New(&wf.Options{Name: wfpProviderName})
-	if err != nil {
-		return fmt.Errorf("WFP verify open: %w", err)
+	return verifyWFPPolicyContext(context.Background(), requireTUN, 0)
+}
+
+func verifyWFPPolicyContext(ctx context.Context, requireTUN bool, expectedLUID uint64) error {
+	return verifyWFPScopeContext(ctx, requireTUN, expectedLUID, nil, false, nil)
+}
+
+// The legacy base observation tolerates existing general rules 20/21. A closed
+// admission proof must instead reject them and any diagnostic/unknown filter,
+// before helper creation and again after original diagnostic retirement.
+func verifyWFPClosedContext(ctx context.Context) error {
+	return verifyWFPScopeContext(ctx, false, 0, nil, true, nil)
+}
+
+// Diagnostic verification never tolerates the general LUID permits. Only the
+// current exact six-condition, nonpersistent filter may accompany the base.
+// nil requires its absence, including during pre-acquisition and retirement.
+func verifyWFPDiagnosticContext(ctx context.Context, owner *nativeWFPSessionOwner, diagnostic *wfpRuleSpec) error {
+	if owner == nil {
+		return fmt.Errorf("WFP diagnostic original session unavailable")
 	}
-	defer s.Close()
+	return verifyWFPScopeContext(ctx, false, 0, diagnostic, true, owner)
+}
+
+func verifyWFPScopeContext(ctx context.Context, requireTUN bool, expectedLUID uint64, diagnostic *wfpRuleSpec, strictDiagnostic bool, owner *nativeWFPSessionOwner) error {
+	if ctx == nil {
+		return fmt.Errorf("WFP verification context unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	sublayers, err := s.Sublayers(wfpProviderID)
-	if err != nil {
-		return fmt.Errorf("WFP verify sublayer: %w", err)
+	var rules []*wf.Rule
+	var validSublayer bool
+	if owner != nil {
+		rules, validSublayer, err = owner.readPolicy(ctx, true)
+	} else {
+		rules, validSublayer, err = readOwnedWFPPolicy(ctx, true)
 	}
-	validSublayer := false
-	for _, sl := range sublayers {
-		if sl.ID == wfpSublayerID {
-			validSublayer = sl.Provider == wfpProviderID && sl.Persistent && sl.Weight == ^uint16(0)
-		}
+	if err != nil {
+		return fmt.Errorf("WFP verify owned policy: %w", err)
 	}
 	if !validSublayer {
 		return fmt.Errorf("WFP verify: sublayer ownership/persistence/weight mismatch")
 	}
-	appID, err := wf.AppID(exe)
+	var appID string
+	if owner != nil {
+		appID, err = owner.imageAppID(ctx, exe)
+	} else {
+		appID, err = readOwnedWFPAppID(ctx, exe)
+	}
 	if err != nil {
 		return err
-	}
-	rules, err := s.Rules()
-	if err != nil {
-		return fmt.Errorf("WFP enumerate filters: %w", err)
 	}
 	want := map[wf.RuleID]wfpRuleSpec{}
 	for _, spec := range wfpBaseRuleSpecs(appID) {
 		want[wf.RuleID(wfpStableGUID(spec.id))] = spec
 	}
+	if diagnostic != nil {
+		if !strictDiagnostic || requireTUN || diagnostic.id != 30 {
+			return fmt.Errorf("WFP diagnostic verification scope mismatch")
+		}
+		want[wf.RuleID(wfpStableGUID(diagnostic.id))] = *diagnostic
+	}
 	if requireTUN {
-		luid, err := waitInterfaceLUID(wfpTunName, 250*time.Millisecond)
+		luid, err := waitInterfaceLUIDContext(ctx, wfpTunName, 250*time.Millisecond)
 		if err != nil {
 			return err
+		}
+		if expectedLUID != 0 && luid != expectedLUID {
+			return fmt.Errorf("WFP: TUN interface changed during lifecycle gate")
 		}
 		for _, spec := range wfpTunRuleSpecs(luid) {
 			want[wf.RuleID(wfpStableGUID(spec.id))] = spec
@@ -280,12 +235,16 @@ func verifyWFPPolicy(requireTUN bool) error {
 	for _, rule := range rules {
 		spec, owned := want[rule.ID]
 		if !owned {
-			if rule.Provider == wfpProviderID && rule.ID != wf.RuleID(wfpStableGUID(20)) && rule.ID != wf.RuleID(wfpStableGUID(21)) {
+			if rule.Provider == wfpProviderID && (strictDiagnostic || rule.ID != wf.RuleID(wfpStableGUID(20)) && rule.ID != wf.RuleID(wfpStableGUID(21))) {
 				return fmt.Errorf("WFP verify: unexpected owned filter %q", rule.Name)
 			}
 			continue
 		}
-		if !wfpRuleMatches(rule, spec) {
+		matches := wfpRuleMatches(rule, spec)
+		if diagnostic != nil && spec.id == diagnostic.id {
+			matches = wfpRuleMatchesPersistence(rule, spec, false) && !rule.PermitIfMissing && rule.Callout == (wf.CalloutID{}) && len(rule.ProviderData) == 0
+		}
+		if !matches {
 			return fmt.Errorf("WFP verify: filter %q has unexpected ownership/shape", rule.Name)
 		}
 		found[rule.ID] = true
@@ -295,15 +254,19 @@ func verifyWFPPolicy(requireTUN bool) error {
 			return fmt.Errorf("WFP verify: обязательный filter %q отсутствует", spec.name)
 		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 // Compare security-relevant shape, including AppID/LUID and conditions on a
 // catch-all block. Condition enumeration order has no policy meaning.
 func wfpRuleMatches(rule *wf.Rule, spec wfpRuleSpec) bool {
+	return wfpRuleMatchesPersistence(rule, spec, true)
+}
+
+func wfpRuleMatchesPersistence(rule *wf.Rule, spec wfpRuleSpec, persistent bool) bool {
 	if rule.Provider != wfpProviderID || rule.Sublayer != wfpSublayerID ||
-		rule.Layer != spec.layer || rule.Action != spec.action || !rule.Persistent ||
-		rule.Disabled || rule.BootTime || rule.HardAction || rule.Weight != spec.weight ||
+		rule.Layer != spec.layer || rule.Action != spec.action || rule.Persistent != persistent ||
+		rule.Disabled || rule.BootTime || rule.HardAction || rule.PermitIfMissing || rule.Callout != (wf.CalloutID{}) || rule.Weight != spec.weight ||
 		len(rule.Conditions) != len(spec.conditions) {
 		return false
 	}
@@ -323,105 +286,82 @@ func wfpRuleMatches(rule *wf.Rule, spec wfpRuleSpec) bool {
 	return true
 }
 
-// Remove only TUN permits, retaining the base lockdown throughout teardown.
-func revokeWFPTUN() error {
-	s, err := wf.New(&wf.Options{Name: wfpProviderName})
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-	rules, err := s.Rules()
-	if err != nil {
-		return err
-	}
-	for _, rule := range rules {
-		if rule.Provider == wfpProviderID && (rule.ID == wf.RuleID(wfpStableGUID(20)) || rule.ID == wf.RuleID(wfpStableGUID(21))) {
-			if err := s.DeleteRule(rule.ID); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// removeWFPPolicy removes only objects carrying our stable provider ID.
-func removeWFPPolicy() error {
-	s, err := wf.New(&wf.Options{Name: wfpProviderName})
-	if err != nil {
-		return fmt.Errorf("WFP cleanup open: %w", err)
-	}
-	defer s.Close()
-	var errs []string
-	rules, enumErr := s.Rules()
-	if enumErr != nil {
-		return fmt.Errorf("WFP cleanup enumerate: %w", enumErr)
-	}
-	for _, rule := range rules {
-		if rule.Provider == wfpProviderID {
-			if err := s.DeleteRule(rule.ID); err != nil {
-				errs = append(errs, fmt.Sprintf("delete filter %s: %v", rule.Name, err))
-			}
-		}
-	}
-	sublayers, err := s.Sublayers(wfpProviderID)
-	if err != nil {
-		errs = append(errs, "enumerate sublayers: "+err.Error())
-	}
-	for _, sl := range sublayers {
-		if sl.ID == wfpSublayerID {
-			if err := s.DeleteSublayer(sl.ID); err != nil {
-				errs = append(errs, "delete sublayer: "+err.Error())
-			}
-		}
-	}
-	providers, err := s.Providers()
-	if err != nil {
-		errs = append(errs, "enumerate providers: "+err.Error())
-	}
-	for _, provider := range providers {
-		if provider.ID == wfpProviderID {
-			if err := s.DeleteProvider(provider.ID); err != nil {
-				errs = append(errs, "delete provider: "+err.Error())
-			}
-		}
-	}
-	if len(errs) > 0 {
-		return fmt.Errorf("WFP cleanup incomplete: %s", strings.Join(errs, "; "))
-	}
-	return nil
-}
-
-// externalTUNProbe proves that a process not covered by the engine AppID can
-// reach the expected egress only through the permitted TUN interface. The
-// target is an IP literal so Windows DNS Client (a separate svchost AppID)
-// cannot turn a successful LUID policy into a false failure.
+// externalTUNProbe observes IPv4 egress from another executable alongside the
+// verified LUID policy. It is not native DNS/UDP/IPv6 or kernel-owner proof.
 func externalTUNProbe(expected string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		cmd := exec.Command("curl.exe", "--silent", "--show-error", "--fail", "--noproxy", "*", "--max-time", "3", "https://1.1.1.1/cdn-cgi/trace")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			lastErr = err
-			time.Sleep(250 * time.Millisecond)
-			continue
+	return externalTUNProbeContext(context.Background(), expected, timeout)
+}
+
+func externalTUNProbeContext(parent context.Context, expected string, timeout time.Duration) error {
+	expectedIP := net.ParseIP(strings.TrimSpace(expected))
+	if expectedIP == nil || expectedIP.To4() == nil || timeout <= 0 || timeout > 30*time.Second {
+		return fmt.Errorf("external TUN IPv4 expectation is unavailable")
+	}
+	ctx, release, err := core.AdmitDiagnostic(parent, core.DiagnosticProtected, 3, 3*(4096+1), timeout)
+	if err != nil {
+		return err
+	}
+	defer release()
+	systemDirectory, err := windows.GetSystemDirectory()
+	if err != nil {
+		return fmt.Errorf("external TUN system helper unavailable")
+	}
+	helperPath := filepath.Join(systemDirectory, "curl.exe")
+	parentPath, err := osExecutable()
+	if err != nil {
+		return fmt.Errorf("external TUN bypass identity unavailable")
+	}
+	parentID, err := readOwnedWFPAppID(ctx, parentPath)
+	if err != nil || parentID == "" {
+		return fmt.Errorf("external TUN bypass AppID unavailable")
+	}
+	helperID, err := readOwnedWFPAppID(ctx, helperPath)
+	if err != nil || helperID == "" || strings.EqualFold(helperID, parentID) {
+		return fmt.Errorf("external TUN helper must not share the bypass AppID")
+	}
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		got := ""
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(strings.TrimSpace(line), "ip=") {
-				got = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "ip="))
-				break
+		attemptCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		output, err := core.CaptureProtectedHelper(attemptCtx, helperPath, []string{
+			"-q", "--silent", "--fail", "--noproxy", "*", "--proxy", "",
+			"--max-time", "3", "--connect-timeout", "2", "--max-filesize", "4096",
+			"--proto", "=https", "--ipv4", "--write-out", "\\nSNOWDEN_HTTP_STATUS:%{http_code}\\n", render.ExternalTUNProbeURL,
+		}, 4096)
+		cancel()
+		if errors.Is(err, core.ErrProtectedHelperCleanup) || errors.Is(err, core.ErrProtectedHelperBusy) {
+			return err // never replace or work around an uncertain helper owner
+		}
+		if err == nil && ctx.Err() == nil {
+			const statusMarker = "\nSNOWDEN_HTTP_STATUS:"
+			body := string(output)
+			marker := strings.LastIndex(body, statusMarker)
+			if marker < 0 || strings.TrimSpace(body[marker+len(statusMarker):]) != "200" {
+				return fmt.Errorf("external TUN trace status not confirmed")
+			}
+			var got net.IP
+			fields := 0
+			for _, line := range strings.Split(body[:marker], "\n") {
+				if value, present := strings.CutPrefix(strings.TrimSpace(line), "ip="); present {
+					fields++
+					got = net.ParseIP(strings.TrimSpace(value))
+				}
+			}
+			if fields == 1 && got != nil {
+				if !got.Equal(expectedIP) {
+					return fmt.Errorf("external TUN IPv4 egress mismatch")
+				}
+				return nil
 			}
 		}
-		if net.ParseIP(got) == nil {
-			lastErr = fmt.Errorf("trace response has no valid egress")
-			time.Sleep(250 * time.Millisecond)
-			continue
+		if attempt < 2 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(250 * time.Millisecond):
+			}
 		}
-		if got != strings.TrimSpace(expected) {
-			return fmt.Errorf("WFP external protected probe: egress mismatch")
-		}
-		return nil
 	}
-	return fmt.Errorf("WFP external protected probe: route not ready before timeout: %w", lastErr)
+	return fmt.Errorf("external TUN IPv4 flow not confirmed within budget")
 }

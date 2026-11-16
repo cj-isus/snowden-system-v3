@@ -1,1387 +1,239 @@
 <script setup lang="ts">
-/**
- * Главная (UI-план v3): hero с power-кнопкой, текущий канал, карта маршрута,
- * проверка пути с инлайн-шагами, факты сети, режим SOCKS/TUN, сводка каналов
- * и автозащиты со ссылками (не дубли страниц — v2 тащил целые копии разделов).
- * Все данные — факты из backend; пусто = «нет данных». Навигация — useNav().
- */
 import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import Icon from '../components/Icon.vue'
-import type { IconName } from '../components/Icon.vue'
-import { useBackendState, initBackendState } from '../composables/backendState'
+import ActionButton from '../components/ActionButton.vue'
+import ProbeReportView from '../components/ProbeReportView.vue'
+import ProcessModeSetting from '../components/ProcessModeSetting.vue'
+import { useBackendState, initBackendState, refreshState } from '../composables/backendState'
 import { useLifecycle } from '../composables/lifecycle'
 import { useInfoFacts } from '../composables/infoFacts'
 import { useNav } from '../composables/nav'
-import { validationStatusLabels, lifecycleLabels, blockedReasonLabels, fmtDateTime } from '../api/labels'
-import { netGuardStatus } from '../api/backend'
 import { usePolling } from '../composables/polling'
+import { useRemovedControlFocus } from '../composables/removedControlFocus'
+import { api, netGuardStatus } from '../api/backend'
+import { uiFailure } from '../api/failureMessages'
+import { validationStatusLabels, lifecycleLabels, blockedReasonLabels, blockedReasonNextStep, lifecycleActionHelp, fmtDateTime, fmtObservationAge, probeStepStatus, isInformationalProbeStep, fmtEgressObservation, fmtEgressObservationTime } from '../api/labels'
 
-const { state, stateLoaded, isRunning, isBusy, primaryAction, tunMode, tunBusy, setTUNMode } = useBackendState()
+const { state, stateLoaded, isRunning, isBusy, switching, primaryAction, stopPending, canStop, commandMessage } = useBackendState()
 const { start, stop, runProbe } = useLifecycle()
-const { facts } = useInfoFacts()
+const { facts } = useInfoFacts({ facts: true })
+const egressObservation = computed(() => facts.value?.egress === null ? null : isRunning.value ? facts.value?.egress?.socks : facts.value?.egress?.osControl)
+const egressIP = computed(() => isRunning.value ? facts.value?.tunnelIP : facts.value?.publicIP)
 const { navTo } = useNav()
+const { data: netGuard } = usePolling(netGuardStatus, 10000, { pauseWhenHidden: true })
+onMounted(() => { void initBackendState() })
 
-onMounted(() => {
-  void initBackendState()
-})
-
+const page = ref<HTMLElement | null>(null)
+useRemovedControlFocus(page, '#dashboard-primary-action')
+const primaryControl = ref<InstanceType<typeof ActionButton> | null>(null)
 function onPrimary(): void {
+  if (primaryAction.value.disabled) return
   if (primaryAction.value.kind === 'start') void start()
   else void stop()
 }
-
-// ---------- hero: фактическое состояние ----------
-
-const heroHeading = computed(() => {
-  const s = state.value?.state
-  if (!stateLoaded.value || !s) return 'Нет данных'
-  return lifecycleLabels[s]
-})
-
-const heroTone = computed(() => {
-  const s = state.value?.state
-  if (s === 'running') return 'running'
-  if (s === 'error') return 'error'
-  if (s === 'starting' || s === 'stopping' || s === 'reloading') return 'busy'
-  return 'stopped'
-})
-
-// BLOCKED расшифровывается машинной причиной из контракта (v2 прятал её).
-const blockedLine = computed(() => {
-  const r = state.value?.blockedReason
-  return r ? `BLOCKED — ${blockedReasonLabels[r] ?? r}` : null
-})
-
-const heroDescription = computed(() => {
-  if (blockedLine.value) return `${blockedLine.value}: запуск остаётся закрытым (fail-closed).`
-  if (isRunning.value) return tunMode.value
-    ? 'TUN работает; защищённый путь прошёл проверку.'
-    : 'Защищённый канал работает для приложений, использующих системный прокси.'
-  if (state.value?.error) return state.value.error
-  return 'Соединение не установлено. Запуск — строго после успешного protected-probe.'
-})
-
-const canReleaseProtection = computed(() => {
-  const s = state.value
-  return !!s && (s.state === 'error' || s.state === 'starting' || s.state === 'reloading' || !!s.blockedReason)
-})
-
-// ---------- fail-closed баннер (V2-053) ----------
-// Два фактических пути к fail-closed (оба — факты из контракта, не догадки):
-//  1) state='error' после исчерпания failover-on-start (failCore:
-//     «все каналы не прошли probe … fail-closed (FR-001)»);
-//  2) state='stopped' + blockedReason='all_channels_failed' после исчерпания
-//     сторожа (V2-037 watchdog BLOCKED).
-const failClosed = computed(() => {
-  const s = state.value
-  if (!s) return null
-  const watchdogBlocked = s.blockedReason === 'all_channels_failed'
-  const startExhausted = s.state === 'error' && (s.error ?? '').includes('fail-closed')
-  if (!watchdogBlocked && !startExhausted) return null
-  return {
-    detail: watchdogBlocked
-      ? 'Сторож исчерпал все validated каналы: защищённый путь недоступен ни на одном из них — туннель остановлен (BLOCKED).'
-      : 'Failover-on-start перебрал все validated каналы — ни один не прошёл protected-probe (FR-001).',
-    hint: 'Запуск закрыт честно: без успешного probe туннель не включается. Когда сеть восстановит путь — повторная попытка безопасна.',
-  }
-})
-
-// Авто-повтор (V2-053): backend сам запланировал следующую попытку с растущим
-// backoff (30с→1м→2м→4м→8м→10м); здесь — честный отсчёт до неё. Тикаем каждую
-// секунду, пока баннер виден; отрицательная дельта (due давно, попытка вот-вот)
-// показывается как «сейчас». Пустой nextRetryAt — авто-повтор не запланирован
-// (старая сборка backend или ручное действие отменило расписание).
-const nowTick = ref(Date.now())
-let retryTicker: ReturnType<typeof setInterval> | null = null
-watchEffect(() => {
-  const active = !!failClosed.value && !isBusy.value && !!state.value?.nextRetryAt
-  if (active && retryTicker === null) {
-    nowTick.value = Date.now()
-    retryTicker = setInterval(() => (nowTick.value = Date.now()), 1000)
-  } else if (!active && retryTicker !== null) {
-    clearInterval(retryTicker)
-    retryTicker = null
-  }
-})
-onUnmounted(() => {
-  if (retryTicker !== null) clearInterval(retryTicker)
-})
-
-const retrySchedule = computed(() => {
-  const s = state.value
-  if (!failClosed.value || isBusy.value || !s?.nextRetryAt) return null
-  const due = new Date(s.nextRetryAt)
-  if (Number.isNaN(due.getTime())) return null // честно: битное время не выдумываем
-  const leftMs = due.getTime() - nowTick.value
-  const total = Math.max(0, Math.floor(leftMs / 1000))
-  const mm = Math.floor(total / 60)
-  const ss = total % 60
-  const left = leftMs <= 0 ? 'сейчас' : mm > 0 ? `${mm}:${String(ss).padStart(2, '0')}` : `0:${String(ss).padStart(2, '0')}`
-  return {
-    attempt: s.retryAttempt,
-    left,
-    dueText: fmtTime(due),
-  }
-})
-
-function fmtTime(d: Date): string {
-  return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+function onDisconnect(): void {
+  if (!canStop.value) return
+  primaryControl.value?.focus({ preventScroll: true })
+  void stop()
 }
 
-const retrying = ref(false)
-
-/** Повторный запуск из fail-closed баннера — тот же гейт, что и hero-кнопка. */
-async function onRetryStart(): Promise<void> {
-  if (retrying.value) return
-  retrying.value = true
-  try {
-    await start()
-  } finally {
-    retrying.value = false
-  }
-}
-
-// ---------- текущий канал ----------
-
+const heading = computed(() => {
+  const s = state.value
+  if (stopPending.value) return 'Остановка ожидает результата'
+  if (switching.value) return 'Смена канала ожидает результата'
+  if (isBusy.value && s?.state === 'stopped') return 'Запуск ожидает результата'
+  if (!stateLoaded.value) return 'Получаем состояние…'
+  if (!s) return 'Состояние неизвестно'
+  if (s.blockedReason === 'proxy_conflict' || !s.blockedReason && s.lifecycleActions?.explicitStartRequired) return 'Настройки прокси изменились'
+  if (s.blockedReason) return s.state === 'stopped' ? 'Подключение остановлено, требуется действие' : 'Подключение требует внимания'
+  if ((s.state === 'stopped' || s.state === 'error') && !s.lifecycleActions) return 'Доступность запуска неизвестна'
+  if (s.state === 'stopped' && s.lifecycleActions?.startAllowed === false) return 'Запуск сейчас недоступен'
+  return s.state === 'running' ? 'Соединение запущено' : lifecycleLabels[s.state]
+})
+const tone = computed(() => {
+  const s = state.value
+  if (s?.blockedReason || s?.state === 'error') return 'danger'
+  if (isBusy.value || switching.value) return 'pending'
+  return isRunning.value ? 'active' : 'idle'
+})
+const reason = computed(() => {
+  const s = state.value
+  if (stopPending.value) return 'Команда остановки ожидает завершения. Предыдущий статус не подтверждает её результат.'
+  if (primaryAction.value.kind === 'stop' && s?.lifecycleActions?.stopBlockedBy) return lifecycleActionHelp[s.lifecycleActions.stopBlockedBy].reason
+  if (switching.value) return 'Команда смены канала ожидает результата. Можно остановить операцию.'
+  if (isBusy.value && s?.state === 'stopped') return 'Команда запуска ожидает результата. Можно остановить операцию до ответа приложения.'
+  if (!stateLoaded.value) return 'Ожидается ответ приложения Windows.'
+  if (!s) return 'Нет ответа приложения. Состояние подключения и защиты не подтверждено.'
+  if (primaryAction.value.kind === 'start' && !api.hasOrderedLifecycle()) return uiFailure.lifecycleUnavailable
+  if (s.blockedReason) return blockedReasonLabels[s.blockedReason]
+  if ((s.state === 'stopped' || s.state === 'error') && s.lifecycleActions?.startBlockedBy) return lifecycleActionHelp[s.lifecycleActions.startBlockedBy].reason
+  if (s.error) return s.error
+  if ((s.state === 'stopped' || s.state === 'error') && !s.lifecycleActions) return 'Приложение не передало поддерживаемые сведения о команде запуска. Отсутствие запущенного ядра само по себе не является запретом запуска.'
+  if (s.state === 'starting') return 'Идёт запуск и проверка канала. Можно остановить ожидающую операцию.'
+  if (s.state === 'reloading') return 'Идёт смена канала. Результат предыдущей проверки не подтверждает новый путь.'
+  if (s.state === 'stopping') return 'Ожидается результат остановки. Отправка команды ещё не означает завершение.'
+  if (s.state === 'running') return 'Проверка ниже относится к указанным целям. Защита всей системы этим статусом не подтверждается.'
+  return 'Подключение остановлено. Выберите канал и подключитесь, когда приложение будет готово.'
+})
+const nextStep = computed(() => {
+  const s = state.value
+  if (stopPending.value) return 'Дождитесь подтверждения остановки. Повторная команда сейчас не нужна.'
+  if (primaryAction.value.kind === 'stop' && s?.lifecycleActions?.stopBlockedBy) return lifecycleActionHelp[s.lifecycleActions.stopBlockedBy].next
+  if (!s) return 'Откройте приложение Windows и повторите загрузку состояния.'
+  if (primaryAction.value.kind === 'start' && !api.hasOrderedLifecycle()) return 'Используйте совместимый комплект интерфейса и приложения. Устаревшая команда запуска не используется как обход.'
+  if (isBusy.value || switching.value) return 'Дождитесь результата или остановите операцию.'
+  if (s.blockedReason) return blockedReasonNextStep(s.blockedReason)
+  if (s.lifecycleActions?.startBlockedBy && !isRunning.value) return lifecycleActionHelp[s.lifecycleActions.startBlockedBy].next
+  if (!s.lifecycleActions && !isRunning.value) return 'Обновите состояние. Если сведения о команде не появятся, используйте совместимый комплект приложения Windows и интерфейса.'
+  if (s.state === 'error') return 'Изучите причину и последний отчёт. Новый запуск — новая попытка, которая должна пройти обязательную проверку.'
+  return isRunning.value ? 'Проверьте время и область последнего результата перед использованием соединения.' : 'Можно запустить новую попытку подключения. Результат будет подтверждаться обязательной проверкой пути.'
+})
+const showDisconnect = computed(() => stateLoaded.value && primaryAction.value.kind === 'start' &&
+  (!state.value || state.value.state === 'error' || !!state.value.blockedReason || !!state.value.nextRetryAt))
+const showRefresh = computed(() => stateLoaded.value && (stopPending.value || isBusy.value || switching.value || !state.value?.lifecycleActions ||
+  !state.value.lifecycleActions.startAllowed && !state.value.lifecycleActions.stopAllowed))
 const activeChannel = computed(() => state.value?.activeChannel ?? null)
-const channelStatusPill = computed(() => {
-  const v = activeChannel.value?.validation
-  if (!v) return null
-  const cls =
-    v === 'live-verified' ? 'live' : v === 'degraded' ? 'degraded' : v === 'blocked' ? 'blocked' : v === 'retired' || v === 'planned' ? 'neutral' : 'configured'
-  return { cls, text: validationStatusLabels[v] ?? v }
-})
+const routingMode = computed(() => state.value?.proxyMode === 'tun' ? 'TUN · режим процесса' : state.value?.proxyMode === 'socks' ? 'Системный прокси · SOCKS/HTTP' : 'Не сообщён')
 
-// ---------- проверка пути: шаги с человеческими статусами ----------
-
-const probeSteps = computed(() => state.value?.probe?.steps ?? [])
-const probePassed = computed(() => probeSteps.value.filter((s) => s.status === 'pass').length)
-
-const summaryItems = computed(() => {
-  const items: { icon: IconName; text: string; ok: boolean | null }[] = []
-  const find = (needle: string): 'pass' | 'fail' | null => {
-    const st = probeSteps.value.find((s) => s.name.toLowerCase().includes(needle))
-    if (!st) return null
-    return st.status === 'pass' ? 'pass' : st.status === 'fail' ? 'fail' : null
+// One display clock, owned by this page. It does not refresh or validate facts.
+const now = ref(Date.now())
+let clock: ReturnType<typeof setInterval> | null = null
+watchEffect(() => {
+  const needed = !!state.value?.probeLastAt || !!state.value?.nextRetryAt
+  if (needed && clock === null) {
+    now.value = Date.now()
+    clock = setInterval(() => { now.value = Date.now() }, 1000)
+  } else if (!needed && clock !== null) {
+    clearInterval(clock)
+    clock = null
   }
-  const dns = find('dns')
-  const egress = find('egress')
-  const leak = find('leak')
-  const https = probeSteps.value.filter((s) => s.name.toLowerCase().startsWith('https'))
-  const httpsOk = https.length > 0 && https.every((s) => s.status === 'pass')
-
-  items.push({ icon: 'shield', text: 'Соединение защищено', ok: state.value?.probe?.ok ?? null })
-  items.push({ icon: 'key', text: 'IP-адрес скрыт', ok: egress === 'pass' ? true : egress === 'fail' ? false : null })
-  items.push({ icon: 'pulse', text: 'DNS через туннель', ok: dns === 'pass' ? true : dns === 'fail' ? false : null })
-  items.push({ icon: 'server', text: 'Доступ к ресурсам открыт', ok: httpsOk ? true : https.some((s) => s.status === 'fail') ? false : null })
-  items.push({ icon: 'warn', text: 'Утечек прямого трафика нет', ok: leak === 'pass' ? true : leak === 'fail' ? false : null })
-  return items
 })
-
-// Egress-IP: сначала шаг «Expected egress» (его detail содержит факт),
-// резерв — любой egress-шаг с распознаваемым IP (v2 брал первый попавшийся
-// egress-шаг и показывал «обе цели видят один egress» вместо адреса).
-const egressFact = computed(() => {
-  const steps = probeSteps.value
-  const pick = (needle: string) => steps.find((s) => s.name.toLowerCase().includes(needle))
-  const st = pick('expected egress') ?? pick('egress')
-  if (!st) return '—'
-  const m = /egress IP: ([0-9a-fA-F.:]+)/.exec(st.detail) ?? /egress ([0-9a-fA-F.:]+),/.exec(st.detail)
-  if (m) return m[1]
-  return /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/.exec(st.detail)?.[1] ?? '—'
+onUnmounted(() => { if (clock !== null) clearInterval(clock) })
+const probeAge = computed(() => fmtObservationAge(state.value?.probeLastAt, now.value))
+const retry = computed(() => {
+  const iso = state.value?.nextRetryAt
+  if (!iso) return null
+  const due = Date.parse(iso)
+  if (!Number.isFinite(due)) return { time: 'время неизвестно', left: 'срок не распознан' }
+  const seconds = Math.max(0, Math.ceil((due - now.value) / 1000))
+  return { time: fmtDateTime(iso), left: seconds ? `через ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : 'назначенное время наступило; результат ожидается' }
 })
-
-// ---------- карта маршрута ----------
-
-const routeActive = computed(() => isRunning.value && !!activeChannel.value)
-const routeServerLabel = computed(() => activeChannel.value?.id ?? '')
-const routeServerHint = computed(() => activeChannel.value?.server ?? '')
-const localIP = computed(() => facts.value?.localIP || null)
-const directEgress = computed(() => facts.value?.publicIP || null)
-const tunnelEgress = computed(() => facts.value?.tunnelIP || null)
-
-// ---------- режим маршрутизации: факт + честное переключение ----------
-
-const routingMode = computed(() => {
-  if (state.value?.proxyMode === 'tun') return 'TUN (вся система)'
-  if (state.value?.proxyMode === 'socks') return 'SOCKS 127.0.0.1:1080'
-  return null
+const probeSummary = computed(() => {
+  const report = state.value?.probe
+  if (state.value?.probeRunning) return { label: 'Проверка выполняется', cls: 'pending' }
+  if (!report) return { label: 'Результата нет', cls: 'unknown' }
+  if (report.scope?.historical) return { label: 'Исторический отчёт', cls: 'unknown' }
+  const steps = report.steps.filter(step => !isInformationalProbeStep(step))
+  if (!steps.length) return { label: 'Нет обязательных измерений', cls: 'unknown' }
+  const statuses = steps.map(probeStepStatus)
+  if (statuses.some(status => status === 'fail' || status === 'leak')) return { label: 'Есть неуспешные шаги', cls: 'danger' }
+  if (report.ok && statuses.every(status => status === 'pass')) return { label: 'Обязательные шаги пройдены', cls: 'passed' }
+  return { label: 'Результат неполный', cls: 'unknown' }
 })
-
-const tunSwitchLabel = computed(() => {
-  if (tunBusy.value) return 'Перезапуск…'
-  return tunMode.value ? 'Вернуться в SOCKS' : 'Включить TUN'
-})
-
-function onToggleTUN(): void {
-  void setTUNMode(!tunMode.value)
-}
-
-const { data: netGuard } = usePolling(netGuardStatus, 10000)
-
+const checkDisabled = computed(() => !stateLoaded.value || !state.value || !isRunning.value || isBusy.value || switching.value || state.value.probeRunning)
 </script>
 
 <template>
-  <div class="dashboard">
-    <!-- ================= HERO ================= -->
-    <section class="protection-hero card" :class="heroTone">
-      <div class="protection-control">
-        <button
-          class="protection-button"
-          :class="heroTone"
-          :disabled="primaryAction.disabled"
-          :aria-label="primaryAction.label"
-          :title="isRunning ? 'Остановить защиту' : 'Подключить (probe перед активацией — обязателен)'"
-          @click="onPrimary"
-        >
-          <span class="power-symbol">⏻</span>
-        </button>
-
-        <div class="protection-state" :class="heroTone">
-          <span class="state-dot"></span>
-          <span>{{ heroHeading.toUpperCase() }}</span>
-        </div>
-
-        <div class="control-facts" aria-label="Краткие факты подключения">
-          <div class="control-fact">
-            <span>Режим</span>
-            <strong>{{ routingMode ?? 'нет данных' }}</strong>
-          </div>
-          <div class="control-fact">
-            <span>Канал</span>
-            <strong>{{ activeChannel?.id ?? 'не выбран' }}</strong>
-          </div>
-          <div class="control-fact">
-            <span>Проверено</span>
-            <strong>{{ state?.probeLastAt ? fmtDateTime(state.probeLastAt) : 'нет данных' }}</strong>
-          </div>
-        </div>
-
-        <button class="disconnect-button" :disabled="primaryAction.disabled" @click="onPrimary">
+  <div ref="page" class="dashboard">
+    <section class="connection-overview" :class="tone">
+      <div class="connection-heading" role="status" aria-live="polite" aria-atomic="true">
+        <p class="eyebrow">Подключение</p>
+        <h2 class="connection-title">{{ heading }}</h2>
+        <p class="reason">{{ reason }}</p>
+      </div>
+      <div class="connection-actions">
+        <ActionButton id="dashboard-primary-action" ref="primaryControl" class="primary" :disabled="primaryAction.disabled" :busy="stopPending" aria-describedby="connection-next-step" @click="onPrimary">
+          <Icon :name="primaryAction.kind === 'start' ? 'play' : 'cross'" :size="17" />
           {{ primaryAction.label }}
-        </button>
+        </ActionButton>
+        <ActionButton v-if="showDisconnect" :disabled="!canStop" aria-describedby="disconnect-effect" @click="onDisconnect">Отключить VPN и отменить повторы</ActionButton>
+        <ActionButton v-if="showRefresh" @click="refreshState">Обновить состояние</ActionButton>
+        <button class="btn" @click="navTo('channels')">Каналы</button>
       </div>
-
-      <div class="protection-information">
-        <div class="protection-heading" :class="heroTone">{{ heroHeading }}</div>
-        <div class="protection-description">{{ heroDescription }}</div>
-        <button
-          v-if="canReleaseProtection"
-          class="release-protection"
-          :disabled="state?.state === 'stopping'"
-          @click="stop"
-        >Отключить защиту и автоповтор</button>
-
-        <!-- Fail-closed: все каналы исчерпаны (failover-on-start или сторож) -->
-        <div v-if="failClosed" class="failclosed-banner" role="alert">
-          <div class="fc-head">
-            <span class="fc-badge">FAIL-CLOSED</span>
-            <strong>Все каналы не прошли проверку защищённого пути</strong>
-          </div>
-          <p class="fc-detail">{{ failClosed.detail }}</p>
-          <p class="fc-hint">{{ failClosed.hint }}</p>
-          <p v-if="retrySchedule" class="fc-next">
-            ⟳ Авто-повтор запуска<span v-if="retrySchedule.attempt > 1"> (попытка №{{ retrySchedule.attempt }})</span>:
-            через <strong>{{ retrySchedule.left }}</strong> — в {{ retrySchedule.dueText }}.
-            Каждая попытка снова проверяет все каналы probe'ом.
-          </p>
-          <div class="fc-actions">
-            <button class="fc-retry" :disabled="retrying || isBusy" @click="onRetryStart">
-              {{ retrying ? 'Повторный запуск…' : '⟳ Повторить запуск' }}
-            </button>
-            <button class="fc-channels" @click="navTo('channels')">Посмотреть каналы</button>
-          </div>
-        </div>
-
-        <!-- Текущий канал -->
-        <article v-if="activeChannel" class="current-channel-card">
-          <div class="current-channel-header">
-            <h2>Текущий канал</h2>
-            <span v-if="channelStatusPill" class="channel-status" :class="channelStatusPill.cls">
-              <span class="status-dot"></span>
-              {{ channelStatusPill.text }}
-            </span>
-          </div>
-
-          <div class="current-channel-name">
-            <span>{{ activeChannel.id }}</span>
-            <span class="channel-arrow">›</span>
-          </div>
-
-          <div class="current-channel-details">
-            <div class="channel-detail">
-              <span class="detail-label">Транспорт</span>
-              <strong>{{ activeChannel.transport || '—' }}</strong>
-            </div>
-            <div class="channel-detail">
-              <span class="detail-label">Порт</span>
-              <strong>{{ activeChannel.port || '—' }}</strong>
-            </div>
-            <div class="channel-detail">
-              <span class="detail-label">Сервер</span>
-              <strong>{{ activeChannel.server || '—' }}</strong>
-            </div>
-          </div>
-
-          <div class="current-channel-actions">
-            <button class="change-channel-button" @click="navTo('channels')">
-              <span>⇄</span>
-              <span>Сменить канал</span>
-            </button>
-          </div>
-        </article>
-
-        <!-- Карта маршрута -->
-        <div class="route-visualization" :class="{ active: routeActive }">
-          <div class="map-background"><div class="map-dots"></div></div>
-
-          <svg class="route-line" viewBox="0 0 350 130" preserveAspectRatio="none">
-            <path d="M70 100 C125 78 180 48 270 38" />
-          </svg>
-
-          <div class="route-point device">
-            <span class="point"></span>
-            <div class="route-location">
-              <strong>Ваше устройство</strong>
-              <small>{{ localIP ? 'локальный IP: ' + localIP : 'локальный IP: нет данных' }}</small>
-            </div>
-          </div>
-
-          <div v-if="routeActive" class="route-point server">
-            <span class="point"></span>
-            <div class="route-location">
-              <strong>{{ routeServerLabel }}</strong>
-              <small>{{ routeServerHint }}</small>
-            </div>
-          </div>
-          <div v-else class="route-point server ghost">
-            <span class="point"></span>
-            <div class="route-location">
-              <strong>Сервер</strong>
-              <small>нет активного канала</small>
-            </div>
-          </div>
-        </div>
-
-        <!-- Прямой egress (факт наблюдения) -->
-        <div class="egress-fact mono">
-          {{ directEgress ? `прямой egress: ${directEgress}` : 'прямой egress: нет данных (наблюдение недоступно)' }}
-        </div>
-
-        <!-- Сводка защиты: только факты probe -->
-        <div class="connection-summary">
-          <div
-            v-for="item in summaryItems"
-            :key="item.text"
-            class="connection-summary-item"
-            :class="{ ok: item.ok === true, bad: item.ok === false }"
-          >
-            <span class="summary-icon"><Icon :name="item.icon" :size="12" /></span>
-            <span>{{ item.text }}</span>
-          </div>
-        </div>
-      </div>
+      <p id="connection-next-step" class="next-step">{{ nextStep }}</p>
+      <p v-if="commandMessage" class="next-step" role="status" aria-atomic="true">{{ commandMessage }}</p>
+      <p v-if="showDisconnect" id="disconnect-effect" class="next-step">Ручное отключение запрашивает снятие защиты после очистки. Отправка команды не подтверждает её результат.</p>
+      <p v-if="retry" class="retry-note">Автоповтор: {{ retry.left }} · {{ retry.time }}. Расписание не подтверждает успешный запуск.</p>
+      <dl class="connection-facts">
+        <div><dt>Режим</dt><dd>{{ routingMode }}</dd></div>
+        <div><dt>{{ isRunning ? 'Сообщённый активный канал' : 'Выбранный канал' }}</dt><dd>{{ activeChannel?.id ?? 'Не сообщён' }}</dd></div>
+        <div><dt>Транспорт</dt><dd>{{ activeChannel?.transport || 'Не сообщён' }}</dd></div>
+      </dl>
+      <p v-if="activeChannel" class="channel-note">
+        {{ activeChannel.server }}:{{ activeChannel.port }} · Реестр: {{ validationStatusLabels[activeChannel.validation] ?? activeChannel.validation }}.
+        Статус реестра не подтверждает текущую доступность.
+      </p>
     </section>
 
-    <!-- ================= ПРОВЕРКА ПУТИ (инлайн-отчёт) ================= -->
-    <aside class="security-check-card card">
-      <div class="card-header">
-        <h2>Проверка защищённого пути</h2>
-        <span v-if="state?.probeRunning" class="status-badge warning"><span class="status-dot"></span>Выполняется…</span>
-        <span v-else-if="state?.probe?.ok" class="status-badge success"><span class="status-dot"></span>Успешно</span>
-        <span v-else-if="state?.probe" class="status-badge danger"><span class="status-dot"></span>Не пройдено</span>
-        <span v-else class="status-badge neutral"><span class="status-dot"></span>Нет данных</span>
+    <section class="verification">
+      <div class="section-title">
+        <h2>Последняя проверка пути</h2>
+        <span class="result-label" :class="probeSummary.cls" role="status">{{ probeSummary.label }}</span>
       </div>
-
-      <ol v-if="probeSteps.length" class="probe-steps">
-        <li v-for="(s, i) in probeSteps" :key="i" class="probe-step" :class="s.status" :title="s.detail">
-          <span class="ps-name">{{ s.name }}</span>
-          <span class="ps-status">{{
-            s.status === 'pass' ? 'пройдено' : s.status === 'fail' ? 'провалено' : s.status === 'leak' ? 'обнаружена утечка' : s.status === 'unavailable' ? 'нет доказательства' : s.status === 'running' ? 'выполняется' : s.status === 'skipped' ? 'пропущено' : 'ожидает'
-          }}</span>
-        </li>
-      </ol>
-      <p v-else class="probe-empty">Probe ещё не запускался в этой сессии.</p>
-
-      <div class="verification-columns">
-        <div class="verification-column">
-          <div class="verification-label">Последняя проверка</div>
-          <strong>{{ state?.probeLastAt ? fmtDateTime(state.probeLastAt) : '—' }}</strong>
-        </div>
-        <div class="verification-column">
-          <strong>{{ probeSteps.length ? `${probePassed} / ${probeSteps.length}` : '—' }}</strong>
-          <div class="verification-label">шагов пройдено</div>
-        </div>
-        <div class="verification-column">
-          <div class="verification-label">Egress</div>
-          <strong class="mono">{{ egressFact }}</strong>
-        </div>
+      <p class="observation-time">
+        <time v-if="state?.probeLastAt && fmtDateTime(state.probeLastAt) !== '—'" :datetime="state.probeLastAt">{{ fmtDateTime(state.probeLastAt) }}</time>
+        <span v-else>Время не сообщено</span> · {{ probeAge }}
+      </p>
+      <p class="scope-note">HTTPS-цели и DoH через выбранный канал. Системный DNS, IPv6, UDP и отсутствие утечек других приложений этим отчётом не измеряются.</p>
+      <p class="scope-note">Срок применимости не передан. Возраст отчёта сам по себе не подтверждает его актуальность для текущей сети и канала.</p>
+      <details class="probe-details" :open="probeSummary.cls === 'danger'">
+        <summary>Шаги и границы измерения</summary>
+        <ProbeReportView :report="state?.probe ?? null" :running="state?.probeRunning ?? false" />
+      </details>
+      <div class="actions-row">
+        <ActionButton :disabled="checkDisabled" :busy="state?.probeRunning ?? false" @click="runProbe">{{ state?.probeRunning ? 'Проверка выполняется…' : 'Проверить путь' }}</ActionButton>
+        <button class="btn" @click="navTo('tests')">Все проверки</button>
       </div>
-
-      <button class="secondary-button" :disabled="state?.probeRunning || isBusy" @click="runProbe">
-        {{ state?.probeRunning ? 'Проверка выполняется…' : 'Проверить сейчас' }}
-      </button>
-    </aside>
-
-    <!-- ================= БЫСТРЫЕ ФАКТЫ ================= -->
-    <section class="quick-information">
-      <article class="information-card card">
-        <div class="information-icon"><Icon name="dashboard" :size="20" /></div>
-        <div class="information-content">
-          <div class="information-label">Режим маршрутизации</div>
-          <div class="information-value">{{ routingMode ?? 'Нет данных' }}</div>
-          <div class="information-description">
-            <button class="mode-switch" :disabled="tunBusy || !stateLoaded" :title="tunMode ? 'Перезапуск приложения в SOCKS-режиме' : 'Перезапуск с правами администратора и WFP kill switch'" @click="onToggleTUN">
-              {{ tunSwitchLabel }}
-            </button>
-          </div>
-        </div>
-      </article>
-
-      <article class="information-card card">
-        <div class="information-icon blue"><Icon name="pulse" :size="20" /></div>
-        <div class="information-content">
-          <div class="information-label">Системный прокси</div>
-          <div class="information-value">{{ netGuard ? (netGuard.proxy.enabled ? `${netGuard.proxy.server}:${netGuard.proxy.port}` : 'выключен') : 'Нет данных' }}</div>
-          <div class="information-description">
-            {{ netGuard ? (netGuard.proxy.listenerAlive ? 'листенер жив' : 'листенер не слушается') : 'нет данных NetGuard' }}
-          </div>
-        </div>
-      </article>
-
-      <article class="information-card card">
-        <div class="information-icon blue"><Icon name="server" :size="20" /></div>
-        <div class="information-content">
-          <div class="information-label">Локальный IP</div>
-          <div class="information-value">{{ localIP ?? 'Нет данных' }}</div>
-          <div class="information-description"><span class="small-status">{{ facts?.connectionType || 'тип соединения: нет данных' }}</span></div>
-        </div>
-      </article>
-
-      <article class="information-card card">
-        <div class="information-icon"><Icon name="shield" :size="20" /></div>
-        <div class="information-content">
-          <div class="information-label">Публичный IP защищённого пути</div>
-          <div class="information-value">{{ isRunning ? (tunnelEgress ?? 'Нет данных') : (directEgress ?? 'Нет данных') }}</div>
-          <div class="information-description">
-            {{ isRunning ? (tunnelEgress ? 'измерен через SOCKS5h' : 'туннельный egress не подтверждён') : facts?.country ? `прямой egress · ${facts.country}` : 'подключение не установлено' }}
-          </div>
-        </div>
-      </article>
+      <p v-if="!isRunning" class="scope-note">Для проверки действующего пути сначала нужно подключение.</p>
     </section>
 
-    <!-- ================= КАНАЛЫ + АВТОЗАЩИТА (сводки со ссылками) ================= -->
+    <section class="environment">
+      <h2>Локальные наблюдения</h2>
+      <dl class="environment-facts">
+        <div><dt>Системный прокси</dt><dd>{{ netGuard ? (netGuard.proxy.enabled ? netGuard.proxy.server || 'Включён, адрес не сообщён' : 'Выключен') : 'Нет данных' }}</dd></div>
+        <div><dt>Локальный адрес</dt><dd>{{ facts?.localIP || 'Нет данных' }}<small>{{ facts?.connectionType || 'Тип сети не сообщён' }}</small></dd></div>
+        <div><dt>{{ isRunning ? 'Внешний IP в ответе через прокси' : 'Внешний IP контрольного запроса' }}</dt><dd>{{ egressIP || fmtEgressObservation(egressObservation) }}<small>{{ egressIP ? `${fmtEgressObservation(egressObservation)}. ` : '' }}{{ fmtEgressObservationTime(egressObservation) }}. IP не устанавливает локальный маршрут.</small></dd></div>
+      </dl>
+      <div class="actions-row">
+        <button class="btn" @click="navTo('netguard')">Локальное восстановление</button>
+        <button class="btn" @click="navTo('logs')">Открыть журнал</button>
+      </div>
+      <ProcessModeSetting id="dashboard-process-mode" />
+      <p class="scope-note">Прокси охватывает приложения, которые его используют. Флаг режима процесса не подтверждает общий допуск трафика TUN.</p>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.dashboard {
-  display: grid;
-  grid-template-columns: 1fr 360px;
-  gap: 10px;
-}
-
-.dashboard > .protection-hero { grid-column: 1; }
-.dashboard > .quick-information { grid-column: 1; }
-.dashboard > .security-check-card,
-.dashboard > .events-section { grid-column: 2; }
-.dashboard > .security-check-card { align-self: start; }
-.dashboard > .digest-grid { grid-column: 1; }
-
-/* ---------- HERO ---------- */
-.protection-hero {
-  position: relative;
-  min-height: 300px;
-  display: grid;
-  grid-template-columns: 36% 64%;
-  overflow: hidden;
-}
-.protection-hero.running .protection-control::before {
-  background: radial-gradient(circle at 50% 55%, rgba(24, 229, 161, 0.15), transparent 42%);
-}
-.protection-hero.error .protection-control::before {
-  background: radial-gradient(circle at 50% 55%, rgba(255, 79, 89, 0.12), transparent 42%);
-}
-.protection-control {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 20px;
-}
-.protection-control::before {
-  content: '';
-  position: absolute;
-  inset: 14px 20px;
-  pointer-events: none;
-}
-
-.protection-button {
-  position: relative;
-  width: 150px;
-  height: 150px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 5px solid #35e6a5;
-  background: radial-gradient(circle, rgba(24, 216, 150, 0.17), rgba(7, 28, 38, 0.95) 67%);
-  color: var(--green-bright);
-  box-shadow:
-    0 0 0 7px rgba(37, 227, 160, 0.09),
-    0 0 28px rgba(37, 227, 160, 0.35),
-    inset 0 0 30px rgba(37, 227, 160, 0.17);
-  z-index: 2;
-}
-.power-symbol {
-  font-size: 56px;
-  line-height: 1;
-  font-weight: 300;
-}
-.protection-button.stopped,
-.protection-button.busy {
-  border-color: var(--blue);
-  color: var(--blue-bright);
-  background: radial-gradient(circle, rgba(20, 140, 255, 0.12), rgba(7, 24, 38, 0.95) 67%);
-  box-shadow:
-    0 0 0 7px rgba(20, 140, 255, 0.07),
-    0 0 26px rgba(20, 140, 255, 0.25),
-    inset 0 0 30px rgba(20, 140, 255, 0.13);
-}
-/* fail-closed баннер (V2-053) */
-.failclosed-banner {
-  margin-top: 14px;
-  padding: 14px 16px;
-  border: 1px solid #ff636355;
-  border-left: 3px solid var(--red, #ff6363);
-  border-radius: 10px;
-  background: #ff63630d;
-  display: grid;
-  gap: 6px;
-}
-.fc-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text);
-  font-size: 13.5px;
-}
-.fc-badge {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: #ff636322;
-  border: 1px solid #ff636355;
-  color: #ffb9bd;
-}
-.fc-detail,
-.fc-hint,
-.fc-next {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-.fc-detail {
-  color: var(--text);
-}
-.fc-hint {
-  color: var(--text-faint);
-}
-.fc-next {
-  color: var(--text-faint);
-}
-.fc-next strong {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.fc-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 6px;
-}
-.fc-retry,
-.fc-channels {
-  cursor: pointer;
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 12.5px;
-  font-weight: 600;
-  transition: all 0.15s ease;
-}
-.fc-retry {
-  border: 1px solid #ff636366;
-  background: #ff63631a;
-  color: #ffd2d4;
-}
-.fc-retry:hover:not(:disabled) {
-  background: #ff63632e;
-}
-.fc-retry:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.fc-channels {
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-}
-.fc-channels:hover {
-  background: var(--bg-hover);
-}
-
-.protection-button.error {
-  border-color: var(--red);
-  color: var(--red);
-  background: radial-gradient(circle, rgba(255, 79, 89, 0.12), rgba(38, 7, 14, 0.95) 67%);
-  box-shadow:
-    0 0 0 7px rgba(255, 79, 89, 0.08),
-    0 0 26px rgba(255, 79, 89, 0.25),
-    inset 0 0 30px rgba(255, 79, 89, 0.13);
-}
-.protection-button:disabled {
-  filter: saturate(0.4) brightness(0.75);
-  cursor: not-allowed;
-}
-.protection-button:not(:disabled):hover {
-  filter: brightness(1.12);
-}
-
-.protection-state {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  letter-spacing: 0.09em;
-  color: var(--text-soft);
-  z-index: 2;
-}
-.protection-state .state-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--muted-2);
-}
-.protection-state.running .state-dot { background: var(--green); box-shadow: 0 0 9px var(--green); }
-.protection-state.error .state-dot { background: var(--red); box-shadow: 0 0 9px var(--red); }
-.protection-state.busy .state-dot { background: var(--yellow); animation: pulse 1.1s infinite; }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-.disconnect-button {
-  height: 34px;
-  padding: 0 22px;
-  border-radius: 8px;
-  border: 1px solid var(--border-light);
-  background: var(--panel-3);
-  color: var(--text-soft);
-  font-size: 12px;
-  z-index: 2;
-}
-.disconnect-button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
-.disconnect-button:disabled { opacity: 0.55; cursor: not-allowed; }
-
-.protection-information {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px 20px 16px 6px;
-  min-width: 0;
-}
-.protection-heading {
-  font-size: 21px;
-  font-weight: 680;
-}
-.protection-heading.running { color: var(--green-bright); }
-.protection-heading.error { color: var(--red); }
-.protection-heading.busy { color: var(--yellow); }
-.protection-description {
-  color: var(--muted);
-  font-size: 12px;
-  max-width: 560px;
-}
-
-.current-channel-card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: linear-gradient(160deg, rgba(13, 30, 47, 0.9), rgba(10, 25, 40, 0.9));
-  padding: 11px 13px;
-}
-.current-channel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.current-channel-header h2 {
-  margin: 0;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  font-weight: 600;
-}
-.current-channel-name {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 640;
-  margin: 5px 0 8px;
-}
-.channel-arrow { color: var(--green); font-weight: 700; }
-.current-channel-details {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.channel-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 9px;
-  border-radius: 7px;
-  background: rgba(7, 21, 34, 0.7);
-  border: 1px solid rgba(26, 52, 75, 0.55);
-  min-width: 0;
-}
-.detail-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--muted-2);
-}
-.channel-detail strong {
-  font-size: 11.5px;
-  font-family: var(--mono);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.current-channel-actions { margin-top: 9px; }
-.change-channel-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 28px;
-  padding: 0 13px;
-  border-radius: 7px;
-  border: 1px solid var(--green-border);
-  background: var(--green-soft);
-  color: var(--green-bright);
-  font-size: 11.5px;
-}
-.change-channel-button:hover { background: rgba(37, 227, 160, 0.19); }
-
-.route-visualization {
-  position: relative;
-  height: 118px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: #081827;
-  overflow: hidden;
-}
-.map-background {
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(rgba(65, 110, 148, 0.16) 1px, transparent 1px);
-  background-size: 16px 16px;
-}
-.route-line {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.route-line path {
-  fill: none;
-  stroke: rgba(20, 140, 255, 0.28);
-  stroke-width: 1.6;
-  stroke-dasharray: 5 5;
-}
-.route-visualization.active .route-line path {
-  stroke: var(--green);
-  animation: dashmove 1.4s linear infinite;
-}
-@keyframes dashmove {
-  to { stroke-dashoffset: -20; }
-}
-.route-point {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.route-point.device { left: 12px; bottom: 14px; }
-.route-point.server { right: 12px; top: 14px; text-align: right; flex-direction: row-reverse; }
-.route-point.server.ghost { opacity: 0.45; }
-.route-point .point {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 10px var(--blue);
-}
-.route-visualization.active .route-point .point {
-  background: var(--green);
-  box-shadow: 0 0 12px var(--green);
-}
-.route-location { display: flex; flex-direction: column; gap: 1px; }
-.route-location strong { font-size: 11.5px; font-family: var(--mono); }
-.route-location small { font-size: 12px; color: var(--muted-2); }
-
-.egress-fact {
-  font-size: 12px;
-  color: var(--muted-2);
-}
-
-.connection-summary {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-}
-.connection-summary-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 9px;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: rgba(7, 21, 34, 0.65);
-  font-size: 12px;
-  color: var(--text-soft);
-  min-width: 0;
-}
-.connection-summary-item .summary-icon { color: var(--muted-2); flex: 0 0 auto; }
-.connection-summary-item.ok { border-color: var(--green-border); }
-.connection-summary-item.ok .summary-icon { color: var(--green); }
-.connection-summary-item.bad { border-color: var(--red-border); color: #ffb9bd; }
-.connection-summary-item.bad .summary-icon { color: var(--red); }
-
-/* ---------- ПРОВЕРКА ПУТИ ---------- */
-.security-check-card { padding: 13px; display: flex; flex-direction: column; gap: 10px; }
-.probe-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.probe-step {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 7px;
-  background: var(--bg-elevated);
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.probe-step .ps-status { flex: 0 0 auto; }
-.probe-step.pass .ps-status { color: var(--ok); }
-.probe-step.fail .ps-status { color: var(--danger); }
-.probe-step.leak .ps-status { color: var(--danger); }
-.probe-step.unavailable .ps-status { color: var(--text-faint); }
-.probe-step.running .ps-status { color: var(--accent); }
-.probe-step.skipped .ps-status { color: var(--text-faint); }
-.probe-empty { color: var(--text-faint); font-size: 12px; margin: 0; }
-
-.verification-columns {
-  display: grid;
-  grid-template-columns: 1.3fr 0.7fr 1fr;
-  gap: 8px;
-}
-.verification-column {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: 7px;
-  background: rgba(7, 21, 34, 0.6);
-  border: 1px solid rgba(26, 52, 75, 0.5);
-}
-.verification-column strong { font-size: 12px; }
-.verification-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--muted-2);
-}
-.secondary-button {
-  height: 32px;
-  border-radius: 8px;
-  border: 1px solid var(--border-light);
-  background: var(--panel-3);
-  color: var(--text-soft);
-  font-size: 12px;
-}
-.secondary-button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
-.secondary-button:disabled { opacity: 0.55; cursor: not-allowed; }
-
-/* ---------- БЫСТРЫЕ ФАКТЫ ---------- */
-.quick-information {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-.information-card {
-  display: flex;
-  gap: 11px;
-  padding: 13px;
-  align-items: flex-start;
-}
-.information-icon {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  color: var(--green);
-  background: var(--green-soft);
-  border: 1px solid var(--green-border);
-}
-.information-icon.blue {
-  color: var(--blue-bright);
-  background: var(--blue-soft);
-  border-color: var(--blue-border);
-}
-.information-content { min-width: 0; }
-.information-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted-2);
-}
-.information-value {
-  font-size: 13.5px;
-  font-weight: 640;
-  margin: 2px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.information-description {
-  font-size: 12px;
-  color: var(--muted-2);
-  min-height: 24px;
-  display: flex;
-  align-items: center;
-}
-.mode-switch {
-  height: 22px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--blue-border);
-  background: var(--blue-soft);
-  color: var(--blue-bright);
-  font-size: 12px;
-}
-.mode-switch:hover:not(:disabled) { background: rgba(20, 140, 255, 0.22); }
-.mode-switch:disabled { opacity: 0.5; cursor: wait; }
-
-/* ---------- СВОДКИ (каналы + автозащита) ---------- */
-.digest-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.digest-card { padding: 13px; display: flex; flex-direction: column; gap: 9px; }
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.card-header h2 { margin: 0; font-size: 13.5px; font-weight: 650; }
-.count-badge {
-  min-width: 20px;
-  height: 18px;
-  padding: 0 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: var(--gray-soft);
-  border: 1px solid var(--gray-border);
-  font-size: 12px;
-  color: var(--text-soft);
-}
-.digest-link {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: var(--blue-bright);
-  font-size: 11.5px;
-  padding: 2px 4px;
-}
-.digest-link:hover { text-decoration: underline; }
-.digest-empty { color: var(--muted); font-size: 11.5px; }
-.digest-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.digest-note { margin: 0; font-size: 12px; color: var(--muted-2); }
-.digest-note strong { font-family: var(--mono); color: var(--text-soft); }
-.digest-rows { display: flex; flex-direction: column; gap: 5px; }
-.digest-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.digest-row strong { color: var(--text-soft); font-weight: 600; }
-
-.auto-incidents { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
-.auto-incident {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  font-size: 12px;
-  padding: 5px 8px;
-  border-radius: 6px;
-  background: rgba(7, 21, 34, 0.6);
-}
-.auto-incident .ai-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-2); flex: 0 0 auto; }
-.auto-incident.warn .ai-dot, .auto-incident.warning .ai-dot { background: var(--yellow); }
-.auto-incident.error .ai-dot { background: var(--red); }
-.auto-incident .ai-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-soft);
-}
-
-/* ---------- СОБЫТИЯ ---------- */
-.events-section { padding: 13px; display: flex; flex-direction: column; gap: 8px; }
-.events-header { display: flex; align-items: center; justify-content: space-between; }
-.events-header h2 { margin: 0; font-size: 13.5px; font-weight: 650; }
-.show-more-button {
-  background: none;
-  border: none;
-  color: var(--blue-bright);
-  font-size: 11.5px;
-}
-.show-more-button:hover { text-decoration: underline; }
-.events-list { display: flex; flex-direction: column; gap: 4px; }
-.event-line {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  font-size: 12px;
-  padding: 5px 8px;
-  border-radius: 6px;
-  background: rgba(7, 21, 34, 0.6);
-}
-.event-time { color: var(--muted-2); flex: 0 0 auto; }
-.event-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-soft); }
-.event-line.error .event-text { color: #ffb9bd; }
-.event-line.warn .event-text { color: #ffe2a8; }
-.events-empty { color: var(--muted-2); font-size: 11.5px; }
-
-/* ---------- общие статусные чипы ---------- */
-.channel-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 12px;
-  border: 1px solid;
-}
-.channel-status .status-dot { width: 6px; height: 6px; border-radius: 50%; }
-.channel-status.live { color: var(--green-bright); border-color: var(--green-border); background: var(--green-soft); }
-.channel-status.live .status-dot { background: var(--green); }
-.channel-status.configured { color: var(--blue-bright); border-color: var(--blue-border); background: var(--blue-soft); }
-.channel-status.configured .status-dot { background: var(--blue); }
-.channel-status.degraded { color: var(--yellow); border-color: var(--yellow-border); background: var(--yellow-soft); }
-.channel-status.degraded .status-dot { background: var(--yellow); }
-.channel-status.blocked { color: var(--red); border-color: var(--red-border); background: var(--red-soft); }
-.channel-status.blocked .status-dot { background: var(--red); }
-.channel-status.neutral { color: var(--muted); border-color: var(--gray-border); background: var(--gray-soft); }
-.channel-status.neutral .status-dot { background: var(--muted-2); }
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 12px;
-  border: 1px solid var(--gray-border);
-  background: var(--gray-soft);
-  color: var(--muted);
-}
-.status-badge .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-2); }
-.status-badge.success { color: var(--green-bright); border-color: var(--green-border); background: var(--green-soft); }
-.status-badge.success .status-dot { background: var(--green); }
-.status-badge.warning { color: var(--yellow); border-color: var(--yellow-border); background: var(--yellow-soft); }
-.status-badge.warning .status-dot { background: var(--yellow); }
-.status-badge.danger { color: var(--red); border-color: var(--red-border); background: var(--red-soft); }
-.status-badge.danger .status-dot { background: var(--red); }
-
-.mono { font-family: var(--mono); }
-
-@media (max-width: 1180px) {
-  .dashboard { grid-template-columns: 1fr; }
-  .dashboard > .security-check-card,
-  .dashboard > .events-section { grid-column: 1; }
-  .quick-information { grid-template-columns: repeat(2, 1fr); }
-  .connection-summary { grid-template-columns: repeat(2, 1fr); }
-}
-
-/* ---------- command center visual system ---------- */
-.dashboard {
-  width: min(1280px, 100%);
-  margin: 0 auto;
-  grid-template-columns: minmax(0, 1.55fr) minmax(310px, .8fr);
-  gap: 16px;
-}
-
-.dashboard :deep(.card),
-.protection-hero,
-.security-check-card,
-.digest-card,
-.events-section,
-.information-card {
-  border-color: rgba(42, 62, 77, .82);
-  background: linear-gradient(145deg, rgba(8, 17, 24, .94), rgba(4, 10, 15, .97));
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .2);
-}
-
-.protection-hero {
-  min-height: 350px;
-  grid-template-columns: 210px minmax(0, 1fr);
-  border-radius: 2px 16px 2px 16px;
-  clip-path: polygon(0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
-}
-
-.protection-hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-top: 1px solid rgba(255, 98, 38, .48);
-  background: linear-gradient(90deg, rgba(255, 98, 38, .08), transparent 25%);
-}
-
-.protection-control {
-  border-right: 1px solid rgba(42, 62, 77, .65);
-  background:
-    radial-gradient(circle at 50% 48%, rgba(255, 98, 38, .1), transparent 46%),
-    repeating-radial-gradient(circle at 50% 48%, transparent 0 38px, rgba(255,255,255,.018) 39px 40px);
-}
-
-.protection-button,
-.protection-button.running,
-.protection-button.stopped,
-.protection-button.busy {
-  width: 124px;
-  height: 124px;
-  border: 2px solid #ff6226;
-  color: #ff7c49;
-  background: radial-gradient(circle, rgba(255, 98, 38, .16), rgba(6, 13, 19, .96) 67%);
-  box-shadow:
-    0 0 0 1px rgba(255, 98, 38, .15),
-    0 0 38px rgba(255, 98, 38, .19),
-    inset 0 0 32px rgba(255, 98, 38, .1);
-}
-
-.protection-button::before,
-.protection-button::after {
-  content: '';
-  position: absolute;
-  inset: -11px;
-  border: 1px solid rgba(255, 98, 38, .16);
-  border-radius: 50%;
-  clip-path: polygon(0 0, 42% 0, 42% 100%, 0 100%);
-}
-
-.protection-button::after {
-  inset: -18px;
-  transform: rotate(180deg);
-  opacity: .55;
-}
-
-.power-symbol { font-size: 48px; }
-.protection-state.running .state-dot { background: #ff6226; box-shadow: 0 0 10px #ff6226; }
-.protection-state.running { color: #ff9c76; }
-.disconnect-button { display: none; }
-.release-protection {
-  align-self: flex-start;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 8px 12px;
-  color: var(--text);
-  cursor: pointer;
-}
-.release-protection:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.release-protection:disabled { opacity: .55; cursor: wait; }
-
-.control-facts {
-  width: min(210px, 100%);
-  margin-top: 10px;
-  border-top: 1px solid #1b2b37;
-}
-.control-fact {
-  display: grid;
-  grid-template-columns: 60px minmax(0, 1fr);
-  gap: 9px;
-  padding: 8px 2px;
-  border-bottom: 1px solid #15242f;
-  text-align: left;
-}
-.control-fact span {
-  color: #607385;
-  font-size: 12px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.control-fact strong {
-  color: #aebdca;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.protection-information { padding: 28px 28px 22px 26px; gap: 14px; }
-.protection-heading { font-size: clamp(25px, 2.6vw, 34px); letter-spacing: -.045em; }
-.protection-heading.running { color: #fff; }
-.protection-description { font-size: 13px; }
-
-.current-channel-card,
-.route-visualization {
-  border-radius: 2px 12px 2px 12px;
-  background: rgba(4, 11, 16, .62);
-}
-.current-channel-card { padding: 15px 17px; }
-.current-channel-header h2 { color: #ff8657; letter-spacing: .16em; }
-.current-channel-name { margin: 8px 0 12px; font-size: 18px; }
-.channel-arrow { color: #ff6226; }
-.channel-detail { border-radius: 2px; background: rgba(12, 23, 31, .72); }
-.change-channel-button {
-  height: 34px;
-  border-radius: 2px 8px 2px 8px;
-  border-color: rgba(255, 98, 38, .35);
-  background: rgba(255, 98, 38, .1);
-  color: #ff9b73;
-}
-.change-channel-button:hover { background: rgba(255, 98, 38, .18); }
-
-.route-visualization { height: 104px; }
-.route-visualization.active .route-line path { stroke: #ff6226; }
-.route-visualization.active .route-point .point { background: #ff6226; box-shadow: 0 0 12px #ff6226; }
-
-.connection-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.connection-summary-item { border-radius: 2px 8px 2px 8px; }
-
-.security-check-card,
-.events-section,
-.digest-card,
-.information-card {
-  border-radius: 2px 12px 2px 12px;
-}
-.security-check-card { padding: 18px; gap: 14px; }
-.security-check-card .card-header h2,
-.events-header h2,
-.digest-card .card-header h2 { font-size: 15px; }
-.probe-step { border-radius: 2px; background: rgba(13, 24, 33, .74); padding: 8px 10px; }
-.secondary-button { border-radius: 2px 8px 2px 8px; }
-
-.quick-information { gap: 12px; }
-.quick-information {
-  padding: 0;
-  gap: 0;
-  border: 1px solid rgba(42, 62, 77, .82);
-  border-radius: 2px 12px 2px 12px;
-  background: rgba(5, 12, 18, .82);
-  overflow: hidden;
-}
-.information-card {
-  padding: 17px;
-  border: 0 !important;
-  border-right: 1px solid #1a2a36 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-.information-card:last-child { border-right: 0 !important; }
-.information-icon {
-  border-radius: 2px 9px 2px 9px;
-  color: #ff7f4c;
-  background: rgba(255, 98, 38, .1);
-  border-color: rgba(255, 98, 38, .26);
-}
-.information-icon.blue { color: #ff7f4c; background: rgba(255, 98, 38, .1); border-color: rgba(255, 98, 38, .26); }
-.mode-switch { border-radius: 2px 7px 2px 7px; }
-
-.channel-status.live,
-.status-badge.success {
-  color: var(--green-bright);
-  border-color: var(--green-border);
-  background: var(--green-soft);
-}
-.events-section { padding: 17px; }
-.event-line, .auto-incident { border-radius: 2px; }
-
-/* Детальные данные доступны через контекстные вкладки. Главная остаётся
-   рабочей сводкой: состояние, маршрут, probe и четыре факта среды. */
-.digest-grid,
-.events-section { display: none; }
-
-@media (max-width: 1180px) {
-  .dashboard { grid-template-columns: 1fr; }
-  .protection-hero { grid-template-columns: 250px minmax(0, 1fr); }
-}
-
-@media (max-width: 980px) {
-  .protection-hero { grid-template-columns: 1fr; }
-  .protection-control {
-    min-height: 158px;
-    flex-direction: row;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-    justify-content: center;
-    gap: 28px;
-  }
-  .protection-button,
-  .protection-button.running,
-  .protection-button.stopped,
-  .protection-button.busy {
-    width: 112px;
-    height: 112px;
-  }
-  .power-symbol { font-size: 38px; }
-  .protection-information { padding: 22px 18px 18px; }
-  .control-facts { display: none; }
-  .current-channel-details, .verification-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .quick-information { grid-template-columns: repeat(2, 1fr); }
-  .quick-information { display: grid; }
-  .information-card { border-right: 0 !important; border-bottom: 1px solid #1a2a36 !important; }
-  .connection-summary { grid-template-columns: 1fr 1fr; }
-}
-
-@media (max-width: 620px) {
-  .protection-control { min-height: 132px; gap: 18px; }
-  .protection-button,
-  .protection-button.running,
-  .protection-button.stopped,
-  .protection-button.busy { width: 92px; height: 92px; }
-  .power-symbol { font-size: 32px; }
-  .protection-heading { font-size: 24px; }
-  .current-channel-details { grid-template-columns: 1fr 1fr; }
-  .current-channel-details .channel-detail:last-child { grid-column: 1 / -1; }
-  .verification-columns { grid-template-columns: 1fr; }
-  .quick-information { grid-template-columns: 1fr; }
-  .connection-summary { grid-template-columns: 1fr; }
-  .route-visualization { height: 92px; }
-}
+.dashboard { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; min-width: 0; }
+.connection-overview, .verification, .environment { min-width: 0; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); overflow-wrap: anywhere; }
+.connection-overview { grid-column: 1 / -1; border-top: 2px solid var(--accent); background: linear-gradient(110deg, var(--panel-2), var(--panel)); }
+.eyebrow { margin: 0 0 8px; color: var(--accent); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.connection-title { margin: 0; font-size: clamp(24px, 2rem, 36px); line-height: 1.2; }
+h2 { margin: 0; font-size: 17px; line-height: 1.4; }
+.reason { margin: 14px 0 0; max-width: 82ch; color: var(--text-soft); line-height: 1.65; }
+.connection-actions, .actions-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.btn { min-height: 40px; white-space: normal; text-align: left; }
+.connection-actions .primary { min-width: 180px; justify-content: center; }
+.next-step, .retry-note { margin: 12px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.retry-note { color: var(--yellow); }
+.connection-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; border-top: 1px solid var(--border); margin: 24px 0 0; padding-top: 18px; }
+dt { color: var(--muted); font-size: 12px; }
+dd { margin: 5px 0 0; color: var(--text); font-size: 14px; }
+.channel-note { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
+.section-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.result-label { font-size: 12px; color: var(--muted); }
+.result-label.passed { color: var(--green-bright); }
+.result-label.pending { color: var(--accent); }
+.result-label.danger, .danger .connection-title { color: var(--red); }
+.observation-time, .scope-note { margin: 12px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.observation-time { color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.probe-details { margin-top: 18px; border-block: 1px solid var(--border); padding-block: 10px; }
+.probe-details summary { cursor: pointer; padding-block: 5px; color: var(--text-soft); }
+.probe-details :deep(.report), .probe-details :deep(.empty), .probe-details :deep(.running) { margin-top: 12px; }
+.environment-facts { margin: 12px 0 0; }
+.environment-facts > div { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.environment-facts small { display: block; color: var(--muted); margin-top: 5px; font-size: 12px; }
+@media (max-width: 1180px) { .dashboard { grid-template-columns: minmax(0, 1fr); gap: 14px; } }
+@media (max-width: 760px) { .connection-overview, .verification, .environment { padding: 18px; } .connection-facts { grid-template-columns: minmax(0, 1fr); gap: 14px; } }
 </style>

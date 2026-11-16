@@ -1,100 +1,92 @@
-/**
- * Секреты-хранилище (список + операции поверх api.*). Значения не держатся
- * в сторе: из backend приходят только метаданные (fingerprint, статусы).
- */
-import { ref } from 'vue'
-import type { SecretMeta, SecretTestReport, SecretVerifyResult } from '@/api/contract'
-import { api } from '@/api/backend'
-import { toast } from './toast'
+import { onBeforeUnmount, readonly, ref } from 'vue'
+import type { SecretKind, SecretMeta } from '../api/contract'
+import { api } from '../api/backend'
 
-const items = ref<SecretMeta[] | null>(null) // null = источник недоступен
+export type SecretActionResult<T> = { ok: true; value: T; refreshed: boolean } | { ok: false; message: string }
+const items = ref<SecretMeta[] | null>(null)
 const loading = ref(false)
+const loadError = ref('')
+const receivedAt = ref<string | null>(null)
+const actionBusy = ref(false)
+const lastOutcome = ref('')
+let users = 0
+let generation = 0
+let revision = 0
+let pending: Promise<boolean> | null = null
 
-async function refresh(): Promise<void> {
+function refresh(): Promise<boolean> {
+  if (!users) return Promise.resolve(false)
+  if (pending) return pending
+  const owner = generation, readRevision = revision
   loading.value = true
-  try {
-    items.value = await api.listSecrets()
-  } catch (e) {
-    toast('error', e instanceof Error ? e.message : String(e))
-  } finally {
-    loading.value = false
-  }
-}
-
-/** Создать/обновить секрет по типу (используется формой «Новый секрет»). */
-async function save(kind: string, title: string, value: string, hint: string): Promise<boolean> {
-  try {
-    await api.addSecret(kind, title, value, hint)
-    toast('ok', 'Секрет сохранён локально (значение не отображается)')
-    await refresh()
-    return true
-  } catch (e) {
-    toast('error', e instanceof Error ? e.message : String(e))
+  loadError.value = ''
+  pending = Promise.resolve().then(() => api.listSecrets()).then(result => {
+    if (!users || owner !== generation || readRevision !== revision) return false
+    items.value = result
+    receivedAt.value = result === null ? null : new Date().toISOString()
+    if (result === null) loadError.value = 'Метаданные недоступны. Откройте приложение Windows.'
+    return result !== null
+  }, () => {
+    if (!users || owner !== generation || readRevision !== revision) return false
+    items.value = null
+    receivedAt.value = null
+    loadError.value = 'Не удалось получить метаданные. Повторите загрузку; пустота хранилища не подтверждена.'
     return false
-  }
+  }).finally(() => {
+    pending = null
+    if (users && (owner !== generation || readRevision !== revision)) void refresh()
+    else loading.value = false
+  })
+  return pending
 }
 
-/** Задать значение существующего слота (для предзаполненных карточек). */
-async function setValue(id: string, value: string): Promise<boolean> {
+/** Native operations cannot be cancelled by Vue; no raw errors or values in refs/toasts. */
+async function perform<T>(operation: () => Promise<T>, success: string, failure: string, waitForList = true): Promise<SecretActionResult<T>> {
+  if (!users || actionBusy.value) return { ok: false, message: 'Другая операция ещё не завершена. Дождитесь её результата.' }
+  const owner = generation
+  actionBusy.value = true
+  lastOutcome.value = ''
+  revision++
   try {
-    await api.saveSecret(id, value)
-    toast('ok', 'Значение сохранено (шифрование DPAPI, статус проверки сброшен)')
-    await refresh()
-    return true
-  } catch (e) {
-    toast('error', e instanceof Error ? e.message : String(e))
-    return false
-  }
-}
-
-async function remove(id: string, title: string): Promise<boolean> {
-  try {
-    await api.deleteSecret(id)
-    toast('info', `Секрет «${title}» удалён из локального хранилища`)
-    await refresh()
-    return true
-  } catch (e) {
-    toast('error', e instanceof Error ? e.message : String(e))
-    return false
-  }
-}
-
-async function verify(id: string): Promise<SecretVerifyResult | null> {
-  try {
-    const res = await api.verifySecret(id)
-    await refresh()
-    return res
-  } catch (e) {
-    // Ошибка валидации — нормальный исход: backend вернул обновлённую карточку.
-    try {
-      await refresh()
-    } catch {
-      /* список важнее тоста */
+    const value = await operation()
+    revision++
+    let refreshed = false
+    if (users) {
+      if (waitForList) refreshed = await refresh()
+      else void refresh()
     }
-    toast('error', e instanceof Error ? e.message : String(e))
-    return null
-  }
-}
-
-/** Живой тест значения секрета (сеть/сервер). Ошибку возвращает вызывающему
- * код карточки: отчёт с шагами показывается прямо в карточке. */
-async function runTest(id: string): Promise<SecretTestReport> {
-  return api.testSecret(id)
-}
-
-async function reveal(id: string): Promise<string | null> {
-  try {
-    const res = await api.revealSecret(id)
-    if (res.value === null) {
-      toast('warn', res.error || 'Раскрытие недоступно')
-    }
-    return res.value
-  } catch (e) {
-    toast('error', e instanceof Error ? e.message : String(e))
-    return null
-  }
+    if (users && owner === generation) lastOutcome.value = success + (refreshed ? ' Метаданные перечитаны.' : ' Актуальные метаданные ещё не подтверждены.')
+    return { ok: true, value, refreshed }
+  } catch {
+    revision++
+    if (users) void refresh()
+    if (users && owner === generation) lastOutcome.value = failure
+    return { ok: false, message: failure }
+  } finally { actionBusy.value = false }
 }
 
 export function useSecretsStore() {
-  return { items, loading, refresh, save, setValue, remove, verify, reveal, runTest }
+  users++
+  onBeforeUnmount(() => {
+    users = Math.max(0, users - 1)
+    if (!users) {
+      generation++
+      revision++
+      items.value = null
+      receivedAt.value = null
+      lastOutcome.value = ''
+      loadError.value = ''
+    }
+  })
+  return {
+    items: readonly(items), loading: readonly(loading), loadError: readonly(loadError), receivedAt: readonly(receivedAt),
+    actionBusy: readonly(actionBusy), lastOutcome: readonly(lastOutcome), refresh,
+    save: (kind: SecretKind, title: string, value: string, hint: string) => perform(() => api.addSecret(kind, title, value, hint), 'Сохранение подтверждено приложением.', 'Сохранение не подтверждено. Перечитайте метаданные перед повторной попыткой.'),
+    setValue: (id: string, value: string) => perform(() => api.saveSecret(id, value), 'Запись значения подтверждена приложением.', 'Запись не подтверждена. Перечитайте метаданные перед повторной попыткой.'),
+    remove: (id: string) => perform(() => api.deleteSecret(id), 'Удаление подтверждено приложением.', 'Удаление не подтверждено. Перечитайте метаданные перед повторной попыткой.'),
+    verify: (id: string) => perform(() => api.verifySecret(id), 'Ответ локальной проверки получен.', 'Положительный результат проверки не получен. Сверьте формат и обновлённое состояние слота.'),
+    runTest: (id: string) => perform(() => api.testSecret(id), 'Отчёт проверки получен.', 'Отчёт не получен. Причина сетевого или серверного отказа не установлена.'),
+    // Return plaintext to the original caller promptly; do not hold it for a list reload.
+    reveal: (id: string) => perform(() => api.revealSecret(id), 'Ответ на выдачу значения получен; копирование является отдельным действием.', 'Выдача значения не подтверждена.', false),
+  }
 }

@@ -9,8 +9,10 @@
   `secretvault/`, `onboarding/`, `update/` — границы данных и доверия.
 - `controller.go`, `failover.go`, `netwatch.go`, `autoretry.go` — решения и события;
   применять изменения engine через Manager. Controller не второй engine owner.
-- Ядро embedded; отдельного production `sing-box.exe` сейчас нет. Новая служба —
-  целевое решение из OFF-06, не предположение для текущего кода.
+- sing-box встроен в тот же EXE; V2-114 source запускает internal worker через
+  NewIsolatedEngine/Windows Job Object. Это непроверенная изоляция процесса,
+  не реализованная служба OFF-06; отдельного `sing-box.exe` нет. NewEngine
+  оставлен для worker/local harness, не как fallback приложения.
 
 ## Инварианты
 
@@ -23,6 +25,10 @@
   engine, controller и metrics session. Без структурной совместимости — Reload.
 - Panic не возвращает успех. Switch/rollback/error должны иметь единый outcome.
 - Ошибка не снимает strict-барьер как побочный эффект cleanup; см. FR-009.
+- V2-116 source: Manager вызывает LifecycleProbe для native TUN boundary в
+  Start/select/Reload/rollback/cleanup. Periodic Run не делает external curl.
+  Custom probeFactory для TUN требует explicit tunnelBoundary; без неё fail до
+  native действий. Эти изменения ещё не прошли compile/native приёмку.
 - Secret refs, schema, migration и подписи проверяются до commit. Никаких
   synthetic credentials в production config; никаких реальных в fixtures.
 - При генерации bindings использовать Wails; `frontend/wailsjs` не править вручную.

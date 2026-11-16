@@ -17,6 +17,8 @@ import { uiLogLines } from '../composables/uiLog'
 import Icon from './Icon.vue'
 import type { IconName } from './Icon.vue'
 
+defineProps<{ searchOpen?: boolean; notificationsOpen?: boolean }>()
+
 const runtimeInfo = ref<RuntimeInfo | null>(null)
 const versionLabel = computed(() => runtimeInfo.value?.version ? `v${runtimeInfo.value.version}` : MOCK_ACTIVE ? 'dev-mock' : 'версия недоступна')
 
@@ -113,13 +115,15 @@ const statusIcon = computed<IconName>(() => {
     </div>
 
     <div class="header-actions">
-      <button class="settings-search" title="Поиск по настройкам (Ctrl K)" @click="emit('openSearch')">
+      <button type="button" class="settings-search" title="Поиск по разделам (Ctrl K)" aria-label="Поиск по разделам"
+        aria-keyshortcuts="Control+k Meta+k" aria-haspopup="dialog" :aria-expanded="searchOpen === true" @click="emit('openSearch')">
         <span class="search-icon"><Icon name="search" :size="13" /></span>
-        <span>Поиск по настройкам…</span>
+        <span>Найти страницу…</span>
         <kbd>Ctrl K</kbd>
       </button>
 
-      <button class="notification-button" aria-label="Уведомления" title="События журнала" @click="onNotifications">
+      <button type="button" class="notification-button" aria-label="Уведомления" title="События журнала"
+        aria-haspopup="dialog" :aria-expanded="notificationsOpen === true" @click="onNotifications">
         <Icon name="bell" :size="17" />
         <span v-if="unreadEvents" class="notification-dot"></span>
       </button>
@@ -146,13 +150,16 @@ const statusIcon = computed<IconName>(() => {
 .brand {
   display: flex;
   align-items: center;
-  width: 210px;
+  width: var(--navigation-width, 210px);
+  flex-shrink: 0;
+  min-width: 0;
   padding: 0 24px;
   height: 100%;
 }
 .brand-logo {
   width: 28px;
   height: 38px;
+  flex-shrink: 0;
   margin-right: 13px;
 }
 .brand-logo svg {
@@ -173,6 +180,7 @@ const statusIcon = computed<IconName>(() => {
   display: flex;
   flex-direction: column;
   margin-top: -1px;
+  min-width: 0;
 }
 .brand-name {
   font-size: 16px;
@@ -180,12 +188,16 @@ const statusIcon = computed<IconName>(() => {
   font-weight: 650;
   letter-spacing: 0.02em;
   color: #f1f5f8;
+  white-space: nowrap;
 }
 .brand-version {
   margin-top: 2px;
   color: #6d7d8e;
   font-size: 12px;
   letter-spacing: .14em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar-center {
@@ -297,11 +309,19 @@ const statusIcon = computed<IconName>(() => {
 }
 
 @media (max-width: 1180px) {
-  .brand { width: 72px; padding: 0 20px; }
-  .brand-info { display: none; }
+  .brand { padding: 0 16px; }
+  .brand-logo { margin-right: 8px; }
+  .brand-name { font-size: 13px; letter-spacing: 0; }
+  .brand-version { font-size: 11px; }
   .topbar-center { margin-left: 14px; }
   .settings-search { width: 42px; justify-content: center; }
   .settings-search > span:not(.search-icon), .settings-search kbd { display: none; }
+}
+
+@media (max-width: 900px) {
+  .brand { padding: 0 20px; }
+  .brand-info { display: none; }
+  .brand-logo { margin-right: 0; }
 }
 
 @media (max-width: 820px) {

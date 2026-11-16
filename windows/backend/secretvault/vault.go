@@ -2,11 +2,12 @@
 //
 // Правила проекта (PLAN.md §7, AGENTS.md §2.4):
 //   - значения шифруются DPAPI (пользовательский scope) и живут только в
-//     gitignored-файле windows/secrets/vault.v1.json;
+//     файле %APPDATA%/snowden-system/secrets/vault.v1.json (CLI задаёт путь явно);
 //   - наружу (UI/логи/диагностика) отдаются только метаданные: SHA256-префикс
 //     (fingerprint), статус проверки, счётчик раскрытий;
 //   - сверка client↔server — по хешам, не по значениям;
-//   - запись атомарна (temp + rename), файл не читаем другими пользователями.
+//   - исходное содержимое сравнивается перед записью под profile journal lock;
+//     Windows ACL проверяются отдельно от DPAPI и POSIX mode bits.
 package secretvault
 
 import (
@@ -17,9 +18,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/snowden-system/windows/backend/filetxn"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -88,6 +86,7 @@ type audit struct {
 }
 
 type fileFormat struct {
+	source vaultSource
 	Schema int                    `json:"schema"`
 	Items  map[string]storedEntry `json:"items"`
 	Order  []string               `json:"order"`
@@ -118,6 +117,8 @@ type Manager struct {
 	importJournal string
 }
 
+// NewManager performs no I/O. Before mutations, RecoverImport must bind the
+// profile's fixed journal and check/recover it with caller-supplied targets.
 func NewManager(path string) *Manager {
 	return &Manager{path: path}
 }
@@ -128,28 +129,25 @@ func (m *Manager) Path() string { return m.path }
 // ---------- загрузка/сохранение ----------
 
 func (m *Manager) load() (*fileFormat, error) {
-	if err := filetxn.Check(m.importJournal); err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(m.path)
+	data, source, err := m.readSource()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return &fileFormat{
-				Schema: schemaVersion,
-				Items:  map[string]storedEntry{},
-				Order:  []string{},
-				Audit:  map[string]audit{},
-			}, nil
-		}
 		return nil, fmt.Errorf("secretvault: read: %w", err)
 	}
+	if !source.present {
+		return &fileFormat{source: source, Schema: schemaVersion, Items: map[string]storedEntry{}, Order: []string{}, Audit: map[string]audit{}}, nil
+	}
+	return decodeVault(data, source)
+}
+
+func decodeVault(data []byte, source vaultSource) (*fileFormat, error) {
 	var f fileFormat
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("secretvault: parse %s: %w", m.path, err)
+		return nil, errors.New("secretvault: invalid stored document")
 	}
 	if f.Schema != schemaVersion {
-		return nil, fmt.Errorf("secretvault: unsupported schema %d in %s", f.Schema, m.path)
+		return nil, fmt.Errorf("secretvault: unsupported schema %d", f.Schema)
 	}
+	f.source = source
 	if f.Items == nil {
 		f.Items = map[string]storedEntry{}
 	}
@@ -162,24 +160,30 @@ func (m *Manager) load() (*fileFormat, error) {
 	return &f, nil
 }
 
-// save атомарна: temp-файл рядом + rename. Права — только у владельца.
+// Every mutator retains the exact source from load. Final comparison and write
+// share the profile journal lock; stale derivation fails instead of overwriting.
 func (m *Manager) save(f *fileFormat) error {
-	if err := os.MkdirAll(filepath.Dir(m.path), 0o700); err != nil {
-		return fmt.Errorf("secretvault: mkdir: %w", err)
+	if f == nil || f.source.file == nil {
+		return ErrSourceChanged
 	}
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return fmt.Errorf("secretvault: marshal: %w", err)
 	}
-	tmp := m.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("secretvault: write temp: %w", err)
-	}
-	if err := os.Rename(tmp, m.path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("secretvault: rename: %w", err)
-	}
-	return nil
+	digest := sha256.Sum256(data)
+	return m.withWriter(func() error {
+		if err := m.checkSource(f.source); err != nil {
+			return err
+		}
+		if f.source.present && f.source.digest == digest {
+			return nil
+		}
+		if err := f.source.file.write(data, false); err != nil {
+			return err
+		}
+		f.source.present, f.source.digest = true, digest
+		return nil
+	})
 }
 
 // ---------- операции ----------
@@ -444,11 +448,12 @@ func (m *Manager) Verify(id string) (Meta, error) {
 	}
 	plain, err := m.decryptEntry(it)
 	if err != nil {
-		_ = setStatus("failed", err.Error())
-		return Meta{}, err
+		return Meta{}, errors.Join(err, setStatus("failed", err.Error()))
 	}
 	if err := validateKind(Kind(it.Kind), string(plain)); err != nil {
-		_ = setStatus("failed", err.Error())
+		if saveErr := setStatus("failed", err.Error()); saveErr != nil {
+			return Meta{}, errors.Join(err, saveErr)
+		}
 		return m.metaOf(id, it, a), err
 	}
 	if err := setStatus("ok", ""); err != nil {

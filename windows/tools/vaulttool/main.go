@@ -7,6 +7,7 @@
 //	vaulttool fill <vault.v1.json> <spec.json>
 //	vaulttool list <vault.v1.json>
 //	vaulttool verify-all <vault.v1.json>
+//	vaulttool -metadata-dir <profile metadata dir> fill <vault.v1.json> <spec.json>
 //
 // spec.json: [{"kind":"vless-uuid","path":"secrets/channels/vless_uuid"}, ...]
 // (или {"env":"NAME"} вместо path). kind custom — доп. поля title/hint.
@@ -14,10 +15,13 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/snowden-system/windows/backend/filetxn"
+	"github.com/snowden-system/windows/backend/metadata"
 	"github.com/snowden-system/windows/backend/secretvault"
 )
 
@@ -54,15 +58,32 @@ func valueOf(it specItem) string {
 }
 
 func main() {
-	if len(os.Args) < 3 {
-		fatal("usage: vaulttool fill|list|verify-all <vault.json> [spec.json]")
+	metadataDir := flag.String("metadata-dir", "", "metadata directory of the profile owning this vault (default: current user's Snowden profile)")
+	flag.Parse()
+	args := flag.Args()
+	if len(args) < 2 {
+		fatal("usage: vaulttool [-metadata-dir <dir>] fill|list|verify-all <vault.json> [spec.json]")
 	}
-	cmd, vaultPath := os.Args[1], os.Args[2]
+	cmd, vaultPath := args[0], args[1]
+	if cmd != "fill" && cmd != "list" && cmd != "verify-all" || cmd == "fill" && len(args) != 3 || cmd != "fill" && len(args) != 2 {
+		fatal("invalid command or argument count")
+	}
+	if *metadataDir == "" {
+		var err error
+		*metadataDir, err = metadata.DefaultStoreDir()
+		if err != nil {
+			fatal("metadata directory: %v", err)
+		}
+	}
 	m := secretvault.NewManager(vaultPath)
+	journal := (&metadata.Store{Dir: *metadataDir}).ImportJournal()
+	if err := m.RecoverImport(journal, func(string) error { return filetxn.Check(journal) }); err != nil {
+		fatal("profile journal: %v", err) // no CLI rollback with an inferred target set
+	}
 
 	switch cmd {
 	case "fill":
-		raw, err := os.ReadFile(os.Args[3])
+		raw, err := os.ReadFile(args[2])
 		if err != nil {
 			fatal("read spec: %v", err)
 		}

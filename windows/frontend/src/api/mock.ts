@@ -38,7 +38,7 @@ type MockState = {
 const now = (): string => new Date().toISOString()
 
 const channels = [
-  { id: 'channel-a-vless', transport: 'vless+ws', server: 'vpn.example.com', port: 443, validation: 'live-verified', enabled: true },
+  { id: 'channel-a-vless', transport: 'vless+ws', server: 'vpn.example.invalid', port: 443, validation: 'live-verified', enabled: true },
   { id: 'channel-a-hy2', transport: 'hysteria2', server: '203.0.113.10', port: 8444, validation: 'live-verified', enabled: true },
   { id: 'channel-a-reality', transport: 'vless+tcp-reality', server: 'www.samsung.com', port: 8443, validation: 'live-verified', enabled: true },
   { id: 'channel-a-shadowtls', transport: 'vless+shadowtls', server: 'www.samsung.com', port: 8445, validation: 'configured', enabled: true },
@@ -47,12 +47,12 @@ const channels = [
 const probeOk = (): MockState['probe'] => ({
   ok: true,
   steps: [
-    { name: 'https://vpn.example.com/ip', status: 'pass', detail: `HTTP 200 за 92ms; egress IP: 203.0.113.10` },
+    { name: 'https://vpn.example.invalid/ip', status: 'pass', detail: `HTTP 200 за 92ms; egress IP: 203.0.113.10` },
     { name: 'https://api.ipify.org', status: 'pass', detail: 'HTTP 200 за 104ms; egress IP: 203.0.113.10' },
     { name: 'Egress consistency', status: 'pass', detail: 'обе цели видят один egress' },
     { name: 'Expected egress', status: 'pass', detail: 'egress 203.0.113.10 соответствует каналу' },
     { name: 'Direct leak check', status: 'pass', detail: 'прямой egress отличается — трафик идёт через туннель' },
-    { name: 'DNS через туннель', status: 'pass', detail: 'example.com → 93.184.216.34 (DoH через туннель)' },
+    { name: 'DNS через туннель', status: 'pass', detail: 'example.com → 192.0.2.53 (DoH через туннель)' },
   ],
 })
 
@@ -217,7 +217,7 @@ const mockApp = {
 
   // ---------- факты ----------
   GetNetworkFacts: () =>
-    Promise.resolve({ connectionType: 'Wi-Fi', ssid: 'HomeNet-5G', localIP: '192.168.1.42', isp: 'МГТС', publicIP: '91.92.42.245', tunnelIP: '203.0.113.10', country: '—', countryOrigin: 'RU', dnsViaTunnel: true, netClass: 'wifi', checkedAt: now() }),
+    Promise.resolve({ connectionType: 'Wi-Fi', ssid: 'HomeNet-5G', localIP: '192.168.1.42', isp: 'МГТС', publicIP: '192.0.2.24', tunnelIP: '203.0.113.10', country: '—', countryOrigin: 'RU', dnsViaTunnel: true, netClass: 'wifi', checkedAt: now() }),
   GetRuntimeInfo: () => Promise.resolve({ version: 'dev-mock', os: 'windows', arch: 'amd64', pid: 4242, coreVersion: 'v1.13.19', shellVersion: 'v2.13.0' }),
   GetNetStats: () =>
     Promise.resolve({ inOctets: 7_412_336_128 + Math.floor(Math.random() * 3_000_000), outOctets: 1_236_802_048 + Math.floor(Math.random() * 900_000), speedBps: 450_000_000, alias: 'Wi-Fi (wlan0)' }),

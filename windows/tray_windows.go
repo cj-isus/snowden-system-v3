@@ -15,28 +15,19 @@ package main
 
 import (
 	_ "embed"
-	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/getlantern/systray"
 	"github.com/snowden-system/windows/backend/render"
-	"golang.org/x/sys/windows/registry"
 )
-
-const autostartRunKey = `Software\Microsoft\Windows\CurrentVersion\Run`
-const autostartValueName = "snowden-system"
 
 //go:embed build/windows/icon.ico
 var trayIcon []byte
 
-// startTray — запустить иконку трея (горутина; вызывается из startup).
-func (a *App) startTray() {
-	go systray.Run(a.onTrayReady, a.onTrayExit)
-}
-
-func (a *App) onTrayReady() {
+func (a *App) onTrayReady(session *traySession) {
+	if session.stopping() {
+		return
+	}
 	systray.SetIcon(trayIcon)
 	systray.SetTooltip("snowden.system")
 
@@ -51,17 +42,38 @@ func (a *App) onTrayReady() {
 		channelItems = append(channelItems, it)
 	}
 	systray.AddSeparator()
-	mAutostart := systray.AddMenuItemCheckbox("Автозапуск с системой", "Запускать приложение при входе в систему", autostartEnabled())
+	autostart := newTrayAutostart(a, session)
 	mQuit := systray.AddMenuItem("Выход", "Завершить приложение")
 
 	// Каналы: каждый пункт — собственная горутина-ретранслятор (индекс в ch).
 	chSelected := make(chan int, len(channelItems))
 	for i, it := range channelItems {
-		go func(idx int, mi *systray.MenuItem) {
-			for range mi.ClickedCh {
-				chSelected <- idx
+		idx, mi := i, it
+		session.startWorker(func() {
+			for {
+				select {
+				case <-session.stop:
+					return
+				case <-session.ctx.Done():
+					return
+				case _, ok := <-mi.ClickedCh:
+					if !ok {
+						session.fail()
+						return
+					}
+					if session.stopping() {
+						return
+					}
+					select {
+					case <-session.stop:
+						return
+					case <-session.ctx.Done():
+						return
+					case chSelected <- idx:
+					}
+				}
 			}
-		}(i, it)
+		})
 	}
 
 	setConnected := func(on bool) {
@@ -75,38 +87,84 @@ func (a *App) onTrayReady() {
 	}
 	setConnected(false)
 
-	go func() {
+	session.startWorker(func() {
 		for {
+			if session.stopping() {
+				return
+			}
 			select {
-			case <-mConnect.ClickedCh:
-				a.Start() // асинхронный: результат виден и в трее, и в окне
-			case <-mDisconnect.ClickedCh:
+			case <-session.stop:
+				return
+			case <-session.ctx.Done():
+				return
+			case _, ok := <-mConnect.ClickedCh:
+				if !ok {
+					session.fail()
+					return
+				}
+				if session.stopping() {
+					return
+				}
+				a.Start() // original App lifecycle outcome publishes the actual result
+			case _, ok := <-mDisconnect.ClickedCh:
+				if !ok {
+					session.fail()
+					return
+				}
+				if session.stopping() {
+					return
+				}
 				_ = a.Stop()
-			case idx := <-chSelected:
+			case idx, ok := <-chSelected:
+				if !ok {
+					session.fail()
+					return
+				}
+				if session.stopping() {
+					return
+				}
 				if idx >= 0 && idx < len(ids) {
 					if err := a.SelectChannel(ids[idx]); err != nil {
-						// честный факт в журнал; откат гарантирует живой канал
+						// Existing App lifecycle outcome owns failure/rollback; no live-channel guarantee here.
 						a.appendLog("warn", "трей: переключение на "+ids[idx]+" не удалось: "+err.Error())
 					}
 				}
-			case <-mAutostart.ClickedCh:
-				want := !autostartEnabled()
-				if err := setAutostart(want); err != nil {
-					a.appendLog("error", "автозапуск: "+err.Error())
-				} else if want {
-					mAutostart.Check()
-				} else {
-					mAutostart.Uncheck()
+			case _, ok := <-autostart.item.ClickedCh:
+				if !ok {
+					session.fail()
+					return
 				}
-			case <-mQuit.ClickedCh:
-				systray.Quit()
+				if session.stopping() {
+					return
+				}
+				autostart.click()
+			case _, ok := <-mQuit.ClickedCh:
+				if !ok {
+					session.fail()
+					return
+				}
+				if session.stopping() {
+					return
+				}
+				a.mu.Lock()
+				ctx := a.ctx
+				a.mu.Unlock()
+				if !a.OnBeforeClose(ctx) {
+					a.requestQuit(0) // accepted handoff or already authorized terminal exit
+				}
+				return // the original App cleanup now owns termination
 			}
 		}
-	}()
+	})
 
 	// Зеркало состояния: опрос 2с, обновление только при изменении.
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
 	last := ""
 	for {
+		if session.stopping() {
+			return
+		}
 		a.mu.Lock()
 		st := a.state.State
 		active := a.state.ActiveID
@@ -128,11 +186,15 @@ func (a *App) onTrayReady() {
 				setConnected(false)
 			}
 		}
-		time.Sleep(2 * time.Second)
+		select {
+		case <-session.stop:
+			return
+		case <-session.ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
-
-func (a *App) onTrayExit() {}
 
 // trayChannelIDs — идентификаторы selectable каналов для меню.
 func (a *App) trayChannelIDs() []string {
@@ -147,54 +209,6 @@ func (a *App) trayChannelIDs() []string {
 	return ids
 }
 
-// ---------- автозапуск (F14) ----------
-
-// autostartEnabled — есть ли запись в HKCU Run.
-func autostartEnabled() bool {
-	k, err := registry.OpenKey(registry.CURRENT_USER, autostartRunKey, registry.QUERY_VALUE)
-	if err != nil {
-		return false
-	}
-	defer k.Close()
-	v, _, err := k.GetStringValue(autostartValueName)
-	return err == nil && v != ""
-}
-
-// setAutostart — включить/выключить автозапуск (HKCU, без UAC).
-// Значение: "<exe>" --auto-connect (путь в кавычках: Program Files с пробелами).
-func setAutostart(on bool) error {
-	k, err := registry.OpenKey(registry.CURRENT_USER, autostartRunKey, registry.SET_VALUE)
-	if err != nil {
-		return fmt.Errorf("реестр недоступен: %w", err)
-	}
-	defer k.Close()
-	if !on {
-		return k.DeleteValue(autostartValueName)
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("путь приложения неизвестен: %w", err)
-	}
-	return k.SetStringValue(autostartValueName, `"`+exe+`" --auto-connect`)
-}
-
-// автозапуск-биндинг для UI-настроек (вызывается из SettingsView).
-func (a *App) GetAutostart() bool { return autostartEnabled() }
-
-func (a *App) SetAutostart(on bool) error {
-	if err := setAutostart(on); err != nil {
-		return err
-	}
-	if on {
-		a.appendLog("info", "автозапуск включён (HKCU Run, --auto-connect)")
-	} else {
-		a.appendLog("info", "автозапуск выключен")
-	}
-	return nil
-}
-
 // iconFileGuard — проверка, что embed-иконка на месте (сборка сломается раньше,
 // но тест пусть даёт внятную ошибку).
 func iconFileGuard() bool { return len(trayIcon) > 0 }
-
-var _ = filepath.Join

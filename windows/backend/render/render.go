@@ -2,13 +2,13 @@
 // (FR-002: каналы — данные, не хардкод) и значений секретов.
 //
 // Ключевые правила (docs/old-core-review.md §3):
-//   - в защищённый селектор попадают ТОЛЬКО каналы с validation_status
-//     "live-verified" (UDP-gate для hysteria2 — то же условие; HY2 не может
-//     оказаться в селекторе, пока не доказан live из UDP-сети);
-//   - DNS: все запросы — через туннель; direct-бутстрап только для имени
-//     самого сервера туннеля (иначе круговое разрешение), это не трафик
-//     пользователя;
-//   - HY2 требует pin-сертификат: рендер откажется собирать канал без него;
+//   - selectable configured-канал допускается для явной проверки, но запуск
+//     считается защищённым только после protected probe; статус в дескрипторе
+//     не является текущим доказательством доступности;
+//   - DNS: пользовательские запросы — через tunnel final; только сам dialer
+//     domain-адреса сервера выбирает отдельный bootstrap resolver, не DNS rule
+//     для совпадающего пользовательского имени;
+//   - HY2 требует signed inline certificate policy либо legacy pin-файл;
 //   - результат обязан проходить config.Parse (проверено тестом).
 package render
 
@@ -17,22 +17,31 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/snowden-system/windows/backend/config"
-	"github.com/snowden-system/windows/backend/filetxn"
 	"github.com/snowden-system/windows/backend/metadata"
+	"github.com/snowden-system/windows/backend/netprobe"
 )
 
 //go:embed descriptors.json
 var descriptorsRaw []byte
+
+// The public-profile fetcher and renderer share the configured local endpoint;
+// Manager ownership still has to be checked before/after protected I/O.
+const MixedListenAddress = "127.0.0.1"
+const MixedListenPort = 1080
 
 // ChannelDescriptor uses the signed channel schema while retaining render methods.
 // A named underlying type keeps existing composite literals and package API.
@@ -40,6 +49,11 @@ type ChannelDescriptor metadata.Channel
 
 // DefaultProbeTargets — пара по умолчанию, если дескриптор не задаёт своих.
 var DefaultProbeTargets = []string{"https://api.ipify.org", "https://ifconfig.me/all.json"}
+
+const TUNInterfaceName = "snowden0"
+
+// Fixed measurement dependency, not a fallback transport or provider diversity.
+const ExternalTUNProbeURL = netprobe.TUNProbeURL
 
 type descriptorSet struct {
 	Schema   int                 `json:"schema"`
@@ -55,7 +69,7 @@ type descriptorSet struct {
 type SecretsSource interface {
 	// Get возвращает значение по ссылке на слот (credential_ref).
 	Get(ref string) (string, error)
-	// PinCertPath возвращает путь к pin-PEM канала ("" = нет).
+	// PinCertPath supplies only legacy policies; signed HY2Pins never calls it.
 	PinCertPath(channelID string) string
 }
 
@@ -82,33 +96,30 @@ type SecretIDSource interface {
 //     понижается к "configured" — фейковые live-verified через metadata
 //     невозможны.
 func LoadDescriptors() ([]ChannelDescriptor, error) {
-	channels, err := parseDescriptors(descriptorsRaw)
+	snapshot, err := LoadDescriptorSnapshot()
 	if err != nil {
 		return nil, err
 	}
-	// V2-048/F10: сплит-список берётся из встроенного набора, envelope (если
-	// доставлен) заменяет его в applyEnvelopeOverride (единый источник правды).
-	splitSet = nil
-	var set descriptorSet
-	if err := json.Unmarshal(descriptorsRaw, &set); err == nil {
-		splitSet = validateSplitDirect(set.SplitDirect)
-	}
-	channels, err = applyEnvelopeOverride(channels)
-	if err != nil {
-		return nil, err
-	}
-	return channels, nil
+	return snapshot.Channels, nil
 }
 
-// splitSet — активный список процессов прямого обхода (нижний регистр).
-// Заполняется LoadDescriptors из встроенного набора или envelope.
+// splitSet is a synchronized legacy cache of configured process names.
+// Rendering uses only the explicit DescriptorSnapshot, never this shared cache.
 var splitSet []string
 
-// SplitDirect — текущий список сплита (для UI-карточки, read-only).
+var splitMu sync.RWMutex
+
+func rememberConfiguredSplit(processes []string) {
+	splitMu.Lock()
+	splitSet = slices.Clone(processes)
+	splitMu.Unlock()
+}
+
+// SplitDirect is the legacy configured cache, not proof of an applied session.
 func SplitDirect() []string {
-	out := make([]string, len(splitSet))
-	copy(out, splitSet)
-	return out
+	splitMu.RLock()
+	defer splitMu.RUnlock()
+	return append([]string{}, splitSet...)
 }
 
 // validateSplitDirect — нормализация/валидация списка процессов (общая для
@@ -135,8 +146,11 @@ func validateSplitDirect(in []string) []string {
 // непустом списке — правило без условий в sing-box матчит ВСЁ, и пустой
 // сплит превратил бы весь трафик в direct (выключенный VPN без признаков).
 func routeRulesWithSplit(split []string) []config.RouteRule {
-	rules := make([]config.RouteRule, 0, 4)
-	rules = append(rules, config.RouteRule{Protocol: "dns", Action: "hijack-dns"})
+	rules := make([]config.RouteRule, 0, 5)
+	rules = append(rules,
+		config.RouteRule{Port: []uint16{53}, Action: "hijack-dns"}, // TCP/UDP before sniff, split or LAN rules
+		config.RouteRule{Protocol: "dns", Action: "hijack-dns"},
+	)
 	if len(split) > 0 {
 		// V2-048/F10: процессы из split_direct — прямиком (до RFC1918,
 		// чтобы их локальный трафик не зависел от порядка правил).
@@ -161,7 +175,11 @@ var envelopeStore = func() *metadata.Store {
 // parseSet — строгая валидация готового набора дескрипторов (общий гейт
 // для встроенных и envelope-каналов).
 func parseSet(channels []ChannelDescriptor) ([]ChannelDescriptor, error) {
+	if len(channels) > metadata.MaxProfileChannels {
+		return nil, fmt.Errorf("descriptors: channel count exceeds bounded profile size")
+	}
 	seen := map[string]bool{}
+	owned := make([]ChannelDescriptor, len(channels))
 	for i, ch := range channels {
 		if ch.ID == "" {
 			return nil, fmt.Errorf("descriptors[%d]: empty id", i)
@@ -173,8 +191,12 @@ func parseSet(channels []ChannelDescriptor) ([]ChannelDescriptor, error) {
 		if err := validateChannel(ch); err != nil {
 			return nil, err
 		}
+		owned[i] = ChannelDescriptor(metadata.Channel(ch).Clone())
+		if err := validateChannel(owned[i]); err != nil {
+			return nil, err
+		}
 	}
-	return channels, nil
+	return owned, nil
 }
 
 // envelopeVersionPath — файл с последним принятым metadata_version
@@ -192,18 +214,27 @@ func CurrentEnvelopeVersion() uint64 {
 }
 
 func readEnvelopeVersion(dir string) uint64 {
-	data, err := os.ReadFile(envelopeVersionPath(dir))
+	state, err := metadata.LoadAcceptedProfile(dir)
 	if err != nil {
 		return 0
 	}
-	v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
-	if err != nil {
-		return 0
-	}
-	return v
+	return state.Version
 }
 
 func writeEnvelopeVersion(dir string, v uint64) error {
+	state, err := metadata.LoadAcceptedProfile(dir)
+	if err != nil {
+		return err
+	}
+	if state.EnvelopeSHA256 != "" {
+		if state.Version == v {
+			return nil
+		}
+		return fmt.Errorf("metadata: accepted identity requires an authenticated profile transaction")
+	}
+	if v < state.Version {
+		return fmt.Errorf("metadata: version downgrade")
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -217,33 +248,22 @@ func writeEnvelopeVersion(dir string, v uint64) error {
 // applyEnvelopeOverride — валидация, ревокации и статус-правила FR-008.
 // nil-стора (нет UserConfigDir) или отсутствие envelope — встроенный набор.
 func applyEnvelopeOverride(channels []ChannelDescriptor) ([]ChannelDescriptor, error) {
-	store := envelopeStore
-	if store == nil {
-		return channels, nil
-	}
-	unlock := filetxn.Serialize(store.ImportJournal())
-	defer unlock()
-	env, err := store.Apply(time.Now(), readEnvelopeVersion(store.Dir))
-	if err != nil {
-		return nil, fmt.Errorf("metadata override: %w", err)
-	}
-	if env == nil {
-		return channels, nil
-	}
-	out, err := DescriptorsFromEnvelope(env)
-	if err != nil {
+	snapshot := &DescriptorSnapshot{Channels: channels, SplitDirect: SplitDirect(), Profile: ProfileProvenance{Source: "embedded_configuration"}}
+	if err := applyProfileSnapshot(snapshot); err != nil {
 		return nil, err
 	}
-	splitSet = validateSplitDirect(env.SplitDirect)
-	if err := writeEnvelopeVersion(store.Dir, env.MetadataVersion); err != nil {
-		return nil, fmt.Errorf("metadata override: сохранить version: %w", err)
-	}
-	return out, nil
+	snapshot.Channels, _ = projectProtectedPayloadEligibility(snapshot.Channels)
+	rememberConfiguredSplit(snapshot.SplitDirect)
+	return snapshot.Channels, nil
 }
 
 // DescriptorsFromEnvelope is the pure descriptor gate used by import preview
 // and runtime loading. It does not write version.txt or change splitSet.
 func DescriptorsFromEnvelope(env *metadata.Envelope) ([]ChannelDescriptor, error) {
+	return DescriptorsFromEnvelopeAt(env, time.Now())
+}
+
+func DescriptorsFromEnvelopeAt(env *metadata.Envelope, now time.Time) ([]ChannelDescriptor, error) {
 	if env == nil {
 		return nil, fmt.Errorf("metadata: missing envelope")
 	}
@@ -268,6 +288,17 @@ func DescriptorsFromEnvelope(env *metadata.Envelope) ([]ChannelDescriptor, error
 	if _, err := parseSet(out); err != nil {
 		return nil, err
 	}
+	for i := range out {
+		if pins, _ := metadata.Channel(out[i]).SignedLeafPins(); pins != nil {
+			if _, err := pins.Certificates(out[i].Hostname, now); err != nil {
+				if !errors.Is(err, metadata.ErrNoActivePin) {
+					return nil, err
+				}
+				out[i].Enabled = false // effective eligibility, not a signed revocation
+			}
+		}
+	}
+	out, _ = projectProtectedPayloadEligibility(out)
 	return out, nil
 }
 
@@ -307,7 +338,8 @@ func validateChannel(ch ChannelDescriptor) error {
 }
 
 // Selectable — каналы, которым разрешено войти в защищённый селектор.
-// live-verified — безусловно. configured — тоже (A1.3, обобщено в B1: без
+// Сначала требуется поддержанная protected payload composition. Затем
+// допускаются live-verified и configured (A1.3, обобщено в B1: без
 // этого канал невозможно когда-либо проверить live — проверка возможна
 // только через сам селектор), НО default'ом становится только live-verified
 // (pickDefault): вход configured-канала — только явным выбором SelectChannel,
@@ -316,7 +348,7 @@ func validateChannel(ch ChannelDescriptor) error {
 func Selectable(channels []ChannelDescriptor) []ChannelDescriptor {
 	out := make([]ChannelDescriptor, 0, len(channels))
 	for _, ch := range channels {
-		if !ch.Enabled {
+		if !ch.Enabled || metadata.Channel(ch).CheckProtectedPayload() != nil {
 			continue
 		}
 		if ch.ValidationStatus == "live-verified" || ch.ValidationStatus == "configured" {
@@ -329,6 +361,11 @@ func Selectable(channels []ChannelDescriptor) []ChannelDescriptor {
 // ClientConfig — собранный клиентский конфиг + метаданные для probe/UI.
 type ClientConfig struct {
 	Raw []byte
+	// SessionID identifies the applied config snapshot, not a JSON option or
+	// proof of engine liveness. App assigns a fresh ID before lifecycle use.
+	SessionID       uint64
+	OwnerID         uint64
+	OwnerGeneration uint64
 	// ExpectedEgress — ожидаемый egress ВЫБРАННОГО канала (default или того,
 	// под кого делался рендер). Каналы B1 живут на разных VPS: ожидание
 	// обязано следовать за выбором, иначе probe после переключения канала
@@ -337,51 +374,84 @@ type ClientConfig struct {
 	ExpectedEgress string
 	// ProbeTargets — HTTPS-эхо egress для probe выбранного канала
 	// (дескриптор → self-hosted первичная цель; иначе DefaultProbeTargets).
-	ProbeTargets []string
+	ProbeTargets    []string
+	DNSProbeTargets []string
 	// DiagnosticURL — эндпоинт controlled-volume диагностики заморозки
 	// выбранного канала ("" = нет — freeze-тест честно skip).
 	DiagnosticURL string
-	// TunnelPort — порт, который КЛИЕНТ ФАКТИЧЕСКИ набирает у выбранного
-	// канала (ChannelDescriptor.Port): 443 у CDN-ветки, 8444 hy2, 8443 reality,
-	// 8445 shadowtls. Нужен классификатору отказов как разделяющий признак
-	// порт-эвристики (THEORY §2.4a: селективный SYN-блэкхол не-443 портов,
-	// доказано live V2-051) — порт probe-цели для этого НЕ годится: у всех
-	// встроенных дескрипторов цели https/443, из-за чего диагноз
-	// port_blackholed был недостижим в проде (аудит D1, V2-068).
-	// 0 = неизвестен (классификатор честно уйдёт на фолбэк порта probe-цели).
+	// TunnelPort is the configured first-hop port, not a diagnosis of filtering.
+	// Historical port heuristics do not supply current causal evidence.
 	TunnelPort      int
+	TUNName         string              // actual rendered inbound; empty is SOCKS-only
 	SelectorTags    []string            // состав селектора (для UI, A1.4)
 	SelectorDefault string              // текущий выбранный канал (A1.4)
 	ChannelIDs      map[string]string   // tag → channel id
 	Descriptors     []ChannelDescriptor // исходный набор (карточки UI из данных, FR-002)
+	Profile         ProfileProvenance
+	SplitDirect     []string
+	Validity        metadata.SessionValidity
+}
+
+func (c *ClientConfig) Clone() *ClientConfig {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	out.Raw = bytes.Clone(c.Raw)
+	out.ProbeTargets = slices.Clone(c.ProbeTargets)
+	out.DNSProbeTargets = slices.Clone(c.DNSProbeTargets)
+	out.SelectorTags = slices.Clone(c.SelectorTags)
+	out.SplitDirect = slices.Clone(c.SplitDirect)
+	out.ChannelIDs = maps.Clone(c.ChannelIDs)
+	out.Descriptors = make([]ChannelDescriptor, len(c.Descriptors))
+	for i, ch := range c.Descriptors {
+		out.Descriptors[i] = ChannelDescriptor(metadata.Channel(ch).Clone())
+	}
+	return &out
 }
 
 // RenderClientConfig — сборка из встроенного набора дескрипторов.
 func RenderClientConfig(src SecretsSource) (*ClientConfig, error) {
-	channels, err := LoadDescriptors()
+	snapshot, err := LoadDescriptorSnapshot()
 	if err != nil {
 		return nil, err
 	}
-	return RenderFrom(channels, src)
+	return RenderFrom(snapshot.Channels, src, WithSplitDirect(snapshot.SplitDirect), WithProfileProvenance(snapshot.Profile))
 }
 
 // RenderOption — параметр сборки.
 type RenderOption func(*renderOpts)
 
 type renderOpts struct {
+	at             time.Time
+	splitDirect    []string
+	profile        ProfileProvenance
 	defaultChannel string
 	withTUN        bool
 	engineLogPath  string
-	// dialOverrides — hostname → IP (preflight-резолв, V2-037): vless+ws
-	// каналы диалят по IP с SNI/Host=домену, снимая зависимость от
-	// bootstrap-DNS sing-box (DoT 853 блокируется в РФ-сетях чаще всего).
-	dialOverrides map[string]string
+	// Timeless overrides are retained as rejected API inputs for migration.
+	dialOverrides        map[string]string
+	channelDialOverrides map[string]string
+	bootstrapHints       map[string]config.BootstrapHint
 	// clashAPIPort — порт read-only метрик (clash_api) для UI (V2-048/F12).
 	// 0 = метрики выключены (не рендерить experimental.clash_api) — сохраняет
 	// старое поведение, когда ядро собрано без with_clash_api.
 	clashAPIPort uint16
 	// clashAPISecret — per-session секрет контроллера (Authorization: Bearer).
 	clashAPISecret string
+}
+
+func WithSplitDirect(processes []string) RenderOption {
+	owned := validateSplitDirect(processes)
+	return func(o *renderOpts) { o.splitDirect = slices.Clone(owned) }
+}
+
+func WithProfileProvenance(profile ProfileProvenance) RenderOption {
+	return func(o *renderOpts) { o.profile = profile }
+}
+
+func WithValidityTime(now time.Time) RenderOption {
+	return func(o *renderOpts) { o.at = now }
 }
 
 // WithClashAPI — включить в рендере experimental.clash_api (read-only
@@ -410,14 +480,13 @@ func WithTUN() RenderOption {
 	return func(o *renderOpts) { o.withTUN = true }
 }
 
-// WithEngineLogPath — путь файла лога ядра (V2-046): sing-box пишет строки
-// с тегами компонентов (inbound/outbound/…) туда, приложение хвостит файл
-// в общий журнал. Пусто (по умолчанию) = stdout (точка для тестов).
+// WithEngineLogPath is retained for source compatibility. Nonempty raw SDK
+// logging is unsupported; use the application's operational event journal.
 func WithEngineLogPath(path string) RenderOption {
 	return func(o *renderOpts) { o.engineLogPath = path }
 }
 
-// WithDialOverrides — подстановка IP для dial по hostname (preflight-резолв).
+// WithDialOverrides is obsolete: nonempty timeless overrides are rejected.
 func WithDialOverrides(m map[string]string) RenderOption {
 	return func(o *renderOpts) {
 		if o.dialOverrides == nil {
@@ -429,65 +498,110 @@ func WithDialOverrides(m map[string]string) RenderOption {
 	}
 }
 
+// WithChannelDialOverrides is obsolete: use expiring WithBootstrapHints.
+func WithChannelDialOverrides(values map[string]string) RenderOption {
+	owned := maps.Clone(values)
+	return func(options *renderOpts) { options.channelDialOverrides = maps.Clone(owned) }
+}
+
+// WithBootstrapHints owns the original intervals, keyed by exact channel ID.
+func WithBootstrapHints(values map[string]config.BootstrapHint) RenderOption {
+	owned := maps.Clone(values)
+	return func(options *renderOpts) { options.bootstrapHints = maps.Clone(owned) }
+}
+
 // RenderFrom — сборка из явно заданного набора (точка для контрактных тестов
 // A1.4: селектор собирается из данных, а не из статического шаблона).
 func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderOption) (*ClientConfig, error) {
-	for _, ch := range channels {
-		if err := metadata.ValidateSecretIDs(ch.CredentialRefs, ch.SecretIDs); err != nil {
-			return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
-		}
+	// Reuse the complete bounded descriptor gate, including duplicate IDs and
+	// owned nested fields. A secret-source callback cannot alter caller buffers
+	// to choose another endpoint/role after validation.
+	owned, err := parseSet(channels)
+	if err != nil {
+		return nil, err
 	}
-	o := renderOpts{}
+	channels = owned
+	o := renderOpts{at: time.Now()}
 	for _, fn := range opts {
 		fn(&o)
 	}
-	selected := Selectable(channels)
+	if len(o.dialOverrides) != 0 || len(o.channelDialOverrides) != 0 {
+		return nil, fmt.Errorf("timeless dial overrides are unsupported; use expiring bootstrap hints")
+	}
+	if o.engineLogPath != "" {
+		return nil, fmt.Errorf("raw SDK file logging is unsupported; use application operational events")
+	}
+	if o.defaultChannel != "" {
+		for _, channel := range channels {
+			if channel.ID == o.defaultChannel {
+				if err := metadata.Channel(channel).CheckProtectedPayload(); err != nil {
+					return nil, fmt.Errorf("channel %s: %w", channel.ID, err)
+				}
+			}
+		}
+	}
+	eligible := make([]ChannelDescriptor, 0, len(channels))
+	legacyBundles := make(map[string][]string)
+	legacyDeadlines := make(map[string]time.Time)
+	for _, ch := range Selectable(channels) {
+		if pins, _ := metadata.Channel(ch).SignedLeafPins(); pins != nil {
+			if _, err := pins.Certificates(ch.Hostname, o.at); err != nil {
+				if !errors.Is(err, metadata.ErrNoActivePin) {
+					return nil, err
+				}
+				continue
+			}
+		} else if ch.Protocol == "hysteria2" {
+			pin := src.PinCertPath(ch.ID)
+			if pin == "" {
+				return nil, fmt.Errorf("channel %s: hysteria2 requires a pinned certificate", ch.ID)
+			}
+			bundle, deadline, err := config.PinnedCertificateSnapshot(pin, o.at)
+			if errors.Is(err, config.ErrNoCurrentPinnedCertificate) {
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
+			}
+			legacyBundles[ch.ID], legacyDeadlines[ch.ID] = bundle, deadline
+		}
+		eligible = append(eligible, ch)
+	}
+	selected := Selectable(eligible)
 	if len(selected) == 0 {
+		if o.profile.PinPolicySHA256 != "" {
+			return nil, metadata.ErrPinPolicyRestricted
+		}
 		return nil, fmt.Errorf("no live-verified channels: refusing to render (fail-closed)")
 	}
-
-	// Лог ядра — в файл (V2-046): GUI-процесс не имеет консоли, stdout
-	// умирает «в никуда» и handshake-ошибки REALITY/HY2 невидимы. Путь задаёт
-	// приложение (EngineLogPath, nil = stdout — точка для тестов); файл
-	// усекается на каждом Start (per-session, как журнал приложения).
-	logOutput := "stdout"
-	if o.engineLogPath != "" {
-		logOutput = o.engineLogPath
+	defaultID, err := pickDefault(selected, o.defaultChannel)
+	if err != nil {
+		return nil, err
 	}
+	validity := metadata.SessionValidity{ClockFloor: o.profile.ClockFloor}
+	if o.profile.Source == "verified_metadata_signature" {
+		validity.NotBefore = o.profile.IssuedAt.Add(-metadata.MaxClockSkew)
+		validity.ProfileExpires = o.profile.ExpiresAt
+	}
+	if _, err := validity.Remaining(o.at); err != nil {
+		return nil, err
+	}
+
 	cfg := &config.Config{
-		// Timestamp: false при файловом выводе — форматтер sing-box даёт
-		// «LEVEL сообщение» (уровень в начале строки: классификация tailer'а);
-		// время в общий журнал добавляет appendLog от момента получения.
-		Log: &config.LogConfig{Level: "info", Output: logOutput, Timestamp: logOutput == "stdout"},
-		DNS: &config.DNSConfig{
-			Servers: []config.DNSServer{
-				{Tag: "tunnel-dns", Address: "tls://8.8.8.8", Detour: "proxy"},
-				// Bootstrap для имени туннеля — plain UDP 1.1.1.1, НЕ DoT-853:
-				// порт 853 к зарубежным резолверам блокируется в РФ-сетях чаще
-				// всего (THEORY §2.1) и молча убивал канал A на старте. UDP-53
-				// доступнее; подмена ответа не опасна — TLS проверит сертификат
-				// домена, итоговый контроль за probe. Основной путь — вообще без
-				// этого правила: preflight-резолв + IP-диал (WithDialOverrides).
-				{Tag: "bootstrap-dns", Address: "1.1.1.1", Detour: "direct"},
-			},
-			Rules: []config.DNSRule{
-				// Круговое разрешение: имя сервера туннеля — direct (bootstrap).
-				{Domain: tunnelHostnames(selected), Server: "bootstrap-dns"},
-				// Всё остальное — через туннель (никаких «any → direct»).
-				{Server: "tunnel-dns"},
-			},
-			Strategy: "prefer_ipv4",
-		},
+		// App emits its own finite lifecycle/probe events. Raw SDK error and
+		// connection messages have no accepted bounded/redacted output owner.
+		// The private SDK projection enforces this policy for legacy inputs too.
+		Log: &config.LogConfig{Disabled: true},
 		Inbounds: []config.Inbound{
-			{Type: "mixed", Tag: "socks-in", Listen: "127.0.0.1", ListenPort: 1080},
+			{Type: "mixed", Tag: "socks-in", Listen: MixedListenAddress, ListenPort: MixedListenPort},
 		},
 		Route: &config.RouteConfig{
-			Rules: routeRulesWithSplit(splitSet),
+			Rules: routeRulesWithSplit(o.splitDirect),
 			Final: "proxy",
 		},
 	}
 	// V2-048/F10: find_process только при непустом сплите (не бесплатен).
-	if len(splitSet) > 0 {
+	if len(o.splitDirect) > 0 {
 		cfg.Route.FindProcess = true
 	}
 	// Метрики для UI (V2-048/F12): clash_api на строгом loopback с per-session
@@ -501,19 +615,22 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 			},
 		}
 	}
+	tunName := ""
 	if o.withTUN {
+		tunName = TUNInterfaceName
 		cfg.Inbounds = append(cfg.Inbounds, config.Inbound{
 			Type:          "tun",
 			Tag:           "tun-in",
-			InterfaceName: "snowden0",
+			InterfaceName: tunName,
 			// Explicit addresses are required for sing-box to install the
 			// intercepting routes on Windows. Without them Wintun falls back to
 			// APIPA and traffic continues over the physical default route.
-			Address:             []string{"10.203.0.1/30", "fdfe:dcba:9876::1/126"},
-			AutoRoute:           true,
-			StrictRoute:         true,
-			RouteExcludeAddress: []string{"172.16.0.0/12"}, // локальная сеть остаётся прямой
-			Stack:               "gvisor",
+			Address:     []string{"10.203.0.1/30", "fdfe:dcba:9876::1/126"},
+			AutoRoute:   true,
+			StrictRoute: true,
+			// LAN exceptions remain inside the engine after DNS capture. A native
+			// prefix exclusion would bypass that order, including port53 traffic.
+			Stack: "gvisor",
 		})
 	}
 
@@ -580,71 +697,46 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 				}
 			}
 		case ch.Protocol == "vless" && ch.Transport == "shadowtls":
-			// V2-051: VLESS over ShadowTLS v3 — ДВУХЗВЕННАЯ цепочка:
-			//   <id>-st (shadowtls, терминирует маскировку TLS на сервере)
-			//     ↑ detour
-			//   <id>   (vless на 127.0.0.1:9444 сервера — внутренний инбаунд)
-			// TLS-блок shadowtls-звена — МАСКИРОВОЧНЫЙ хендшейк к донору (SNI);
-			// внутренний vless идёт уже ВНУТРИ расшифрованного туннеля без TLS.
-			uuid, err := getOrErr(src, ch, ch.UUIDRef)
-			if err != nil {
-				return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
-			}
-			stpw, err := getOrErr(src, ch, ch.ShadowTLSPasswordRef)
-			if err != nil {
-				return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
-			}
-			if len(stpw) != 24 {
-				return nil, fmt.Errorf("channel %s: shadowtls password must be base64 of 16 bytes (24 chars), got %d", ch.ID, len(stpw))
-			}
-			stTag := tag + "-st"
-			// Звено 1: ShadowTLS v3 (маскировка под TLS к донору).
-			cfg.Outbounds = append(cfg.Outbounds, config.Outbound{
-				Type: "shadowtls", Tag: stTag,
-				Server: ch.OriginServer, ServerPort: ch.Port,
-				Version:  3,
-				Password: stpw,
-				TLS: map[string]any{
-					"enabled":     true,
-					"server_name": ch.Hostname, // SNI донора (www.samsung.com)
-					"utls":        map[string]any{"enabled": true, "fingerprint": "chrome"},
-				},
-				TCPKeepAlive:   "60s",
-				TCPKeepAliveIt: "20s",
-			})
-			// Звено 2: VLESS внутри туннеля (на loopback сервера).
-			cfg.Outbounds = append(cfg.Outbounds, config.Outbound{
-				Type: "vless", Tag: tag,
-				Server: "127.0.0.1", ServerPort: 9444,
-				UUID:   uuid,
-				Detour: stTag, // подключение через shadowtls-звено
-			})
+			// Defense against a future selector regression: no UUID/password
+			// lookup and no outbound graph for this unsupported composition.
+			return nil, fmt.Errorf("channel %s: %w", ch.ID, metadata.ErrPayloadConfidentialityUnsupported)
 		case ch.Protocol == "vless":
+			path, err := ch.WS.EffectivePath()
+			if err != nil {
+				return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
+			}
+			tls := map[string]any{"enabled": true, "server_name": ch.Hostname, "utls": map[string]any{"enabled": true, "fingerprint": "chrome"}}
+			if pins, _ := metadata.Channel(ch).SignedLeafPins(); pins != nil {
+				certificates, err := pins.Certificates(ch.Hostname, o.at)
+				if err != nil {
+					return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
+				}
+				tls["certificate"] = certificates
+				if ch.ID == defaultID {
+					validity.IdentityExpires, err = pins.SessionDeadline(ch.Hostname, o.at)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
 			uuid, err := getOrErr(src, ch, "vless-uuid")
 			if err != nil {
 				return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
 			}
-			// IP-диал за CDN (V2-037): server=IP из preflight-резолва,
-			// SNI/Host остаются доменными — CDN маршрутизирует по ним,
-			// а клиент не зависит от bootstrap-DNS sing-box. Без override —
-			// прежнее поведение (hostname; bootstrap-правило DNS).
-			server := ch.Hostname
-			var headers map[string]string
-			if ip := o.dialOverrides[ch.Hostname]; net.ParseIP(ip) != nil {
-				server = ip
-				headers = map[string]string{"Host": ch.Hostname}
+			// Keep the service identity for every new physical connection. A
+			// short-lived address hint must never replace the retained hostname.
+			authority := ch.Hostname
+			if ch.Port != 443 {
+				authority = net.JoinHostPort(ch.Hostname, strconv.Itoa(int(ch.Port)))
 			}
+			headers := map[string]string{"Host": authority}
 			ob := config.Outbound{
 				Type: "vless", Tag: tag,
-				Server: server, ServerPort: ch.Port,
+				Server: ch.Hostname, ServerPort: ch.Port,
 				UUID: uuid,
-				TLS: map[string]any{
-					"enabled":     true,
-					"server_name": ch.Hostname,
-					"utls":        map[string]any{"enabled": true, "fingerprint": "chrome"},
-				},
+				TLS:  tls,
 				Transport: &config.Transport{
-					Type: "ws", Path: "/ws",
+					Type: "ws", Path: path,
 					MaxEarlyData:        2048,
 					EarlyDataHeaderName: "Sec-WebSocket-Protocol",
 					Headers:             headers,
@@ -663,9 +755,24 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 			}
 			cfg.Outbounds = append(cfg.Outbounds, ob)
 		case ch.Protocol == "hysteria2":
-			pin := src.PinCertPath(ch.ID)
-			if pin == "" {
-				return nil, fmt.Errorf("channel %s: hysteria2 requires a pinned certificate (refusing to render)", ch.ID)
+			tls := map[string]any{"enabled": true, "server_name": ch.Hostname}
+			if ch.HY2Pins != nil {
+				certificates, err := ch.HY2Pins.Certificates(ch.Hostname, o.at)
+				if err != nil {
+					return nil, fmt.Errorf("channel %s: %w", ch.ID, err)
+				}
+				tls["certificate"] = certificates
+				if ch.ID == defaultID {
+					validity.IdentityExpires, err = ch.HY2Pins.SessionDeadline(ch.Hostname, o.at)
+					if err != nil {
+						return nil, err
+					}
+				}
+			} else {
+				tls["certificate"] = legacyBundles[ch.ID]
+				if ch.ID == defaultID {
+					validity.IdentityExpires = legacyDeadlines[ch.ID]
+				}
 			}
 			password, err := getOrErr(src, ch, "hy2-password")
 			if err != nil {
@@ -680,11 +787,7 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 				Server: ch.OriginServer, ServerPort: ch.Port, // QUIC идёт на origin напрямую
 				Password: password,
 				Obfs:     map[string]any{"type": "salamander", "password": obfs},
-				TLS: map[string]any{
-					"enabled":          true,
-					"server_name":      ch.Hostname,
-					"certificate_path": pin,
-				},
+				TLS:      tls,
 			}
 			// Port hopping + brutal CC (V2-037): только когда заданы в
 			// дескрипторе (сервер обязан иметь DNAT диапазона и не игнорить
@@ -699,15 +802,17 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 		channelIDs[tag] = ch.ID
 	}
 
-	defaultID, err := pickDefault(selected, o.defaultChannel)
-	if err != nil {
-		return nil, err
-	}
 	cfg.Outbounds = append(cfg.Outbounds,
 		config.Outbound{Type: "selector", Tag: "proxy", Outbounds: candidates, Default: defaultID},
 		config.Outbound{Type: "direct", Tag: "direct"},
 		config.Outbound{Type: "block", Tag: "block"},
 	)
+	if err := configureDNS(cfg); err != nil {
+		return nil, err
+	}
+	if err := applyBootstrapHints(cfg, o.bootstrapHints, o.at); err != nil {
+		return nil, err
+	}
 
 	raw, err := json.Marshal(cfg)
 	if err != nil {
@@ -723,11 +828,13 @@ func RenderFrom(channels []ChannelDescriptor, src SecretsSource, opts ...RenderO
 	}
 	return &ClientConfig{
 		Raw: raw, ExpectedEgress: expected,
-		ProbeTargets:  probeTargetsFor(selected, defaultID),
-		DiagnosticURL: diagnosticURLFor(selected, defaultID),
-		TunnelPort:    tunnelPortFor(selected, defaultID),
-		SelectorTags:  candidates, SelectorDefault: defaultID,
+		ProbeTargets:    probeTargetsFor(selected, defaultID),
+		DNSProbeTargets: dnsProbeTargetsFor(selected, defaultID),
+		DiagnosticURL:   diagnosticURLFor(selected, defaultID),
+		TunnelPort:      tunnelPortFor(selected, defaultID), TUNName: tunName,
+		SelectorTags: candidates, SelectorDefault: defaultID,
 		ChannelIDs: channelIDs, Descriptors: selected,
+		Profile: o.profile, SplitDirect: slices.Clone(o.splitDirect), Validity: validity,
 	}, nil
 }
 
@@ -751,6 +858,15 @@ func probeTargetsFor(selected []ChannelDescriptor, defaultID string) []string {
 		}
 	}
 	return append([]string(nil), DefaultProbeTargets...)
+}
+
+func dnsProbeTargetsFor(selected []ChannelDescriptor, defaultID string) []string {
+	for _, channel := range selected {
+		if channel.ID == defaultID && len(channel.DNSProbeTargets) != 0 {
+			return slices.Clone(channel.DNSProbeTargets)
+		}
+	}
+	return metadata.DefaultDNSProbeTargets()
 }
 
 // tunnelPortFor — порт выбранного канала (V2-068, аудит D1): то, что клиент
@@ -780,6 +896,7 @@ func pickDefault(selected []ChannelDescriptor, want string) (string, error) {
 				return want, nil
 			}
 		}
+		return "", fmt.Errorf("requested channel %q is not currently eligible", want)
 	}
 	for _, ch := range selected {
 		if ch.ValidationStatus == "live-verified" {
@@ -837,6 +954,12 @@ func refOf(ch ChannelDescriptor, want string) (string, error) {
 
 // getOrErr — чтение секрета по точной ссылке с понятной ошибкой.
 func getOrErr(src SecretsSource, ch ChannelDescriptor, want string) (string, error) {
+	if err := metadata.Channel(ch).CheckProtectedPayload(); err != nil {
+		return "", err // capability before any Get/GetByID, including credential validation
+	}
+	if err := validateChannel(ch); err != nil {
+		return "", err // direct credential-validation callers also require the declared endpoint/roles
+	}
 	if _, err := refOf(ch, want); err != nil {
 		return "", err
 	}
@@ -878,16 +1001,4 @@ func credentialKind(ch ChannelDescriptor, ref string) (string, error) {
 	default:
 		return "", fmt.Errorf("channel %s: unknown credential role", ch.ID)
 	}
-}
-
-func tunnelHostnames(channels []ChannelDescriptor) []string {
-	set := map[string]bool{}
-	var out []string
-	for _, ch := range channels {
-		if !set[ch.Hostname] {
-			set[ch.Hostname] = true
-			out = append(out, ch.Hostname)
-		}
-	}
-	return out
 }

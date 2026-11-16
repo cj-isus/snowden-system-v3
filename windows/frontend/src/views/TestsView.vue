@@ -1,33 +1,32 @@
 <script setup lang="ts">
 import PageHeading from '../components/PageHeading.vue'
+import ActionButton from '../components/ActionButton.vue'
 /**
- * Раздел «Тестирование». Кнопка «Запустить все» блокируется, пока идёт
- * хотя бы один тест. Результаты приходят только из backend (null = недоступен).
+ * Ручная диагностика: пакет запускает проверки по очереди. Остановка пакета
+ * запрещает следующие запуски, но не объявляет текущий вызов завершённым.
+ * Результаты приходят из backend; null означает недоступные сведения.
  */
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import TestCard from '../components/TestCard.vue'
 import HintBox from '../components/HintBox.vue'
 import Icon from '../components/Icon.vue'
-import { useDiagnostics, refreshTests } from '../composables/diagnostics'
+import { useDiagnostics } from '../composables/diagnostics'
 import { useBackendState } from '../composables/backendState'
-import { toast } from '../composables/toast'
+import { fmtDateTime } from '../api/labels'
 
-const { tests, runningId, busy: anyRunning, runTest, runAll } = useDiagnostics()
+const { tests, runningId, busy: anyRunning, batchRunning, batchStopRequested, loading, loaded, loadError,
+  lastOutcome, receivedAt, canRun, resultContext, runTest, runAll, refreshTests, stopBatch } = useDiagnostics()
 const { state } = useBackendState()
 
 
-const canRunAll = computed(() => !anyRunning.value && Array.isArray(tests.value) && tests.value.length > 0)
+const canRunAll = computed(() => canRun.value && !state.value?.probeRunning)
 
-function onRunAll(): void { void runAll() }
-
-function onRefresh(): void {
-  void refreshTests()
-  toast('info', 'Список тестов перечитан из backend')
+function onRunAll(): void {
+  if (batchRunning.value) { if (!batchStopRequested.value) stopBatch() }
+  else if (canRunAll.value) void runAll()
 }
 
-onMounted(() => {
-  void refreshTests()
-})
+function onRefresh(): void { if (!anyRunning.value && !loading.value) void refreshTests() }
 </script>
 
 <template>
@@ -35,54 +34,65 @@ onMounted(() => {
     <PageHeading title="Диагностика пути" description="Запустите нужную проверку и изучите её результат. Отсутствие результата не означает успех." ></PageHeading>
 
     <div class="actions-row">
-      <button class="btn primary" :disabled="!canRunAll" @click="onRunAll" title="Выполнить все тесты по очереди">
-        <Icon name="play" :size="14" />
-        Запустить все
-      </button>
-      <button class="btn" :disabled="anyRunning" @click="onRefresh">
+      <ActionButton class="primary" :disabled="batchRunning ? batchStopRequested : !canRunAll" :busy="batchStopRequested" @click="onRunAll" :title="batchRunning ? 'Остановить следующие запуски; текущий вызов ожидается до ответа' : 'Выполнить проверки по очереди'">
+        <Icon :name="batchRunning ? (batchStopRequested ? 'refresh' : 'cross') : 'play'" :size="14" />
+        {{ batchRunning ? (batchStopRequested ? 'Ожидание ответа…' : 'Не запускать следующие') : 'Запустить все' }}
+      </ActionButton>
+      <ActionButton :disabled="anyRunning || loading" :busy="loading" @click="onRefresh">
         <Icon name="refresh" :size="14" />
-        Обновить
-      </button>
+        {{ loading ? 'Загрузка…' : 'Обновить список' }}
+      </ActionButton>
       <span v-if="state?.probeRunning" class="probe-flag">probe выполняется…</span>
     </div>
 
-    <div v-if="tests === null" class="empty-block">
+    <p class="scope-note">Результаты относятся к моменту запуска. Смена известного контекста приложения отзывает их актуальность и останавливает следующие запуски пакета. Проверки автоматически не запускаются.</p>
+    <p class="scope-note">Сведения получены: {{ fmtDateTime(receivedAt) }}. Это время чтения списка, не нового измерения.</p>
+    <p v-if="lastOutcome" class="scope-note">{{ lastOutcome }}</p>
+    <p v-if="loadError && tests !== null" class="scope-note">{{ loadError }}</p>
+
+    <div v-if="loading && (!loaded || tests === null)" class="empty-block" role="status">Загружаем список проверок…</div>
+
+    <div v-else-if="tests === null" class="empty-block" role="status">
       <Icon name="warn" :size="18" />
       <p>
-        Список тестов недоступен: нет ответа от приложения Windows. Откройте приложение и повторите загрузку.
+        {{ loadError || 'Данные ещё не получены. Обновите список проверок.' }}
       </p>
     </div>
 
-    <div v-else-if="tests.length === 0" class="empty-block">
+    <div v-else-if="tests.length === 0" class="empty-block" role="status">
       <Icon name="info" :size="18" />
       <p>Backend не вернул ни одного теста для текущего конфига.</p>
     </div>
 
-    <div v-else class="cards test-list">
+    <div v-else class="cards test-list" :aria-busy="anyRunning || loading">
       <TestCard
         v-for="t in tests"
         :key="t.id"
         :test="t"
         :running="runningId === t.id"
-        :disabled="anyRunning"
+        :disabled="!canRun"
+        :context="resultContext(t.id)"
         @run="(id) => void runTest(id)"
       />
     </div>
 
-    <HintBox kind="info" title="Что проверяет probe (и почему этого мало)">
-      Probe подтверждает защищённый путь: DNS через туннель, две HTTPS-цели с маркером egress,
-      совпадение с ожидаемым IP и отсутствие прямых утечек. Результат «пройдено» означает ровно
-      это подтверждение — не «обходит любые блокировки».
-    </HintBox>
+    <details class="check-limits">
+      <summary>Область измерения и ограничения</summary>
+      <HintBox kind="info" title="Что проверяет probe">
+        Probe проверяет ответы конкретных HTTPS-целей, DoH через выбранный канал и соответствие
+        сообщённого выходного IP профилю. Совпадение или различие IP не устанавливает локальный
+        маршрут. Отсутствие утечек native DNS, IPv6 и других приложений этим probe не измеряется.
+      </HintBox>
 
-    <HintBox kind="info" title="HY2/UDP зависит от текущей сети">
-      Доступность UDP измеряется при каждом запуске. Канал HY2 ранее подтверждён live, но оператор
-      может временно фильтровать QUIC/UDP; такой результат относится к текущей сетевой эпохе.
-    </HintBox>
-    <HintBox kind="info" title="TUN защищён WFP policy">
-      Перед запуском TUN приложение включает системный WFP kill switch, проверяет фильтры,
-      интерфейс snowden0 и egress внешнего процесса. Любой провал останавливает запуск fail-closed.
-    </HintBox>
+      <HintBox kind="info" title="HY2/UDP зависит от текущей сети">
+        Доступность UDP и работа HY2 требуют отдельных результатов для текущих канала, сети
+        и приложения. Старый live-результат или работа другого VPN не подтверждают этот запуск.
+      </HintBox>
+      <HintBox kind="info" title="Допуск TUN требует отдельного подтверждения">
+        Общий допуск TUN пока закрыт. Original-helper/WFP протокол реализуется отдельно;
+        наличие фильтров, запущенного процесса или совпавшего IP не означает готовый защищённый путь.
+      </HintBox>
+    </details>
   </div>
 </template>
 
@@ -97,6 +107,11 @@ onMounted(() => {
   color: var(--accent);
   font-size: 12.5px;
 }
+
+.scope-note { margin: 0; color: var(--muted); line-height: 1.6; }
+.check-limits summary { cursor: pointer; padding: 8px 0; color: var(--text-soft); }
+.check-limits :deep(.hint) { margin-top: 10px; }
+.view, .test-list { min-width: 0; }
 
 .cards {
   display: flex;

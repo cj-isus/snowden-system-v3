@@ -2,20 +2,10 @@ package render
 
 import "github.com/snowden-system/windows/backend/metadata"
 
-// fdmodel.go — Failure Domain Model (PLAN §4 Phase B2; plan_gpt §5/§6, шаг 4
-// из §116 — ПЕРЕД каналом B: без модели доменов новый канал родится без
-// семантики независимости, и C2 (candidate scoring) не на чем считать).
-//
-// FD(channel) = { transport_family, carrier, origin, asn, port_family, layer }
-// (plan_gpt §5; protocol выделен в transport_family вместе с транспортом —
-// vless+ws и vless+shadowtls это разные транспортные семейства с разной
-// уязвимостью, THEORY §2.10).
-//
-// Правило честности (AGENTS §3.3): поля fill-in данными владельца; то, чего нет
-// в данных, деривация помечает "unknown" и НЕ участвует в штрафах независимости
-// (plan_gpt §6: одинаковые unknown ≠ общий домен — иначе две незаполненные
-// записи выглядели бы «одинаковыми»).
-
+// Configuration-level dependency compatibility helpers. The current graph
+// separates explicit assertions, configured targets and verified signing-key
+// identity. Unknowns contribute no ranking benefit; scores are never proof
+// that physical infrastructure or recovery paths are independent.
 // FailureDomain shares the signed wire schema; derivation/scoring remain here.
 type FailureDomain = metadata.FailureDomain
 
@@ -39,19 +29,7 @@ func (ch ChannelDescriptor) effectiveFD() FailureDomain {
 	if fd.TransportFamily == "" {
 		fd.TransportFamily = ch.Protocol + "+" + ch.Transport
 	}
-	// Carrier: у ws канала A это Cloudflare (V2-039/041); у quic/reality/
-	// shadowtls — origin-direct (мимо CDN, V2-040/044). Владелец может
-	// переопределить fd.carrier (другой CDN-провайдер).
-	if fd.Carrier == "" {
-		switch ch.Transport {
-		case "ws":
-			fd.Carrier = "cloudflare"
-		case "quic", "tcp-reality", "shadowtls":
-			fd.Carrier = ""
-		default:
-			fd.Carrier = ""
-		}
-	}
+	// Carrier is unknown unless explicitly declared; transport does not identify a CDN.
 	if fd.Origin == "" {
 		fd.Origin = ch.OriginServer
 	}
@@ -97,12 +75,12 @@ func indexByte(s string, c byte) int {
 	return -1
 }
 
-// IndependenceThreshold — порог независимости plan_gpt §6: пары ниже —
-// «слишком общая инфраструктура» для кандидата failover (C2).
+// IndependenceThreshold is a legacy advisory ranking cutoff. It cannot prove
+// that either channel is safe/unsafe, independent or currently available.
 const IndependenceThreshold = 0.35
 
-// independenceShadows — веса §6 (внутренняя инженерная policy-модель, план:
-// калибровка на данных после Phase E2).
+// Historical weights retained for compatibility with old source consumers.
+// Current ranking uses dependencyRoles; it never starts at 1 for unknown data.
 var independenceShadows = []struct {
 	name    string
 	penalty float64
@@ -116,78 +94,19 @@ var independenceShadows = []struct {
 	{"same_donor", 0.10}, // донор REALITY — дополнительный общий домен (не из §6)
 }
 
-// Independence — детерминированная оценка независимости двух каналов по
-// пересечению failure domains: 1 − Σ штрафов, [0..1]. unknown-домены штрафа не
-// дают. Это policy-модель для сортировки кандидатов (C2), не физика.
-func Independence(a, b ChannelDescriptor) float64 {
+// Independence retains its API name but returns configured dependency
+// differences with unknowns contributing zero. It is not independence proof.
+func Independence(a, b ChannelDescriptor, profiles ...ProfileProvenance) float64 {
 	if a.ID == b.ID {
 		return 0
 	}
-	fa, fb := a.effectiveFD(), b.effectiveFD()
-	ind := 1.0
-	for _, s := range independenceShadows {
-		var same bool
-		switch s.name {
-		case "same_origin":
-			same = sameFDValue(fa.Origin, fb.Origin)
-		case "same_asn":
-			same = sameFDValue(fa.ASN, fb.ASN)
-		case "same_carrier":
-			same = sameFDValue(fa.Carrier, fb.Carrier)
-		case "same_transport":
-			same = sameFDValue(fa.TransportFamily, fb.TransportFamily)
-		case "same_port_family":
-			same = sameFDValue(fa.PortFamily, fb.PortFamily)
-		case "same_layer":
-			same = sameFDValue(fa.Layer, fb.Layer)
-		case "same_donor":
-			same = sameFDValue(fa.DonorSNI, fb.DonorSNI)
-		}
-		if same && ind > 0 {
-			ind -= s.penalty
-		}
-	}
-	// Safety policy (V2-073): one known origin hosted in one known ASN is one
-	// dominant infrastructure failure domain. The additive weights are useful
-	// for explaining shared properties, but must not allow transport diversity
-	// to make four profiles on one VPS look like viable independent survivors.
-	// Clamp is deliberately conservative and deterministic; it is not a claim
-	// about backbone correlation and does not replace the second VPS or D3.
-	if sameFDValue(fa.Origin, fb.Origin) && sameFDValue(fa.ASN, fb.ASN) && ind > 0.25 {
-		ind = 0.25
-	}
-	if ind < 0 {
-		ind = 0
-	}
-	return ind
+	return CompareDependencies(a, b, profiles...).RankHint
 }
 
-// IndependenceSummary — человекочитаемый список общих доменов (для UI/journal).
-// Пустая строка = общих известных доменов нет.
-func IndependenceSummary(a, b ChannelDescriptor) string {
+// IndependenceSummary includes coverage, shared dependencies and unknown roles.
+func IndependenceSummary(a, b ChannelDescriptor, profiles ...ProfileProvenance) string {
 	if a.ID == b.ID {
 		return "тот же канал"
 	}
-	fa, fb := a.effectiveFD(), b.effectiveFD()
-	var parts []string
-	add := func(cond bool, what string) {
-		if cond {
-			parts = append(parts, what)
-		}
-	}
-	add(sameFDValue(fa.Origin, fb.Origin), "origin")
-	add(sameFDValue(fa.ASN, fb.ASN), "ASN")
-	add(sameFDValue(fa.Carrier, fb.Carrier), "carrier")
-	add(sameFDValue(fa.TransportFamily, fb.TransportFamily), "транспорт")
-	add(sameFDValue(fa.PortFamily, fb.PortFamily), "класс порта")
-	add(sameFDValue(fa.Layer, fb.Layer), "слой")
-	add(sameFDValue(fa.DonorSNI, fb.DonorSNI), "донор REALITY")
-	if len(parts) == 0 {
-		return ""
-	}
-	out := parts[0]
-	for _, p := range parts[1:] {
-		out += " + " + p
-	}
-	return out
+	return CompareDependencies(a, b, profiles...).Summary()
 }

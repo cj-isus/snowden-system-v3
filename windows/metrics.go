@@ -21,45 +21,51 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/snowden-system/windows/backend/render"
 )
 
-// metricsHTTPTimeout — бюджет одного опроса контроллера. UI поллит каждые 2с;
-// зависший контроллер не должен держать биндинг дольше пары секунд.
+// metricsHTTPTimeout is the request/context budget. It does not prove actual
+// native dial/socket/body retirement or a hard deadline for the Wails frame.
 const metricsHTTPTimeout = 2 * time.Second
 
 // metricsState — состояние сборщика на текущую сессию ядра.
 type metricsState struct {
 	port   string // "127.0.0.1:9097"
 	secret string
+	id     string // process-local collector identity; no endpoint/secret or health authority
 
-	mu       sync.Mutex
-	baseUp   int64 // uploadTotal на первом замере сессии
-	baseDown int64 // downloadTotal на первом замере сессии
-	lastUp   int64 // прошлый сырой счётчик (для скорости)
-	lastDown int64
-	lastAt   time.Time // момент прошлого сырого замера (0 = ещё не было)
-	rateUp   float64
-	rateDown float64
-	started  bool // база «за сессию» зафиксирована
+	mu                   sync.Mutex
+	baseUp               int64 // uploadTotal на первом замере сессии
+	baseDown             int64 // downloadTotal на первом замере сессии
+	lastUp               int64 // прошлый сырой счётчик (для скорости)
+	lastDown             int64
+	seenUp               int64 // most recent accepted totals, including short rate intervals
+	seenDown             int64
+	lastAt               time.Time // момент прошлого сырого замера (0 = ещё не было)
+	rateUp               float64
+	rateDown             float64
+	started              bool // база «за сессию» зафиксирована
+	counterDiscontinuity bool // no counter epoch protocol: totals stay unknown until a new session
 }
 
 // metricsView / connView — контракты UI (зеркало в contract.ts).
 type MetricsView struct {
-	Available   bool       `json:"available"`
-	Note        string     `json:"note,omitempty"`
-	RateUp      float64    `json:"rateUp"` // байт/сек
-	RateDown    float64    `json:"rateDown"`
-	SessionUp   int64      `json:"sessionUp"` // от первого замера сессии
-	SessionDown int64      `json:"sessionDown"`
-	At          time.Time  `json:"at"`
-	Connections []ConnView `json:"connections"`
+	Collector   string                 `json:"collector,omitempty"`
+	Context     *DiagnosticContextView `json:"context,omitempty"` // same value commit, negative display fence only
+	Available   bool                   `json:"available"`
+	Note        string                 `json:"note,omitempty"`
+	RateUp      float64                `json:"rateUp"` // байт/сек
+	RateDown    float64                `json:"rateDown"`
+	SessionUp   int64                  `json:"sessionUp"` // от первого замера сессии
+	SessionDown int64                  `json:"sessionDown"`
+	At          time.Time              `json:"at"`
+	Connections []ConnView             `json:"connections"`
 }
 
 type ConnView struct {
@@ -97,7 +103,7 @@ func newMetricsSession() *metricsState {
 	if _, err := rand.Read(buf); err != nil {
 		return nil
 	}
-	return &metricsState{port: "127.0.0.1:" + port, secret: hex.EncodeToString(buf)}
+	return newMetricsState("127.0.0.1:"+port, hex.EncodeToString(buf))
 }
 
 // Reconstruct exactly the endpoint/secret applied to the engine, never a
@@ -121,7 +127,24 @@ func metricsForConfig(raw []byte) *metricsState {
 	if c.Address == "" || c.Secret == "" {
 		return nil
 	}
-	return &metricsState{port: c.Address, secret: c.Secret}
+	return newMetricsState(c.Address, c.Secret)
+}
+
+var metricsIdentities struct {
+	sync.Mutex
+	last uint64
+}
+
+// A recreated collector gets a new ID even when the same raw config/channel
+// is restored. Exhaustion disables metrics instead of wrapping to an old ID.
+func newMetricsState(port, secret string) *metricsState {
+	metricsIdentities.Lock()
+	defer metricsIdentities.Unlock()
+	if metricsIdentities.last == ^uint64(0) {
+		return nil
+	}
+	metricsIdentities.last++
+	return &metricsState{port: port, secret: secret, id: strconv.FormatUint(metricsIdentities.last, 10)}
 }
 
 // renderOption — WithClashAPI, если сборка с with_clash_api и порт получен.
@@ -164,80 +187,81 @@ type clashConn struct {
 // GetMetrics — Wails-биндинг: один опрос контроллера ядра. Доступен всегда,
 // но при выключенных метриках честно сообщает об этом (Available=false).
 func (a *App) GetMetrics() MetricsView {
-	runtime_.mu.Lock()
-	m := runtime_.metrics
-	runtime_.mu.Unlock()
-	if m == nil || !clashAPIBuilt {
-		return MetricsView{Available: false, Note: "Метрики выключены: сборка ядра без with_clash_api"}
+	scope := a.captureMetricsScope()
+	if scope == nil {
+		return MetricsView{Available: false, Note: "Метрики недоступны: нет текущей сессии или приложение меняет состояние"}
 	}
-	view, err := m.poll()
+	view, err := scope.metrics.pollOwned(scope.parent, scope)
 	if err != nil {
-		return MetricsView{Available: false, Note: "Ядро не отвечает на метрики: " + err.Error()}
+		return MetricsView{Available: false, Note: "Текущий снимок метрик недоступен или не соответствует поддерживаемому формату"}
 	}
+	// Baseline and view were committed under the same original identity lease.
+	// This is an as-of telemetry snapshot, not a transferable health permit.
 	return view
 }
 
 // poll — один HTTP-опрос + пересчёт скоростей/сессийных сумм.
 func (m *metricsState) poll() (MetricsView, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), metricsHTTPTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+m.port+"/connections", nil)
-	if err != nil {
-		return MetricsView{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+m.secret)
-	resp, err := metricsHTTPClient.Do(req)
-	if err != nil {
-		return MetricsView{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return MetricsView{}, fmt.Errorf("контроллер вернул %d", resp.StatusCode)
-	}
-	var snap clashSnapshot
-	if err := json.NewDecoder(resp.Body).Decode(&snap); err != nil {
-		return MetricsView{}, err
-	}
-	return m.apply(snap), nil
+	return m.pollContext(context.Background()) // retained internal caller signature
 }
 
-var metricsHTTPClient = &http.Client{
-	Timeout: metricsHTTPTimeout,
-	Transport: &http.Transport{
-		Proxy: nil, MaxIdleConns: 2, MaxIdleConnsPerHost: 2,
-		IdleConnTimeout: 30 * time.Second, ResponseHeaderTimeout: metricsHTTPTimeout,
-	},
+func (m *metricsState) pollContext(parent context.Context) (MetricsView, error) {
+	return m.pollOwned(parent, nil) // internal callers still share the process-wide I/O slot
 }
 
 // apply — атомарный пересчёт: скорость (дельта/время), сессийные суммы
-// (только положительные дельты — рестарт счётчиков ядра не уводит в минус).
+// Уменьшение счётчика отзывает доступность итогов до новой metrics session.
 func (m *metricsState) apply(snap clashSnapshot) MetricsView {
-	now := time.Now()
+	if !validMetricsSnapshot(snap) {
+		return MetricsView{Available: false, Note: "Снимок метрик содержит неподдерживаемые значения"}
+	}
+	return m.applyPrepared(snap, metricsConnections(snap), time.Now())
+}
+
+// Validated snapshot and prepared top20 only. Caller can hold a value-only
+// lifecycle lease: no sorting, connection cloning or I/O occurs inside it.
+func (m *metricsState) applyPrepared(snap clashSnapshot, conns []ConnView, now time.Time) MetricsView {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.counterDiscontinuity {
+		return MetricsView{Available: false, Note: "Непрерывность счётчиков этой сессии не подтверждена"}
+	}
 
 	if !m.started {
 		m.started = true
 		m.baseUp, m.baseDown = snap.UploadTotal, snap.DownloadTotal
 		m.lastUp, m.lastDown, m.lastAt = snap.UploadTotal, snap.DownloadTotal, now
+		m.seenUp, m.seenDown = snap.UploadTotal, snap.DownloadTotal
 	} else {
+		if snap.UploadTotal < m.seenUp || snap.DownloadTotal < m.seenDown {
+			m.counterDiscontinuity = true
+			return MetricsView{Available: false, Note: "Счётчики уменьшились; итоги этой сессии недоступны без нового источника"}
+		}
+		m.seenUp, m.seenDown = snap.UploadTotal, snap.DownloadTotal
 		dt := now.Sub(m.lastAt).Seconds()
 		if dt > 0.2 { // ниже — отсечка дребезга скорости
 			dU, dD := snap.UploadTotal-m.lastUp, snap.DownloadTotal-m.lastDown
-			if dU < 0 || dD < 0 {
-				// счётчики ядра сбросились (рестарт) — переустановка базы,
-				// сессийные суммы сохраняем (факт уже накопленный)
-				m.baseUp, m.baseDown = snap.UploadTotal, snap.DownloadTotal
-			}
 			m.rateUp = float64(max64(dU, 0)) / dt
 			m.rateDown = float64(max64(dD, 0)) / dt
+			m.lastUp, m.lastDown, m.lastAt = snap.UploadTotal, snap.DownloadTotal, now
 		}
-		m.lastUp, m.lastDown, m.lastAt = snap.UploadTotal, snap.DownloadTotal, now
 	}
 
+	return MetricsView{
+		Available:   true,
+		RateUp:      m.rateUp,
+		RateDown:    m.rateDown,
+		SessionUp:   snap.UploadTotal - m.baseUp,
+		SessionDown: snap.DownloadTotal - m.baseDown,
+		At:          now,
+		Connections: conns,
+	}
+}
+
+func metricsConnections(snap clashSnapshot) []ConnView {
 	top := snap.Connections
-	sort.Slice(top, func(i, j int) bool {
-		return top[i].Upload+top[i].Download > top[j].Upload+top[j].Download
+	sort.SliceStable(top, func(i, j int) bool {
+		return uint64(top[i].Upload)+uint64(top[i].Download) > uint64(top[j].Upload)+uint64(top[j].Download)
 	})
 	if len(top) > 20 {
 		top = top[:20]
@@ -248,28 +272,25 @@ func (m *metricsState) apply(snap clashSnapshot) MetricsView {
 			Network: c.Metadata.Network,
 			Up:      c.Upload,
 			Down:    c.Download,
-			Since:   c.Start.Format("15:04:05"),
 			Process: c.Metadata.ProcessPath,
+		}
+		if !c.Start.IsZero() {
+			cv.Since = c.Start.Format("15:04:05")
 		}
 		if h := c.Metadata.Host; h != "" {
 			cv.Host = h
-		} else {
-			cv.Host = net.JoinHostPort(c.Metadata.DestinationIP, c.Metadata.DestinationPort)
+		} else if c.Metadata.DestinationIP != "" {
+			cv.Host = c.Metadata.DestinationIP
+			if c.Metadata.DestinationPort != "" {
+				cv.Host = net.JoinHostPort(c.Metadata.DestinationIP, c.Metadata.DestinationPort)
+			}
 		}
 		if n := len(c.Chains); n > 0 {
 			cv.Chain = c.Chains[0] // ближний к цели outbound — имя канала
 		}
 		conns = append(conns, cv)
 	}
-	return MetricsView{
-		Available:   true,
-		RateUp:      m.rateUp,
-		RateDown:    m.rateDown,
-		SessionUp:   snap.UploadTotal - m.baseUp,
-		SessionDown: snap.DownloadTotal - m.baseDown,
-		At:          now,
-		Connections: conns,
-	}
+	return conns
 }
 
 func max64(a, b int64) int64 {

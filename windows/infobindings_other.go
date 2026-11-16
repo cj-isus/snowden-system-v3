@@ -2,6 +2,13 @@
 
 package main
 
+import "context"
+
+func collectAdapterFacts(context.Context) (adapterSnapshot, error) {
+	return adapterSnapshot{}, errAdapterObservation
+}
+func netshShowInterfaces(context.Context, string) (string, error) { return "", errAdapterObservation }
+
 // infobindings_other.go — заглушки netwatch/transportpref вне Windows.
 // Продукт — Windows-only; заглушки существуют, чтобы `go test ./...` на
 // другой машине агента компилировался и honest-failed по фактам, а не по
@@ -14,3 +21,6 @@ func adapterNetClass(alias string) string { return "" }
 // берёт факт мгновенным системным вызовом (GetIfEntry2Ex); заглушка сохраняет
 // «факт недоступен» без сети.
 func adapterNetClassByIndex(idx int) string { return "" }
+
+// Windows route observer has no socket/system-resolver fallback elsewhere.
+func netFingerprintOS(context.Context) netFingerprint { return netFingerprint{} }

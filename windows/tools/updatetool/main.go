@@ -5,8 +5,8 @@
 // Использование:
 //
 //	updatetool keygen <trusted_keys.json> <private.key>
-//	  — пара Ed25519 ДЛЯ ПОДПИСИ ОБНОВЛЕНИЙ: публичный ключ добавляется в ту же
-//	    таблицу доверия, что и envelope (comment "update-signing"), приватный
+//	  — отдельная пара Ed25519 с явной ролью update в scoped trust policy; comment
+//	    не назначает полномочий. Профильные ключи сохраняются отдельно, приватный
 //	    (hex) — в отдельный файл 0600 (хранится офлайн).
 //
 //	updatetool sign <payload.exe> <version> <private.key> <outdir> [notes]
@@ -17,14 +17,19 @@
 //	updatetool sign-copy <payload.exe> <version> <private.key> <outdir> [notes]
 //	  — то же + копия payload в outdir (готовый каталог обновления).
 //
+//	updatetool sign-pair[-copy] <app.exe> <helper.exe> <version> <private.key> <new-outdir> [notes]
+//	  — schema2 Windows/amd64, signed fixed app/helper/protocol; manifest last.
+//	updatetool verify-pair <update.json> <payload-dir> <trusted_keys.json>
+//	  — update-role signature and both bounded hashes; not an installer/OS check.
+//
 //	updatetool verify <update.json> <payload> <trusted_keys.json>
 //	  — офлайн-проверка: структура + подпись + sha256 (без политики версий —
 //	    это делает приложение при применении).
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -35,8 +40,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/snowden-system/windows/backend/delivery"
 	"github.com/snowden-system/windows/backend/metadata"
 	"github.com/snowden-system/windows/backend/update"
+	"github.com/snowden-system/windows/tools/internal/deliverypack"
+	"github.com/snowden-system/windows/tools/internal/publisherfiles"
+	"github.com/snowden-system/windows/tools/internal/publisherkeys"
+	"github.com/snowden-system/windows/tools/internal/repository"
 )
 
 func fatal(format string, args ...any) {
@@ -46,15 +56,33 @@ func fatal(format string, args ...any) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fatal("usage: updatetool keygen|sign|sign-copy|verify ...")
+		fatal("usage: updatetool keygen|sign|sign-copy|sign-pair|sign-pair-copy|verify|verify-pair|delivery-pack|repository ...")
 	}
 	switch os.Args[1] {
+	case "repository":
+		report, err := repository.Run(os.Args[2:])
+		if err != nil {
+			fatal("repository: %v", err)
+		}
+		fmt.Println(string(report))
+	case "delivery-pack":
+		report, err := deliverypack.Run(context.Background(), delivery.UpdateManifest, os.Args[2:])
+		if err != nil {
+			fatal("delivery-pack: %v", err)
+		}
+		fmt.Println(string(report))
 	case "keygen":
 		cmdKeygen()
 	case "sign":
 		cmdSign(false)
 	case "sign-copy":
 		cmdSign(true)
+	case "sign-pair":
+		cmdSignPair(false)
+	case "sign-pair-copy":
+		cmdSignPair(true)
+	case "verify-pair":
+		cmdVerifyPair()
 	case "verify":
 		cmdVerify()
 	default:
@@ -67,51 +95,11 @@ func cmdKeygen() {
 		fatal("usage: updatetool keygen <trusted_keys.json> <private.key>")
 	}
 	keysPath, privPath := os.Args[2], os.Args[3]
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	keyID, err := publisherkeys.Generate(keysPath, privPath, metadata.RoleUpdate)
 	if err != nil {
-		fatal("generate: %v", err)
+		fatal("provision: %v", err)
 	}
-	// Таблица доверия: та же схема, что у AppData/metadata/trusted_keys.json.
-	var f struct {
-		Schema int `json:"schema"`
-		Keys   []struct {
-			KeyID   string `json:"key_id"`
-			Public  string `json:"public_hex"`
-			Comment string `json:"comment,omitempty"`
-		} `json:"keys"`
-	}
-	data, err := os.ReadFile(keysPath)
-	if err == nil {
-		if err := json.Unmarshal(data, &f); err != nil {
-			fatal("parse %s: %v", keysPath, err)
-		}
-		if f.Schema != 1 {
-			fatal("%s: schema %d", keysPath, f.Schema)
-		}
-	} else if !os.IsNotExist(err) {
-		fatal("read %s: %v", keysPath, err)
-	} else {
-		f.Schema = 1
-	}
-	keyID := metadata.KeyIDFor(pub)
-	for _, k := range f.Keys {
-		if k.KeyID == keyID {
-			fatal("key %s уже в таблице", keyID)
-		}
-	}
-	f.Keys = append(f.Keys, struct {
-		KeyID   string `json:"key_id"`
-		Public  string `json:"public_hex"`
-		Comment string `json:"comment,omitempty"`
-	}{KeyID: keyID, Public: hex.EncodeToString(pub), Comment: "update-signing"})
-	out, _ := json.MarshalIndent(&f, "", "  ")
-	if err := atomicWrite(keysPath, out); err != nil {
-		fatal("write keys: %v", err)
-	}
-	if err := os.WriteFile(privPath, []byte(hex.EncodeToString(priv)), 0o600); err != nil {
-		fatal("write private: %v", err)
-	}
-	fmt.Printf("ok: key %s добавлен в %s\n    приватный (hex) -> %s (хранить офлайн)\n", keyID, keysPath, privPath)
+	fmt.Printf("ok: key %s role=update; private -> %s (offline); restart after local policy provisioning\n", keyID, privPath)
 }
 
 func loadPriv(path string) ed25519.PrivateKey {
@@ -155,6 +143,9 @@ func cmdSign(copyPayload bool) {
 		SHA256:     hex.EncodeToString(sum),
 		Size:       st.Size(),
 	}
+	if err := m.Validate(); err != nil {
+		fatal("manifest: %v", err)
+	}
 	if err := m.Sign(loadPriv(privPath)); err != nil {
 		fatal("sign: %v", err)
 	}
@@ -179,40 +170,22 @@ func cmdVerify() {
 	if len(os.Args) != 5 {
 		fatal("usage: updatetool verify <update.json> <payload> <trusted_keys.json>")
 	}
-	mb, err := os.ReadFile(os.Args[2])
+	mb, err := publisherfiles.Read(os.Args[2], update.MaxManifestSize)
 	if err != nil {
 		fatal("manifest: %v", err)
 	}
-	var m update.Manifest
-	dec := json.NewDecoder(strings.NewReader(string(mb)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&m); err != nil {
+	m, err := update.DecodeStrict(mb)
+	if err != nil {
 		fatal("manifest: %v", err)
 	}
-	if err := m.Validate(); err != nil {
-		fatal("validate: %v", err)
+	if m.Schema == update.PairSchema {
+		fatal("schema2 requires verify-pair; one EXE is not the complete artifact set")
 	}
-	data, err := os.ReadFile(os.Args[4])
-	if err != nil {
+	policy, present, err := metadata.ReadTrustPolicyFile(os.Args[4])
+	if err != nil || !present {
 		fatal("trusted keys: %v", err)
 	}
-	var f struct {
-		Keys []struct {
-			KeyID  string `json:"key_id"`
-			Public string `json:"public_hex"`
-		} `json:"keys"`
-	}
-	if err := json.Unmarshal(data, &f); err != nil {
-		fatal("trusted keys: %v", err)
-	}
-	keys := map[string]ed25519.PublicKey{}
-	for _, k := range f.Keys {
-		raw, err := hex.DecodeString(k.Public)
-		if err != nil || len(raw) != ed25519.PublicKeySize {
-			fatal("trusted key %s: bad hex", k.KeyID)
-		}
-		keys[k.KeyID] = ed25519.PublicKey(raw)
-	}
+	keys := policy.VerificationKeys(metadata.RoleUpdate)
 	if err := m.Verify(keys); err != nil {
 		fatal("verify: %v", err)
 	}

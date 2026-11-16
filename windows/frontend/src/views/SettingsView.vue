@@ -1,319 +1,184 @@
 <script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import PageHeading from '../components/PageHeading.vue'
-/**
- * Настройки (concept): профиль доставки (подписанный metadata-envelope),
- * сводка секретов, системная информация, «О защите». Все значения — факты
- * из биндингов (GetDeliveryProfile, ListSecrets), выдуманных нет.
- */
-import { computed, onMounted, ref } from 'vue'
+import ActionButton from '../components/ActionButton.vue'
 import ProfileTransfer from '../components/ProfileTransfer.vue'
 import ApplicationUpdate from '../components/ApplicationUpdate.vue'
+import AutostartSetting from '../components/AutostartSetting.vue'
+import ProcessModeSetting from '../components/ProcessModeSetting.vue'
 import HintBox from '../components/HintBox.vue'
-import { api, isBuildPhase } from '../api/backend'
+import { api } from '../api/backend'
 import type { DeliveryProfile, RuntimeInfo } from '../api/contract'
+import { fmtDateTime } from '../api/labels'
+import { useNav } from '../composables/nav'
+import { useBackendState, initBackendState } from '../composables/backendState'
+import { createPoller } from '../composables/polling'
+import { useRemovedControlFocus } from '../composables/removedControlFocus'
 
+const { isRunning, isBusy, switching, stopPending, canStop, stopVpn } = useBackendState()
+const { navTo } = useNav()
+const page = ref<HTMLElement | null>(null)
+const { focusBeforeRemoval } = useRemovedControlFocus(page, '#settings-action-heading')
+function onStop(): void {
+  if (!canStop.value) return
+  focusBeforeRemoval()
+  void stopVpn()
+}
 const profile = ref<DeliveryProfile | null>(null)
 const runtimeInfo = ref<RuntimeInfo | null>(null)
+const profileLoading = ref(false)
+const runtimeLoading = ref(false)
 const profileError = ref('')
-
-// Автозапуск (V2-048/F14): HKCU Run, без UAC. Ошибка — честно текстом.
-const autostart = ref<boolean | null>(null)
-const autostartBusy = ref(false)
-const autostartError = ref('')
-async function toggleAutostart(): Promise<void> {
-  if (isBuildPhase() || autostartBusy.value || autostart.value === null) return
-  autostartBusy.value = true
-  autostartError.value = ''
-  try {
-    await api.setAutostart(!autostart.value)
-    autostart.value = !autostart.value
-  } catch (e) {
-    autostartError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    autostartBusy.value = false
-  }
-}
-
-onMounted(async () => {
-  if (isBuildPhase()) {
-    profileError.value = 'Биндинги недоступны: приложение запущено вне Wails (предпросмотр).'
-    return
-  }
-  try {
-    profile.value = await api.getDeliveryProfile()
-  } catch (e) {
-    profileError.value = e instanceof Error ? e.message : String(e)
-  }
-  try {
-    runtimeInfo.value = await api.getRuntimeInfo()
-  } catch {
-    runtimeInfo.value = null
-  }
-  try {
-    autostart.value = await api.getAutostart()
-  } catch {
-    /* справочная настройка; ошибка уйдёт при переключении */
-  }
+const runtimeError = ref('')
+const profileReceivedAt = ref<string | null>(null)
+const runtimeReceivedAt = ref<string | null>(null)
+const autostartRefreshVersion = ref(0)
+const transferOpen = ref(false)
+const updateOpen = ref(false)
+let initialImportSuggested = false
+let active = true
+const profileReader = createPoller(api.getDeliveryProfile, delivery => {
+  profile.value = delivery
+  profileReceivedAt.value = delivery === null ? null : new Date().toISOString()
+  profileError.value = delivery === null ? 'Сведения о профиле не получены. Повторите загрузку.' : ''
+  if (!initialImportSuggested && delivery?.state === 'embedded') { initialImportSuggested = true; transferOpen.value = true }
+}, null, () => {
+  clearProfile()
+  profileError.value = 'Сведения о профиле не получены. Повторите загрузку.'
+}, pending => {
+  profileLoading.value = pending
+  if (pending) clearProfile()
 })
-
-const statusPill = computed(() => {
-  const p = profile.value
-  if (!p) return { cls: 'neutral', text: 'Нет данных' }
-  if (p.present && !p.error) return { cls: 'success', text: 'Установлено' }
-  if (p.present && p.error) return { cls: 'warning', text: 'С замечанием' }
-  return { cls: 'neutral', text: 'Встроенный набор' }
+const runtimeReader = createPoller(api.getRuntimeInfo, runtime => {
+  runtimeInfo.value = runtime
+  runtimeReceivedAt.value = runtime === null ? null : new Date().toISOString()
+  runtimeError.value = runtime === null ? 'Сведения о текущем процессе недоступны.' : ''
+}, null, () => {
+  clearRuntime()
+  runtimeError.value = 'Сведения о текущем процессе недоступны.'
+}, pending => {
+  runtimeLoading.value = pending
+  if (pending) clearRuntime()
 })
-
-function fmtDate(iso: string): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+onBeforeUnmount(() => { active = false; profileReader.stop(); runtimeReader.stop() })
+function clearProfile(): void {
+  profile.value = null
+  profileReceivedAt.value = null
+  profileError.value = ''
 }
-
-function shortId(id: string): string {
-  if (!id) return '—'
-  return id.length > 10 ? id.slice(0, 8) + '…' : id
+function clearRuntime(): void {
+  runtimeInfo.value = null
+  runtimeReceivedAt.value = null
+  runtimeError.value = ''
 }
-
+function refreshAll(): void {
+  if (!active) return
+  autostartRefreshVersion.value++
+  refreshSummary()
+}
+function refreshSummary(invalidate = false): void {
+  if (!active) return
+  if (invalidate) {
+    clearProfile()
+    clearRuntime()
+    void profileReader.invalidate()
+    void runtimeReader.invalidate()
+  } else {
+    void profileReader.refresh()
+    void runtimeReader.refresh()
+  }
+}
+function refreshProfile(): void {
+  if (!active || profileLoading.value) return
+  void profileReader.refresh()
+}
+function refreshRuntime(): void {
+  if (!active || runtimeLoading.value) return
+  void runtimeReader.refresh()
+}
+onMounted(() => { void initBackendState(); profileReader.start(); runtimeReader.start() })
+function disclosure(event: Event, section: 'transfer' | 'update'): void {
+  const open = (event.target as HTMLDetailsElement).open
+  if (section === 'transfer') transferOpen.value = open
+  else updateOpen.value = open
+}
+const profileStatus = computed(() => {
+  const value = profile.value
+  if (profileLoading.value) return 'Сведения обновляются'
+  if (!value || value.factsSchema !== 1) return 'Принятие не подтверждено'
+  if (value.storageState === 'recovery_required') return 'Хранилище требует восстановления'
+  return ({ accepted: 'Приложение сообщает принятую версию', restricted: 'Нет разрешённых каналов', policy_pending: 'Ожидается применение ограничений', legacy_unanchored: 'Принятие не зафиксировано', embedded: 'Внешний профиль не принят', unavailable: 'Сведения недоступны', unknown: 'Состояние неизвестно' })[value.state ?? 'unknown']
+})
+const policyStatus = computed(() => profile.value?.pinPolicyState === 'applied' ? `Сохранена версия ${profile.value.pinPolicyVersion || 'не сообщена'}` : profile.value?.pinPolicyState === 'pending' ? 'Ожидает применения' : profile.value?.pinPolicyState === 'not_observed' ? 'Получение не зарегистрировано' : 'Нет данных')
+const storageStatus = computed(() => profile.value?.storageState === 'recovery_required' ? 'Требуется восстановление' : profile.value?.storageState === 'cleanup_pending' ? 'Очистка отложена' : profile.value?.storageState === 'not_observed' ? 'Ограничение не зарегистрировано' : 'Нет данных')
 </script>
 
 <template>
-  <div class="view">
-    <PageHeading title="Система" description="Параметры запуска, подписанный профиль и обслуживание приложения." ></PageHeading>
-
-    <div class="grid">
-      <!-- Профиль доставки -->
-      <section class="card delivery">
-        <div class="card-header">
-          <h2>Профиль доставки</h2>
-          <span class="pill" :class="statusPill.cls"><span class="dot"></span>{{ statusPill.text }}</span>
-        </div>
-
-        <div v-if="profileError" class="empty-block">{{ profileError }}</div>
-
-        <template v-else-if="profile">
-          <div class="rows">
-            <div class="row"><span>Версия обновления</span><strong>{{ profile.present ? profile.version : '—' }}</strong></div>
-            <div class="row"><span>key_id</span><strong class="mono">{{ profile.present ? shortId(profile.keyId) : '—' }}</strong></div>
-            <div class="row"><span>Действует до</span><strong>{{ profile.present ? fmtDate(profile.expiresAt) : '—' }}</strong></div>
-            <div class="row"><span>Доверенные ключи</span><strong>{{ profile.trustedKeys ?? '—' }}</strong></div>
-            <div class="row"><span>Каналы из обновления</span><strong>{{ profile.present ? `${profile.channelsApplied} · из подписанного обновления` : 'встроенный набор' }}</strong></div>
-          </div>
-          <p v-if="profile.error" class="profile-error">{{ profile.error }}</p>
-        </template>
-
-        <HintBox kind="info" title="Что это">
-          Подписанный metadata-envelope (FR-008) заменяет встроенный набор каналов. Envelope без
-          действующей подписи, с даунгрейдом версии или истёкший — отвергается (fail-closed).
-        </HintBox>
-      </section>
-
-      <!-- Системные настройки (V2-048/F14) -->
-      <section class="card">
-        <div class="card-header">
-          <h2>Система</h2>
-        </div>
-        <div class="rows">
-          <div class="row">
-            <span>Автозапуск с системой</span>
-            <button
-              class="switch"
-              :class="{ on: autostart }"
-              role="switch"
-              :aria-checked="autostart ?? false"
-              :aria-label="'Автозапуск с системой: ' + (autostart === null ? 'нет данных' : autostart ? 'включён' : 'выключен')"
-              :disabled="autostartBusy || autostart === null"
-              :title="autostart ? 'Выключить автозапуск' : 'Включить автозапуск (HKCU Run, без UAC)'"
-              @click="toggleAutostart"
-            ></button>
-            <span v-if="autostart === null">нет данных</span>
-          </div>
-        </div>
-        <p v-if="autostartError" class="profile-error">{{ autostartError }}</p>
-        <HintBox kind="info" title="Как работает">
-          Обычная пользовательская запись в реестре (HKCU\...\Run, без прав администратора).
-          Приложение стартует с флагом --auto-connect: подключение идёт через честный
-          failover-on-start с probe-проверкой, как и при ручном «Подключить».
-        </HintBox>
-      </section>
-
-      <!-- Перенос на новое устройство (V2-049/F8) -->
-    </div>
-
-    <ProfileTransfer />
-
-    <!-- О защите -->
-    <section class="card about">
-      <div class="card-header"><h2>О защите</h2></div>
-      <div class="about-grid">
-        <div>
-          <h3>Что делает snowden.system</h3>
-          <p>Защищённый трафик проходит только через проверенные каналы.</p>
-          <p>Если рабочего канала нет — соединение останавливается.</p>
-        </div>
-        <div>
-          <h3>Что продукт НЕ обещает</h3>
-          <ul>
-            <li>работу при полном shutdown / allowlist;</li>
-            <li>работу QUIC при фильтрации UDP;</li>
-            <li>вечную работоспособность одного сервера.</li>
-          </ul>
-        </div>
-        <div>
-          <h3>Почему VPN иногда отключается сам</h3>
-          <p>Fail-closed — лучше остановить передачу, чем отправить трафик напрямую.</p>
-        </div>
-      </div>
+  <div ref="page" class="view">
+    <PageHeading id="settings-action-heading" tabindex="-1" title="Настройки системы" description="Профиль, запуск, перенос и обслуживание. Ответ на команду не равен готовому защищённому подключению.">
+      <ActionButton @click="refreshAll">Обновить сведения</ActionButton>
+      <ActionButton v-if="isRunning || isBusy || switching" :disabled="!canStop" :busy="stopPending" @click="onStop">{{ stopPending ? 'Ожидание остановки…' : 'Остановить' }}</ActionButton>
+    </PageHeading>
+    <section class="profile-summary" :aria-busy="profileLoading">
+      <div class="section-heading"><h2>Профиль доставки</h2><span class="status-label" role="status">{{ profileStatus }}</span><ActionButton :disabled="profileLoading" :busy="profileLoading" @click="refreshProfile">Обновить сведения о профиле</ActionButton></div>
+      <p class="source-note">Проверено приложением: {{ fmtDateTime(profile?.checkedAt) }} · Получено экраном: {{ fmtDateTime(profileReceivedAt) }}. Срок действия профиля и состояние подключения — разные сведения.</p>
+      <p v-if="profileError" class="error" role="status">{{ profileError }}</p>
+      <dl v-if="profile" class="profile-facts">
+        <div><dt>Принятая версия</dt><dd>{{ profile.profileIdentity || 'Не подтверждена' }}</dd></div>
+        <div><dt>Удержанная версия</dt><dd>{{ profile.retainedIdentity || 'Не сообщена' }}</dd></div>
+        <div><dt>Издатель</dt><dd class="mono">{{ profile.keyId || 'Не подтверждён' }}</dd></div>
+        <div><dt>Срок профиля</dt><dd>{{ fmtDateTime(profile.expiresAt) }}</dd></div>
+        <div><dt>Ключи профиля</dt><dd>{{ profile.activeProfileKeys ?? 'Нет данных' }}</dd></div>
+        <div><dt>Объявленные / разрешённые каналы</dt><dd>{{ profile.channelsDeclared ?? '—' }} / {{ profile.channelsEligible ?? '—' }}</dd></div>
+        <div><dt>Ограниченные / выведенные каналы</dt><dd>{{ profile.channelsRestricted ?? '—' }} / {{ profile.channelsRetired ?? '—' }}</dd></div>
+        <div><dt>Отозванные сертификаты</dt><dd>{{ profile.certificatesRevoked ?? 'Нет данных' }}</dd></div>
+        <div><dt>Список отзывов</dt><dd>{{ policyStatus }}</dd></div>
+        <div><dt>Ресурсы хранилища</dt><dd>{{ storageStatus }}</dd></div>
+      </dl>
+      <p v-if="profile?.error || profile?.storageWarning" class="error">Приложение сообщает ограничение профиля или хранилища. Сверьте состояние выше перед новым импортом; исходный текст ошибки здесь не публикуется.</p>
+      <p class="source-note">Разрешённый канал и принятая версия не подтверждают native применение, доступность сервера или отсутствие утечек. Отсутствие зарегистрированного сбоя хранилища не является проверкой диска.</p>
+      <button class="btn" @click="navTo('channels')">Состав каналов и наблюдения</button>
     </section>
 
-    <!-- Обновления приложения (V2-050/F15) -->
-    <ApplicationUpdate />
-
-    <!-- Системная информация -->
-    <section class="card sysinfo">
-      <div class="card-header"><h2>Системная информация</h2></div>
-      <div class="about-grid sys-grid">
-        <div class="rows">
-          <div class="row"><span>Версия EXE</span><strong>{{ runtimeInfo?.version ? `v${runtimeInfo.version}` : '—' }}</strong></div>
-          <div class="row"><span>Ядро sing-box</span><strong>{{ runtimeInfo?.coreVersion || '—' }}</strong></div>
-          <div class="row"><span>Wails</span><strong>{{ runtimeInfo?.shellVersion || '—' }}</strong></div>
-        </div>
-        <div class="rows">
-          <div class="row"><span>Хранилище секретов</span><strong>DPAPI (%AppData%)</strong></div>
-          <div class="row"><span>Процесс</span><strong>{{ runtimeInfo ? `${runtimeInfo.os}/${runtimeInfo.arch} · PID ${runtimeInfo.pid}` : '—' }}</strong></div>
-          <div class="row"><span>Журнал</span><strong>%AppData%\snowden-system\logs</strong></div>
-        </div>
-      </div>
+    <section class="system-settings">
+      <h2>Запуск и режим</h2>
+      <AutostartSetting :refresh-version="autostartRefreshVersion" />
+      <ProcessModeSetting id="settings-process-mode" />
+      <div class="actions"><button class="btn" @click="navTo('netguard')">Локальное восстановление</button><button class="btn" @click="navTo('secrets')">Локальные секреты</button></div>
     </section>
+
+    <details class="maintenance" :open="transferOpen" @toggle="disclosure($event, 'transfer')"><summary>Профиль, доверие и перенос на устройство</summary><ProfileTransfer v-if="transferOpen" @changed="refreshSummary(true)" /></details>
+    <details class="maintenance" :open="updateOpen" @toggle="disclosure($event, 'update')"><summary>Проверка и установка обновления</summary><ApplicationUpdate v-if="updateOpen" @changed="refreshSummary(true)" /></details>
+    <details class="runtime" :aria-busy="runtimeLoading"><summary>Сведения о текущем процессе</summary>
+      <p class="source-note">{{ runtimeLoading ? 'Сведения о процессе обновляются.' : runtimeInfo ? 'Сведения о процессе получены.' : 'Сведения о процессе не получены.' }} Получено экраном: {{ fmtDateTime(runtimeReceivedAt) }}.</p>
+      <p v-if="runtimeError" class="error">{{ runtimeError }}</p>
+      <dl class="profile-facts"><div><dt>Версия EXE</dt><dd>{{ runtimeInfo?.version || 'Не сообщена' }}</dd></div><div><dt>Ядро</dt><dd>{{ runtimeInfo?.coreVersion || 'Не сообщено' }}</dd></div><div><dt>Wails</dt><dd>{{ runtimeInfo?.shellVersion || 'Не сообщён' }}</dd></div><div><dt>Процесс</dt><dd>{{ runtimeInfo ? `${runtimeInfo.os}/${runtimeInfo.arch}` : 'Нет данных' }} · PID {{ runtimeInfo && runtimeInfo.pid > 0 ? runtimeInfo.pid : 'не сообщён' }}</dd></div></dl>
+      <ActionButton :disabled="runtimeLoading" :busy="runtimeLoading" @click="refreshRuntime">Обновить сведения о процессе</ActionButton>
+      <button class="btn" @click="navTo('logs')">Журнал и сводка для поддержки</button>
+    </details>
+    <HintBox kind="info">После импорта или команды перезапуска перечитайте факты. Проверка пакета, сохранение профиля и готовность текущего процесса не заменяют результата нового подключения.</HintBox>
   </div>
 </template>
 
 <style scoped>
-.view {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.head h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 650;
-}
-.sub {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 11.5px;
-  max-width: 720px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 10px;
-}
-
-.delivery,
-.secrets,
-.about,
-.sysinfo {
-  padding: 13px;
-}
-
-.rows {
-  margin-top: 8px;
-}
-.row {
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid #142d40;
-  color: #8298ab;
-  font-size: 12px;
-}
-.row strong {
-  color: #dce7ee;
-  font-weight: 500;
-  margin-left: auto;
-  text-align: right;
-}
-
-.secret-row .sr-title {
-  color: #dbe6ed;
-  flex: 0 0 auto;
-  max-width: 34%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.secret-row .sr-fp {
-  color: #6d8497;
-  font-size: 12px;
-}
-.secret-row .pill {
-  margin-left: auto;
-}
-.secret-row .sr-reveals,
-.secret-row .sr-updated {
-  color: #55708a;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.profile-error {
-  margin: 8px 0 0;
-  color: #ff8a90;
-  font-size: 12px;
-}
-.secrets-note {
-  margin: 9px 0 0;
-  color: #6f8699;
-  font-size: 12px;
-}
-
-.empty-block {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px dashed var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.about-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 20px;
-  margin-top: 10px;
-}
-.sys-grid {
-  grid-template-columns: 1fr 1fr;
-}
-.about-grid h3 {
-  margin: 0 0 6px;
-  color: #e2ecf2;
-  font-size: 11px;
-}
-.about-grid p,
-.about-grid li {
-  color: #8499ab;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.about-grid p {
-  margin: 0 0 6px;
-}
-.about-grid ul {
-  margin: 0;
-  padding-left: 15px;
-}
-
-@media (max-width: 1000px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
-
+.view { display: flex; flex-direction: column; gap: 20px; min-width: 0; overflow-wrap: anywhere; }
+h2 { margin: 0; font-size: 17px; }
+h3 { margin: 0 0 8px; font-size: 14px; }
+.profile-summary, .system-settings { padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); min-width: 0; }
+.section-heading, .actions { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: baseline; }
+.section-heading { justify-content: space-between; }
+.status-label, .source-note { color: var(--muted); font-size: 12.5px; line-height: 1.65; }
+.profile-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; margin: 20px 0; }
+dt { color: var(--muted); font-size: 12px; }
+dd { margin: 6px 0 0; color: var(--text-soft); font-size: 13px; }
+.setting-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 20px; padding: 18px 0; border-bottom: 1px solid var(--border); }
+.setting-row > div { min-width: 0; flex: 1 1 320px; }
+.setting-row > .btn { align-self: center; }
+.actions { margin-top: 16px; }
+summary { padding: 12px 0; color: var(--text-soft); font-size: 14px; cursor: pointer; }
+.maintenance, .runtime { min-width: 0; border-top: 1px solid var(--border); }
+.btn { min-height: 40px; white-space: normal; }
+.btn[aria-disabled='true'] { color: var(--muted); cursor: not-allowed; }
+.error { color: var(--yellow); font-size: 13px; line-height: 1.6; }
+@media (max-width: 760px) { .profile-summary, .system-settings { padding: 16px; } .profile-facts { grid-template-columns: minmax(0, 1fr); } }
 </style>

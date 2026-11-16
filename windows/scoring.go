@@ -40,8 +40,8 @@ import (
 	"github.com/snowden-system/windows/backend/render"
 )
 
-// scoreWeights — веса слагаемых C2 (Σ=1.0). §28: независимость — наибольший
-// вес, «минимально коррелированный survivor» важнее исторической стабильности.
+// Ranking weights are engineering policy, not calibrated probabilities.
+// The dependency component measures declared/configured differences only.
 const (
 	wHealth       = 0.30
 	wIndependence = 0.35
@@ -75,7 +75,7 @@ type candidateScore struct {
 }
 
 // scoreCandidate — вычислить score кандидата (чистая функция от фактов).
-func scoreCandidate(cand, failed render.ChannelDescriptor, hs *healthState, hasData bool, now time.Time) candidateScore {
+func scoreCandidate(cand, failed render.ChannelDescriptor, hs *healthState, hasData bool, now time.Time, profile ...render.ProfileProvenance) candidateScore {
 	cs := candidateScore{}
 	verdict := "no_data"
 	if hasData && hs != nil {
@@ -94,7 +94,7 @@ func scoreCandidate(cand, failed render.ChannelDescriptor, hs *healthState, hasD
 	}
 	cs.Verdict = verdict
 	cs.Health = verdictHealth(verdict)
-	cs.Indep = render.Independence(cand, failed)
+	cs.Indep = render.Independence(cand, failed, profile...)
 	cs.Score = wHealth*cs.Health + wIndependence*cs.Indep + wFreshness*cs.Fresh + wEvidenceConf*cs.Evidence
 	return cs
 }
@@ -125,7 +125,7 @@ func healthBucket(verdict string) int {
 // и оно — прежний порядок. d2s — подменяемый источник D2-состояний (может
 // быть nil: тогда все состояния пустые = прежнее поведение C2).
 // scores — для журнала порядка (почему выбран именно этот кандидат).
-func rankCandidates(cands []string, descriptors []render.ChannelDescriptor, failedID string, hs func(id string) (*healthState, bool), d2s func(id string) string, now time.Time) ([]string, map[string]candidateScore) {
+func rankCandidates(cands []string, descriptors []render.ChannelDescriptor, failedID string, hs func(id string) (*healthState, bool), d2s func(id string) string, now time.Time, profile ...render.ProfileProvenance) ([]string, map[string]candidateScore) {
 	byID := make(map[string]render.ChannelDescriptor, len(descriptors))
 	for _, ch := range descriptors {
 		byID[ch.ID] = ch
@@ -149,7 +149,7 @@ func rankCandidates(cands []string, descriptors []render.ChannelDescriptor, fail
 			continue // не должен случиться (кандидаты берутся из дескрипторов)
 		}
 		st, hasData := hs(id)
-		cs := scoreCandidate(cand, failed, st, hasData, now)
+		cs := scoreCandidate(cand, failed, st, hasData, now, profile...)
 		if d2s != nil {
 			cs.D2State = d2s(id) // тай-брейк равных score (V2-064)
 		}
@@ -198,7 +198,7 @@ func rankCandidates(cands []string, descriptors []render.ChannelDescriptor, fail
 // scoredCandidates — интеграция в tryFailover: пересортировка кандидатов
 // по score против деградировавшего канала + строка журнала «почему».
 // Пустой/неизвестный реестр = честный дефолт (см. шапку файла).
-func (a *App) scoredCandidates(cands []string, descriptors []render.ChannelDescriptor, failedID string) ([]string, string) {
+func (a *App) scoredCandidates(cands []string, descriptors []render.ChannelDescriptor, failedID string, profile ...render.ProfileProvenance) ([]string, string) {
 	if len(cands) <= 1 {
 		return cands, "score: кандидатов меньше двух — порядок прежний"
 	}
@@ -213,7 +213,7 @@ func (a *App) scoredCandidates(cands []string, descriptors []render.ChannelDescr
 	// D2 (V2-064): источник состояний восстановления — производное из
 	// слабых фоновых фактов и health (quarantine.go), чтение потокобезопасно.
 	d2src := func(id string) string { return a.quarantineStateOf(id).State }
-	ranked, scores := rankCandidates(cands, descriptors, failedID, lookup, d2src, time.Now())
+	ranked, scores := rankCandidates(cands, descriptors, failedID, lookup, d2src, time.Now(), profile...)
 	if scores == nil {
 		return cands, "score: дескриптор отказавшего канала не найден — порядок прежний"
 	}
@@ -223,7 +223,7 @@ func (a *App) scoredCandidates(cands []string, descriptors []render.ChannelDescr
 	}
 	detail := "score: " + ranked[0] + " предпочтительнее " + cands[0]
 	if cs, ok := scores[ranked[0]]; ok {
-		detail += " (health=" + f2(cs.Health) + " indep=" + f2(cs.Indep) + " fresh=" + f2(cs.Fresh) + ")"
+		detail += " (health=" + f2(cs.Health) + " dependency_hint=" + f2(cs.Indep) + " fresh=" + f2(cs.Fresh) + ")"
 	}
 	return ranked, detail
 }

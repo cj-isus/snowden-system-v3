@@ -4,8 +4,8 @@
 // Контракт (docs/PLAN.md §3 FR-008, решение V2-033):
 //   - Ed25519-подпись над canonical-JSON envelope (signature-поле пустое);
 //   - strict decode: unknown fields и trailing data — reject (как config.Parse);
-//   - fail-closed валидация: схема, временной интервал (±5min clock skew),
-//     expiry, антидаунгрейд (version >= minimumVersion), unknown key_id,
+//   - fail-closed валидация: схема, issued_at (5min skew), строгий expiry,
+//     антидаунгрейд (version >= minimumVersion), unknown key_id,
 //     ревокации, secret-shaped ссылки;
 //   - доверие: локальный файл trusted_keys.json (%AppData%), key_id = первые
 //     16 hex SHA256 публичного ключа; нет файла/ключей — override не
@@ -23,25 +23,32 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/snowden-system/windows/backend/filetxn"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/snowden-system/windows/backend/filetxn"
 )
 
-// SchemaVersion — единственная поддерживаемая схема envelope.
+// SchemaVersion is the legacy epoch0 envelope schema; schema2 carries an epoch.
 const SchemaVersion = 1
 
-// MaxClockSkew — допуск на расхождение часов при проверке issued_at/expires_at.
+// Bounds descriptor/graph/pairwise work before profile acceptance. This is a
+// resource ceiling, not a measured maximum supported deployment size.
+const MaxProfileChannels = 64
+const MaxEnvelopeSize = 1 << 20 // legacy/public file reader; TUF target has its own tighter budget
+
+// MaxClockSkew — допуск issued_at и local clock continuity. Expiry строгий.
 const MaxClockSkew = 5 * time.Minute
 
 // Envelope — подписанный набор дескрипторов каналов.
 type Envelope struct {
 	SchemaVersion   int       `json:"schema_version"`
 	MetadataVersion uint64    `json:"metadata_version"`
+	ProfileEpoch    uint64    `json:"profile_epoch,omitempty"`
 	IssuedAt        time.Time `json:"issued_at"`
 	ExpiresAt       time.Time `json:"expires_at"`
 	KeyID           string    `json:"key_id"`
@@ -51,29 +58,37 @@ type Envelope struct {
 	// V2-048/F10: процессы, идущие мимо туннеля (нижний регистр, без пути).
 	// Полный список заменяет предыдущий (не merge): envelope — единый источник
 	// правды метаданных. Доставed owner'ом через тот же подписанный конверт.
-	SplitDirect []string `json:"split_direct,omitempty"`
+	SplitDirect  []string             `json:"split_direct,omitempty"`
+	Dependencies DeliveryDependencies `json:"dependencies,omitempty,omitzero"`
 }
 
 // Validate — fail-closed проверка envelope БЕЗ подписи (структура и семантика).
 // minimumVersion — последний подтверждённо принятый version (антидаунгрейд).
 func (e *Envelope) Validate(now time.Time, minimumVersion uint64) error {
-	if e.SchemaVersion != SchemaVersion {
-		return fmt.Errorf("metadata: unsupported schema version %d", e.SchemaVersion)
+	if e == nil || e.ProfileEpoch != 0 {
+		return ErrProfileEpoch // legacy scalar API cannot validate an epoch profile
 	}
-	if e.MetadataVersion < minimumVersion {
-		return fmt.Errorf("metadata: version downgrade (%d < %d)", e.MetadataVersion, minimumVersion)
+	return e.ValidateVersion(now, ProfileVersion{Counter: minimumVersion})
+}
+
+func (e *Envelope) ValidateVersion(now time.Time, minimum ProfileVersion) error {
+	if err := e.validateVersionShape(minimum); err != nil {
+		return err
+	}
+	if err := e.Dependencies.Validate(); err != nil {
+		return err
 	}
 	if e.IssuedAt.IsZero() || e.ExpiresAt.IsZero() || !e.ExpiresAt.After(e.IssuedAt) {
 		return errors.New("metadata: invalid validity interval")
 	}
 	if e.IssuedAt.After(now.Add(MaxClockSkew)) {
-		return errors.New("metadata: issued_at too far in the future")
+		return ErrTrustNotYetValid
 	}
-	if !e.ExpiresAt.After(now.Add(-MaxClockSkew)) {
-		return errors.New("metadata: expired")
+	if !e.ExpiresAt.After(now) {
+		return ErrProfileExpired
 	}
-	if len(e.Channels) == 0 {
-		return errors.New("metadata: empty channels")
+	if len(e.Channels) == 0 || len(e.Channels) > MaxProfileChannels {
+		return errors.New("metadata: channel count outside 1..64 bound")
 	}
 	// V2-048/F10: имена процессов — нижний регистр, без пути/аргументов.
 	// Пустой список валиден (нет сплита); «.exe» голым не бывает — имя файла.
@@ -86,11 +101,14 @@ func (e *Envelope) Validate(now time.Time, minimumVersion uint64) error {
 	seen := map[string]bool{}
 	revoked := map[string]bool{}
 	for _, id := range e.Revocations {
+		if !ValidChannelID(id) {
+			return errors.New("metadata: invalid revoked channel id")
+		}
 		revoked[id] = true
 	}
 	for i, c := range e.Channels {
-		if c.ID == "" {
-			return fmt.Errorf("metadata: channels[%d]: empty id", i)
+		if !ValidChannelID(c.ID) {
+			return fmt.Errorf("metadata: channels[%d]: invalid portable id", i)
 		}
 		if seen[c.ID] {
 			return fmt.Errorf("metadata: channels[%d]: duplicate id %s", i, c.ID)
@@ -108,6 +126,9 @@ func (e *Envelope) Validate(now time.Time, minimumVersion uint64) error {
 		if err := validate(c); err != nil {
 			return fmt.Errorf("metadata: channel %s: %w", c.ID, err)
 		}
+		// Certificate structure remains authenticated/strict. Time availability
+		// is a per-channel eligibility gate; one expired identity must not poison
+		// healthy alternatives in the same still-valid signed profile.
 	}
 	return nil
 }
@@ -115,18 +136,18 @@ func (e *Envelope) Validate(now time.Time, minimumVersion uint64) error {
 // Verify — проверка подписи по таблице доверенных ключей (key_id → ключ).
 func (e *Envelope) Verify(keys map[string]ed25519.PublicKey) error {
 	if len(keys) == 0 {
-		return errors.New("metadata: no trusted keys")
+		return fmt.Errorf("%w: metadata: no trusted profile keys", ErrTrustRole)
 	}
 	key, ok := keys[e.KeyID]
 	if !ok || len(key) != ed25519.PublicKeySize {
-		return fmt.Errorf("metadata: unknown key id %q", e.KeyID)
+		return fmt.Errorf("%w: metadata: unknown profile key id %q", ErrTrustRole, e.KeyID)
 	}
 	sig, err := base64.RawStdEncoding.DecodeString(e.Signature)
 	if err != nil || len(sig) != ed25519.SignatureSize {
-		return errors.New("metadata: invalid signature encoding")
+		return fmt.Errorf("%w: metadata: invalid signature encoding", ErrTrustRole)
 	}
 	if !ed25519.Verify(key, e.Canonical(), sig) {
-		return errors.New("metadata: signature mismatch")
+		return fmt.Errorf("%w: metadata: signature mismatch", ErrTrustRole)
 	}
 	return nil
 }
@@ -152,11 +173,31 @@ func (e *Envelope) Sign(key ed25519.PrivateKey) error {
 
 // DecodeStrict — строгий разбор файла: unknown fields/trailing data запрещены.
 func DecodeStrict(data []byte) (*Envelope, error) {
+	if len(data) == 0 || len(data) > MaxEnvelopeSize {
+		return nil, errors.New("metadata: envelope outside size bound")
+	}
+	if err := checkCheckpointJSON(data); err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil || fields == nil {
+		return nil, errors.New("metadata: envelope object required")
+	}
+	for name, raw := range fields {
+		switch name {
+		case "schema_version", "metadata_version", "profile_epoch", "issued_at", "expires_at", "key_id", "signature", "channels", "revocations", "split_direct", "dependencies":
+		default:
+			return nil, errors.New("metadata: unknown/aliased envelope property")
+		}
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return nil, errors.New("metadata: envelope property cannot be null")
+		}
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var e Envelope
 	if err := dec.Decode(&e); err != nil {
-		return nil, fmt.Errorf("metadata: decode: %w", err)
+		return nil, errors.New("metadata: malformed envelope property")
 	}
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
@@ -218,64 +259,37 @@ type trustedKey struct {
 // LoadKeys — чтение и разбор доверенных ключей. Отсутствие файла — не ошибка:
 // возвращается пустая таблица и present=false (override просто не применяется).
 func (s *Store) LoadKeys() (keys map[string]ed25519.PublicKey, present bool, err error) {
-	if err := filetxn.Check(s.ImportJournal()); err != nil {
-		return nil, false, err
-	}
-	data, err := os.ReadFile(s.KeysPath())
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, false, nil
-		}
-		return nil, false, fmt.Errorf("metadata: read keys: %w", err)
-	}
-	var f trustedKeysFile
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&f); err != nil {
-		return nil, true, fmt.Errorf("metadata: parse keys: %w", err)
-	}
-	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
-		return nil, true, errors.New("metadata: trailing keys data")
-	}
-	if f.Schema != 1 {
-		return nil, true, fmt.Errorf("metadata: keys file schema %d", f.Schema)
-	}
-	keys = make(map[string]ed25519.PublicKey, len(f.Keys))
-	for _, k := range f.Keys {
-		raw, err := hex.DecodeString(k.Public)
-		if err != nil || len(raw) != ed25519.PublicKeySize {
-			return nil, true, fmt.Errorf("metadata: key %s: invalid public key hex", k.KeyID)
-		}
-		id := KeyIDFor(ed25519.PublicKey(raw))
-		if k.KeyID != "" && k.KeyID != id {
-			return nil, true, fmt.Errorf("metadata: key %s: key_id mismatch (expected %s)", k.KeyID, id)
-		}
-		keys[id] = ed25519.PublicKey(raw)
-	}
-	return keys, true, nil
+	return s.LoadRoleKeys(RoleProfile)
 }
 
-// SaveKeys — атомарная запись таблицы ключей (temp + rename), права 0600.
+// SaveKeys publishes encoded legacy public keys through the bounded original
+// writer. The caller owns journal serialization; it cannot flatten schema2.
+// Windows permissions follow the checked inherited ACL, not POSIX mode bits.
 func (s *Store) SaveKeys(keys map[string]ed25519.PublicKey) error {
+	return filetxn.WithWriter(s.ImportJournal(), func() error { return s.saveKeys(keys) })
+}
+
+func (s *Store) saveKeys(keys map[string]ed25519.PublicKey) error {
 	if err := filetxn.Check(s.ImportJournal()); err != nil {
 		return err
+	}
+	if policy, present, err := s.LoadTrustPolicy(); err != nil {
+		return err
+	} else if present && policy.Schema == 2 {
+		return errors.New("metadata: legacy SaveKeys cannot flatten a scoped trust policy")
 	}
 	data, err := EncodeKeys(keys)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
-		return fmt.Errorf("metadata: mkdir: %w", err)
-	}
-	return atomicWrite(s.KeysPath(), json.RawMessage(data))
+	return storedPolicyFile.write(s.KeysPath(), data)
 }
 
 // EncodeKeys prepares the same representation as SaveKeys without disk writes.
 func EncodeKeys(keys map[string]ed25519.PublicKey) ([]byte, error) {
-	f := trustedKeysFile{Schema: 1}
+	f := trustedKeysFile{Schema: 1, Keys: []trustedKey{}}
 	for id, pub := range keys {
-		if len(pub) != ed25519.PublicKeySize {
+		if len(pub) != ed25519.PublicKeySize || id != KeyIDFor(pub) {
 			return nil, fmt.Errorf("metadata: key %s: bad size", id)
 		}
 		f.Keys = append(f.Keys, trustedKey{KeyID: id, Public: hex.EncodeToString(pub)})
@@ -284,18 +298,37 @@ func EncodeKeys(keys map[string]ed25519.PublicKey) ([]byte, error) {
 	return json.MarshalIndent(f, "", "  ")
 }
 
-// LoadEnvelope — чтение подписанного envelope с диска. Отсутствие файла —
-// не ошибка (present=false): встроенные дескрипторы продолжают действовать.
-func (s *Store) LoadEnvelope() (*Envelope, bool, error) {
+// ReadEnvelopeBytes returns the exact bounded public file after checked Close.
+// It shares LoadEnvelope's paired reader/writer uncertainty gate. The caller
+// supplies a coherent native scope when combining it with other source files;
+// this method does not acquire that scope or authenticate these bytes.
+func (s *Store) ReadEnvelopeBytes() ([]byte, bool, error) {
 	if err := filetxn.Check(s.ImportJournal()); err != nil {
-		return nil, false, err
+		return nil, false, errors.Join(ErrTrustRole, err)
 	}
-	data, err := os.ReadFile(s.EnvelopePath())
+	data, present, err := storedEnvelopeFile.read(s.EnvelopePath())
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, false, nil
+		return nil, present, fmt.Errorf("%w: read envelope: %w", ErrTrustRole, err)
+	}
+	return data, present, nil
+}
+
+// LoadEnvelope reads the public signed envelope. Confirmed absence returns
+// present=false; the runtime/acceptance caller decides whether retained state
+// permits bootstrap. Journal, storage and decode failures remain trust faults.
+func (s *Store) LoadEnvelope() (result *Envelope, present bool, finalErr error) {
+	defer func() {
+		if finalErr != nil && !errors.Is(finalErr, ErrTrustRole) {
+			// Local journal/storage/decode failure is not a channel observation.
+			finalErr = errors.Join(ErrTrustRole, finalErr)
 		}
-		return nil, false, fmt.Errorf("metadata: read envelope: %w", err)
+	}()
+	data, present, err := s.ReadEnvelopeBytes()
+	if err != nil {
+		return nil, present, err
+	}
+	if !present {
+		return nil, false, nil
 	}
 	e, err := DecodeStrict(data)
 	if err != nil {
@@ -304,25 +337,47 @@ func (s *Store) LoadEnvelope() (*Envelope, bool, error) {
 	return e, true, nil
 }
 
-// SaveEnvelope — атомарная запись подписанного envelope (temp + rename).
+// SaveEnvelope publishes with the original bounded writer. Import retains its
+// existing four-file journal; this helper grants no signature/import authority.
+// The caller owns local journal/source serialization. This public entry acquires
+// the native writer scope and cannot be nested under another WithWriter call.
 func (s *Store) SaveEnvelope(e *Envelope) error {
+	return filetxn.WithWriter(s.ImportJournal(), func() error { return s.saveEnvelope(e) })
+}
+
+func (s *Store) saveEnvelope(e *Envelope) error {
 	if err := filetxn.Check(s.ImportJournal()); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
-		return fmt.Errorf("metadata: mkdir: %w", err)
+	data, err := json.MarshalIndent(e, "", "  ")
+	if err != nil {
+		return fmt.Errorf("metadata: marshal: %w", err)
 	}
-	return atomicWrite(s.EnvelopePath(), e)
+	return storedEnvelopeFile.write(s.EnvelopePath(), data)
 }
 
 // Apply — полный путь использования: load → verify → validate.
 // minimumVersion передаёт вызывающий (хранит последний принятый version).
 func (s *Store) Apply(now time.Time, minimumVersion uint64) (*Envelope, error) {
+	return s.ApplyVersion(now, ProfileVersion{Counter: minimumVersion})
+}
+
+func (s *Store) ApplyVersion(now time.Time, minimum ProfileVersion) (*Envelope, error) {
+	if _, _, err := s.LoadTrustPolicy(); err != nil {
+		return nil, err // including an omitted enrolled root/checkpoint
+	}
 	e, present, err := s.LoadEnvelope()
 	if err != nil {
 		return nil, err
 	}
 	if !present {
+		state, err := LoadAcceptedProfile(s.Dir)
+		if err != nil {
+			return nil, err
+		}
+		if state.ProfileVersion() != (ProfileVersion{}) || minimum != (ProfileVersion{}) {
+			return nil, fmt.Errorf("%w: metadata: accepted envelope missing; embedded fallback prohibited", ErrTrustRole)
+		}
 		return nil, nil
 	}
 	keys, keysPresent, err := s.LoadKeys()
@@ -330,12 +385,15 @@ func (s *Store) Apply(now time.Time, minimumVersion uint64) (*Envelope, error) {
 		return nil, fmt.Errorf("metadata: envelope отвергнут (таблица ключей повреждена): %w", err)
 	}
 	if !keysPresent {
-		return nil, errors.New("metadata: envelope есть, доверенных ключей нет (fail-closed)")
+		return nil, fmt.Errorf("%w: metadata: envelope есть, доверенных ключей нет (fail-closed)", ErrTrustRole)
 	}
 	if err := e.Verify(keys); err != nil {
 		return nil, err
 	}
-	if err := e.Validate(now, minimumVersion); err != nil {
+	if err := e.ValidateVersion(now, minimum); err != nil {
+		return nil, err
+	}
+	if _, err := s.PrepareAcceptance(e, keys, now); err != nil {
 		return nil, err
 	}
 	return e, nil
@@ -358,20 +416,4 @@ func secretShaped(value string) bool {
 		}
 	}
 	return false
-}
-
-func atomicWrite(path string, v any) error {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return fmt.Errorf("metadata: marshal: %w", err)
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("metadata: write temp: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("metadata: rename: %w", err)
-	}
-	return nil
 }

@@ -2,29 +2,14 @@ package main
 
 // netwatch.go — наблюдение за сменой сети (V2-054).
 //
-// Проблема: Wi-Fi⇄LTE-переходы и волны деградации мобильного CGNAT ломают
-// ЗАЩИЩЁННЫЙ ПУТЬ молча (V2-026: return-путь релеированных потоков тонет при
-// живом TLS к CF edge). Реакции сегодня две, обе медленные: сторож тикает
-// раз в 30с, авто-ретрай после fail-closed ждёт backoff 30с→10м независимо
-// от того, что сеть уже сменилась (смена сети = смена return-пути = смена
-// шансов). Между тиками владелец сидит на мёртвом туннеле или без VPN,
-// хотя путь мог восстановиться через секунды после смены сети.
-//
-// Механика: горутина опрашивает fingerprint маршрута по умолчанию каждые
-// netwatchPoll и доставляет СОБЫТИЯ (up/down/change) по одному на переход:
-//   - up/change: туннель работает — сеть под ним сменилась, старый путь
-//     мог умереть → внеочередной probe сейчас, не через 30с (probe не
-//     прошёл → та же семантика сторожа: fastReprobe → tryFailover →
-//     BLOCKED); fail-closed (BLOCKED/error) — немедленный авто-ретрай
-//     (wakeFailClosedRetry, V2-054: begin-гвард, FR-001 не ослаблен).
-//   - down: выключение Wi-Fi/выдёргивание кабеля. Туннель не трогаем:
-//     dying-gasp ничего не чинит, а Stop рвёт пользовательские сессии —
-//     при возврате сети up/change отработают. Только журнал-факт.
-//
-// Fingerprint — БЕЗ PowerShell (2с-поллинг с спавном процесса = самоддо
-// CPU): UDP-connect на IP-литерал 9.9.9.9:53 НЕ отправляет пакетов, но
-// выполняет route-lookup — LocalAddr = IPv4 интерфейса, которым ОС идёт
-// в дефолт. Интерфейс и имя — из net.Interfaces(). Стоимость — микросекунды.
+// Один poller доставляет debounced observations. Один отдельный original task
+// объединяет события в один pending slot, не блокируя poller сетевым IPC.
+// Down запрашивает паузу DNS; up/change — retirement старого DNS-поколения,
+// resume и существующую protected reprobe/preference/retry реакцию. Успешный
+// handoff сохраняет established SDK transports. Ошибка владения идёт через
+// existing failCore, без отрицательного health-факта о канале.
+// Fingerprint и control ACK не являются аттестацией системного пути; текущие
+// latency/CPU/native/OS свойства этой source-реализации не проверены.
 //
 // Границы (честно):
 //   - TUN-режим: весь трафик (и наш connect) маршрутизируется в snowden0 —
@@ -32,15 +17,18 @@ package main
 //     (tunRequested-гвард), там действует 30с-стороже;
 //   - событие дебаунсится netwatchDebounce: flapping Wi-Fi⇄LTE даёт одно
 //     событие (последний переход), с потолком ожидания;
-//   - ошибка сбора = «сети нет»; переходы считаются только между двумя
-//     УСПЕШНЫМИ сборками (шум сборщика не генерирует ложный down).
+//   - ошибка/неоднозначность сбора = unknown, не down. Unknown/TUN gap
+//     отменяет недоставленный debounce, сохраняя последний доставленный факт;
+//   - down требует полного непустого снимка non-loopback адаптеров, в котором
+//     нет ни одного поднятого link. Это локальный факт, не Internet/health proof.
 
 import (
 	"context"
-	"net"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/snowden-system/windows/backend/core"
 	"github.com/snowden-system/windows/backend/render"
 )
 
@@ -57,30 +45,40 @@ var (
 // Fingerprint этого адаптера = «сигнала нет» (см. шапку).
 const tunAdapterName = "snowden0"
 
-// netFingerprint — идентичность сети по факту ОС: индекс интерфейса
-// маршрута по умолчанию, его IPv4 и имя адаптера. Нулевое значение =
-// сети нет / факт недоступен / TUN-маршрут (неразличимо и не важно:
-// переходы считаются только между двумя успешными «физическими» фактами).
+// netFingerprint — наблюдение локального route-selected IPv4/IPv6 интерфейса.
+// Zero = unknown. allLinksDown допускается только после полного непустого
+// снимка всех non-loopback links, включая виртуальные и наш TUN: IPv4 route
+// lookup error сам по себе не означает отсутствие IPv6 или другого VPN.
+// Наблюдение маршрута не аттестует physical path, Internet или protected egress.
 type netFingerprint struct {
-	ifaceIndex int
-	ip         string
-	alias      string
+	ifaceIndex   int
+	ip           string
+	alias        string
+	luid         uint64 // native route/adapter identity; not a WFP ownership receipt
+	netClass     string // class from this snapshot, never a second unrelated MIB read
+	allLinksDown bool
 }
 
-func (f netFingerprint) present() bool { return f.ifaceIndex != 0 || f.ip != "" }
+func (f netFingerprint) present() bool {
+	return !f.allLinksDown && f.ifaceIndex > 0 && f.ip != ""
+}
+
+func (f netFingerprint) observed() bool { return f.present() || f.allLinksDown }
 
 func (f netFingerprint) equal(o netFingerprint) bool {
-	return f.ifaceIndex == o.ifaceIndex && f.ip == o.ip && f.alias == o.alias
+	return f.ifaceIndex == o.ifaceIndex && f.ip == o.ip && f.alias == o.alias && f.luid == o.luid && f.netClass == o.netClass && f.allLinksDown == o.allLinksDown
 }
 
-// classifyTransition — класс перехода между двумя успешными фактами сети
-// (чистая функция для юнит-тестов): "" = нет перехода, "up" = сеть появилась,
-// "down" = пропала, "change" = сменилась.
+// classifyTransition сравнивает последний доставленный факт и новый снимок.
+// Unknown не отзывает путь и не означает восстановление после down.
+// Начальный confirmed-down тоже доставляется: zero baseline не является up.
 func classifyTransition(prev, fp netFingerprint) string {
 	switch {
+	case !fp.observed():
+		return ""
 	case fp.present() && !prev.present():
 		return "up"
-	case !fp.present() && prev.present():
+	case fp.allLinksDown && !prev.allLinksDown:
 		return "down"
 	case fp.present() && prev.present() && !fp.equal(prev):
 		return "change"
@@ -89,13 +87,9 @@ func classifyTransition(prev, fp netFingerprint) string {
 	}
 }
 
-// netClassOf — класс сети адаптера из факта ОС: «mobile» для
-// WWAN (cellular = нестабильный return-путь CGNAT, V2-026), «wifi» для
-// 802.11, «ethernet» для 802.3, иначе «». Сборщик факта — мгновенный
-// системный вызов MIB (адаптерNetClassByIndex, infobindings_windows.go),
-// НЕ PowerShell: fire() живёт на цикле опроса наблюдателя — процесс-спавн
-// (0.5–2с) на каждый переход остановил бы поллинг (поймано тайминг-тестами).
-func netClassOf(fp netFingerprint) string { return adapterNetClassByIndex(fp.ifaceIndex) }
+// Class is captured with the native route/LUID snapshot. Consumers do no MIB
+// or process work and cannot attach another adapter's later class to this event.
+func netClassOf(fp netFingerprint) string { return fp.netClass }
 
 // IANA ifType (MibIfRow2.Type) и NDIS media (MibIfRow2.MediaType) — значения
 // из ifdef.h/netioapi.h. Порядок правил: Type надёжнее (для Wi-Fi=71 и
@@ -144,16 +138,20 @@ func classifyNetClass(ifType, mediaType uint32) string {
 }
 
 // netWatcher — состояние наблюдателя. w.last/w.lastAt под mu; pending-поля
-// живут только в горутине run (блокировок не требуют). Горутина одна на
-// процесс (startNetWatch guard'ится started).
+// живут только в poller run (блокировок не требуют). startNetWatch создаёт
+// ровно один poller и один original DNS-handoff task; оба владельца сохранены.
 type netWatcher struct {
-	mu       sync.Mutex
-	started  bool
-	stop     chan struct{}
-	stopOnce sync.Once
-	last     netFingerprint // последний непустой «физический» факт
-	lastAt   time.Time      // момент последнего перехода (для журнала/тестов)
-	app      *App
+	mu            sync.Mutex
+	started       bool
+	stop          chan struct{}
+	stopOnce      sync.Once
+	last          netFingerprint // последний ДОСТАВЛЕННЫЙ observed факт, включая down
+	lastAt        time.Time      // момент доставки последнего перехода
+	app           *App
+	dns           *serviceDNSHandoff
+	retiredDNS    *serviceDNSHandoff // latest fully retired predecessor, bounded to one
+	poller        *networkPollerOwner
+	retiredPoller *networkPollerOwner // latest fully retired producer, bounded to one
 }
 
 // netWatch — единственный экземпляр на приложение.
@@ -166,74 +164,173 @@ func (a *App) startNetWatch() {
 		netWatch.mu.Unlock()
 		return
 	}
+	if a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() {
+		netWatch.mu.Unlock()
+		return
+	}
 	netWatch.started = true
 	netWatch.stop = make(chan struct{})
 	netWatch.app = a
+	netWatch.poller = newNetworkPollerOwner(a)
+	netWatch.dns = newServiceDNSHandoff(a, netWatch.poller)
+	dns, poller := netWatch.dns, netWatch.poller
 	netWatch.mu.Unlock()
-	go netWatch.run(netWatch.stop)
+	go dns.run()
+	go poller.run(netWatch)
 }
 
 // stopNetWatch — остановить горутину наблюдателя (закрытие окна, перезапуск
 // режима). Повторный вызов безопасен (sync.Once).
 func (a *App) stopNetWatch() {
-	netWatch.mu.Lock()
-	ch := netWatch.stop
-	netWatch.mu.Unlock()
-	if ch != nil {
-		netWatch.stopOnce.Do(func() { close(ch) })
+	pollerDone, dnsDone, err := a.cancelNetWatch()
+	if err != nil {
+		a.appendLog("warn", err.Error())
+		return
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), terminalProducerTimeout)
+	defer cancel()
+	if err := a.joinNetworkPoller(ctx, pollerDone); err != nil {
+		a.appendLog("warn", "завершение цикла наблюдения за сетью не подтверждено; исходный владелец сохранён")
+	}
+	if err := a.joinServiceDNSObserver(ctx, dnsDone); err != nil {
+		a.appendLog("warn", "завершение сетевого DNS-обработчика не подтверждено; исходный владелец сохранён")
+	}
+}
+
+// Cancellation only; the terminal coordinator joins both original tasks with
+// its other producers under one budget. Never cancel another App's watcher.
+func (a *App) cancelNetWatch() (pollerDone <-chan struct{}, dnsDone <-chan struct{}, result error) {
+	netWatch.mu.Lock()
+	if netWatch.app != nil && netWatch.app != a {
+		netWatch.mu.Unlock()
+		return nil, nil, fmt.Errorf("network watcher belongs to another App: %w", errAppProducerPending)
+	}
+	ch := netWatch.stop
+	dns := netWatch.dns
+	poller := netWatch.poller
+	netWatch.mu.Unlock()
+	if poller != nil {
+		pollerDone = poller.done
+	}
+	if dns != nil {
+		dnsDone = dns.done
+	}
+	sequence := &appCleanupSequence{}
+	defer sequence.finish(&result)
+	defer appCleanupStep("cancel original network DNS task", sequence, func() error { dns.stop(); return nil })
+	defer appCleanupStep("cancel original network poller task", sequence, func() error { poller.stop(); return nil })
+	defer appCleanupStep("signal original network watcher stop", sequence, func() error {
+		if ch != nil {
+			netWatch.stopOnce.Do(func() { close(ch) })
+		}
+		return nil
+	})
+	defer appCleanupStep("revoke original network DNS source", sequence, func() error {
+		if dns != nil {
+			dns.mu.Lock()
+			defer dns.mu.Unlock()
+			dns.source.Revoke()
+		}
+		return nil
+	})
+	return pollerDone, dnsDone, nil
 }
 
 // run — цикл наблюдателя. Доставка НЕ блокирует опрос: переход создаёт
 // отложенное событие (pending + fireAt); каждый новый переход перезаписывает
-// pending и отодвигает fireAt (коалесинг flapping); при выходе за потолок —
-// доставляем как есть. Доставка происходит на очередном тике — задержка
-// ≤ debounce+poll, для реакции «вне очереди» это несущественно.
-func (w *netWatcher) run(stop <-chan struct{}) {
+// pending и отодвигает fireAt (коалесинг flapping). Одинаковые успешные
+// samples не продлевают debounce. Cap действует только без unknown/TUN gaps;
+// доставка на следующем тике, без обещания hard OS/IPC/latency bound.
+func (w *netWatcher) run(ctx context.Context) {
+	w.runWithPowerOwner(ctx, nil) // retained direct entry; production passes original owner
+}
+
+func (w *netWatcher) runWithPowerOwner(ctx context.Context, owner *networkPollerOwner) {
+	if !lifecyclePublicationCurrent(ctx) {
+		return
+	}
 	ticker := time.NewTicker(netwatchPoll)
 	defer ticker.Stop()
+	var powerWake <-chan struct{}
+	if owner != nil {
+		powerWake = owner.powerWake
+	}
 	var (
-		pendingKind string
-		pendingFP   netFingerprint
-		pendingAt   time.Time // момент первого отложенного перехода (потолок)
-		fireAt      time.Time
+		pendingKind    string
+		pendingFP      netFingerprint
+		pendingAt      time.Time // момент первого отложенного перехода (потолок)
+		fireAt         time.Time
+		continuityLost bool // observed departure from delivered route, not unknown
 	)
 	for {
 		select {
-		case <-stop:
+		case <-ctx.Done():
 			return
+		case <-powerWake:
+			netEpoch.cancelPowerOperation()
+			return // original finalizers retire producer/DNS/runtime; no second monitor
 		case <-ticker.C:
+		}
+		if !lifecyclePublicationCurrent(ctx) {
+			return
 		}
 		// TUN-режим: физическую сеть не видно (весь трафик в snowden0) —
 		// наблюдатель молчит, действует 30с-стороже.
 		if tunRequested() {
+			pendingKind, pendingFP = "", netFingerprint{}
+			pendingAt, fireAt = time.Time{}, time.Time{}
 			continue
 		}
-		fp := currentNetFingerprint()
+		fp := currentNetFingerprint(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if tunRequested() || !fp.observed() {
+			// Не доставлять старый pending после потери наблюдаемости.
+			// Baseline и ранее observed discontinuity сохраняются. Unknown
+			// сам не создаёт discontinuity; новая доставка ждёт свежий debounce.
+			pendingKind, pendingFP = "", netFingerprint{}
+			pendingAt, fireAt = time.Time{}, time.Time{}
+			continue
+		}
+		now := time.Now()
 		w.mu.Lock()
 		prev := w.last
+		w.mu.Unlock()
 		kind := classifyTransition(prev, fp)
-		if kind == "down" {
-			// Сеть пропала: факт обнуляется, иначе возврат в ТУ ЖЕ сеть
-			// не будет отличён от «всё ещё старая» и up не сработает.
-			w.last = netFingerprint{}
+		if prev.present() && (fp.allLinksDown || fp.present() && !fp.equal(prev)) {
+			continuityLost = true
 		}
-		if kind != "" {
-			if fp.present() {
-				w.last = fp
-			}
-			w.lastAt = time.Now()
+		if kind == "" && continuityLost && fp.present() && prev.present() {
+			// A→down/B→A до доставки всё равно отзывает старое DNS/path
+			// поколение одним change после стабилизации. Исчезновение
+			// observable departure не восстанавливает continuity authority.
+			kind = "change"
+		}
+		if kind == "" {
+			// Нет observed departure от baseline и нет pending перехода.
+			pendingKind, pendingFP = "", netFingerprint{}
+			pendingAt, fireAt = time.Time{}, time.Time{}
+			continue
+		}
+		if pendingKind != kind || !pendingFP.equal(fp) {
 			if pendingKind == "" {
-				pendingAt = time.Now()
+				pendingAt = now
 			}
 			pendingKind, pendingFP = kind, fp
-			fireAt = time.Now().Add(netwatchDebounce)
+			fireAt = now.Add(netwatchDebounce)
 		}
-		w.mu.Unlock()
 
-		if pendingKind != "" && (time.Now().After(fireAt) || time.Since(pendingAt) > netwatchDebounceCap) {
+		if !now.Before(fireAt) || now.Sub(pendingAt) >= netwatchDebounceCap {
 			kind2, fp2 := pendingKind, pendingFP
-			pendingKind, fireAt, pendingAt = "", time.Time{}, time.Time{}
+			pendingKind, pendingFP = "", netFingerprint{}
+			fireAt, pendingAt = time.Time{}, time.Time{}
+			continuityLost = false
+			w.mu.Lock()
+			w.last, w.lastAt = fp2, now
+			w.mu.Unlock()
 			w.fire(kind2, fp2)
 		}
 	}
@@ -242,26 +339,45 @@ func (w *netWatcher) run(stop <-chan struct{}) {
 // fire — фактическая доставка: журнал-факт + реакция. Тесты зовут напрямую
 // с app=nil (тишина).
 func (w *netWatcher) fire(kind string, fp netFingerprint) {
+	// Class is already part of this event's captured native snapshot.
+	cls := netClassOf(fp)
 	w.mu.Lock()
-	cls := netClassOf(w.last)
 	app := w.app
+	dns := w.dns
+	poller := w.poller
 	w.mu.Unlock()
+	var change *serviceDNSChange
+	if app != nil {
+		releasePoller, live := poller.guardRunning(app)
+		if !live {
+			return
+		}
+		releasePoller()                                 // no MIB, epoch callbacks, logs or enqueue under the lease
+		change = app.captureServiceDNSChange(dns, kind) // before epoch/log/cancellation callbacks
+	}
 	// V2-057 (A0): up/change открывают новую сетевую эпоху (health-факты
 	// прошлой эпохи устаревают); down не бампит (сети нет — не смена). До
 	// ветвления app: событие должно бампнуть эпоху даже без живого App.
-	onNetEvent(kind, cls, time.Now())
+	event := onNetEvent(kind, cls, time.Now())
 	if app == nil {
 		return
 	}
+	releasePoller, live := poller.guardRunning(app)
+	if !live {
+		return
+	}
+	poller.observed = true // actual delivered event; private value, not Internet/path proof
+	releasePoller()
 	switch kind {
 	case "down":
-		app.appendLog("warn", "сеть: подключение потеряно — наблюдаю за возвратом (туннель не трогаю)")
+		app.appendLog("warn", "сеть: локальные сетевые адаптеры отключены — запрошена приостановка DNS-разрешения серверов")
 	case "up":
-		app.appendLog("info", "сеть: подключение появилось ("+classLabel(cls)+") — проверка защищённого пути вне очереди")
-		go app.onNetPathChanged()
+		app.appendLog("info", "сеть: локальный маршрут появился ("+classLabel(cls)+") — проверка защищённого пути вне очереди")
 	case "change":
-		app.appendLog("info", "сеть: смена подключения → "+classLabel(cls)+" — проверка защищённого пути вне очереди")
-		go app.onNetPathChanged()
+		app.appendLog("info", "сеть: локальный маршрут изменился ("+classLabel(cls)+") — проверка защищённого пути вне очереди")
+	}
+	if dns != nil {
+		dns.submitChange(change.bindEvent(event))
 	}
 }
 
@@ -285,7 +401,7 @@ func classLabel(cls string) string {
 // probe; fail-closed — немедленный авто-ретрай. Повторный вызов при идущем
 // старте безопасен (startBusy/begin-гварды). Точки подмены для тестов:
 // netWatchProbeStart/netWatchWakeRetry.
-var netWatchProbeStart = func(a *App) { go a.netChangeReprobe() }
+var netWatchProbeStart = func(a *App) { a.netChangeReprobe() }
 var netWatchWakeRetry = func(a *App) { a.wakeFailClosedRetry() }
 
 func (a *App) onNetPathChanged() {
@@ -324,21 +440,41 @@ func (a *App) onNetPathChanged() {
 // tryFailover (кандидаты/cooldown/лимиты — тот же код, что у сторожа) и
 // при исчерпании — BLOCKED + авто-ретрай, как в watchCore.
 func (a *App) netChangeReprobe() {
+	parent := a.ctx
+	netWatch.mu.Lock()
+	if netWatch.app == a && netWatch.dns != nil {
+		parent = netWatch.dns.ctx
+	}
+	netWatch.mu.Unlock()
+	if parent == nil || parent.Err() != nil || a.closing.Load() {
+		return
+	}
 	runtime_.mu.Lock()
 	cc := runtime_.cc
 	runtime_.mu.Unlock()
+	a.netChangeReprobeFor(parent, cc)
+}
+
+// Production DNS reactions pass their original observer/event context and
+// applied config. This method never resolves a newer actor after queueing.
+func (a *App) netChangeReprobeFor(parent context.Context, cc *render.ClientConfig) {
+	if !lifecyclePublicationCurrent(parent) {
+		return
+	}
 	if !a.sessionCurrent(cc) {
 		return
 	}
-	probeCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	probeCtx, cancel := context.WithTimeout(parent, 15*time.Second)
 	report := a.protectedProbe(cc).Run(probeCtx)
 	cancel()
 	stillOurs := a.sessionCurrent(cc)
 	if !stillOurs {
 		return
 	}
-	if report.LeakConfirmed {
-		a.blockUnsafePath(cc, "сеть: обнаружена утечка защищённого пути", report, fcLeakConfirmed)
+	if a.blockUnsafeObservation(cc, report, "сеть") {
+		return
+	}
+	if !lifecyclePublicationCurrent(parent) || !a.currentProbeReport(cc, report) {
 		return
 	}
 	if report.AllPassed {
@@ -347,79 +483,55 @@ func (a *App) netChangeReprobe() {
 		// имеет права трогать работающий туннель: предпочтение — policy hint,
 		// не доказательство доступности нового канала.
 		a.appendLog("info", "сеть: защищённый путь жив на новой сети — probe-гейт preference PASS")
-		a.recordProbeOutcome(true, report) // V2-057 (A0): health новой эпохи
-		a.mu.Lock()
-		a.state.Probe = toView(report)
-		a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
-		a.pushStateLocked()
-		a.mu.Unlock()
-		a.fpol.hardReset()
-		a.sm.markTick(true, "", time.Now()) // C1 (V2-060): путь жив на новой сети → HEALTHY
-		if err := a.renewKillSwitchIfTUN(); err != nil {
-			a.blockUnsafePath(cc, "WFP: policy не подтверждена после смены сети", report, fcUnknown)
+		if err := a.verifySessionProtection(cc, report); err != nil {
+			a.blockProtectionFailure(cc, err, "WFP: policy не подтверждена после смены сети")
 			return
 		}
-		a.tryPreferredChannelOnNetworkChange(cc)
+		if a.publishObservation(cc, report, observationHealthy, "") {
+			a.tryPreferredChannelOnNetworkChange(parent, cc, report)
+		}
 		return
 	}
-	a.appendLog("warn", "сеть: туннель не отвечает на новой сети — подтверждаю серией быстрых репроб: "+report.Summary())
-	a.sm.markTick(false, report.Summary(), time.Now()) // C1: одиночный провал на новой сети = SUSPECTED (§23)
-	recovered, lastReport := a.fastReprobe(context.Background(), cc)
+	a.appendLog("warn", "сеть: проверка не подтвердила путь на новой сети — повторяю измерение: "+report.Summary())
+	if !a.publishObservation(cc, report, observationSuspected, "") {
+		return
+	}
+	recovered, lastReport := a.fastReprobe(parent, cc)
 	if !a.sessionCurrent(cc) {
 		return
 	}
 	if lastReport != nil {
 		report = lastReport
 	}
-	if report.LeakConfirmed {
-		a.blockUnsafePath(cc, "сеть: обнаружена утечка защищённого пути", report, fcLeakConfirmed)
+	if a.blockUnsafeObservation(cc, report, "сеть") {
+		return
+	}
+	if !lifecyclePublicationCurrent(parent) || !a.currentProbeReport(cc, report) {
 		return
 	}
 	if recovered {
 		a.appendLog("info", "сеть: путь восстановился (мерцание) — туннель не тронут")
-		a.fpol.hardReset()
-		a.sm.markRecovered(time.Now()) // C1: серия прервалась успехом → HEALTHY
-		a.recordProbeOutcome(true, report)
-		a.mu.Lock()
-		a.state.Probe = toView(report)
-		a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
-		a.pushStateLocked()
-		a.mu.Unlock()
-		if err := a.renewKillSwitchIfTUN(); err != nil {
-			a.blockUnsafePath(cc, "WFP: policy не подтверждена после восстановления сети", report, fcUnknown)
+		if err := a.verifySessionProtection(cc, report); err != nil {
+			a.blockProtectionFailure(cc, err, "WFP: policy не подтверждена после восстановления сети")
 			return
 		}
-		a.tryPreferredChannelOnNetworkChange(cc)
+		if a.publishObservation(cc, report, observationRecovered, "") {
+			a.tryPreferredChannelOnNetworkChange(parent, cc, report)
+		}
 		return
 	}
 	summary := ""
 	if lastReport != nil {
 		summary = lastReport.Summary()
 	}
-	a.appendLog("error", "сеть: защищённый путь мёртв после смены сети — немедленный failover: "+summary)
+	a.appendLog("error", "сеть: серия проверок не подтвердила путь после смены сети — ограниченная попытка восстановления: "+summary)
 	// Немедленный переход к семантике сторожа, без ожидания тика.
-	inSelector := map[string]bool{}
-	for _, tag := range cc.SelectorTags {
-		inSelector[tag] = true
-	}
-	channels, cerr := render.LoadDescriptors()
-	if cerr != nil {
-		channels = nil
-	}
 	fc := ClassifyFailure(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets))
-	a.sm.markClassified(fc.Code, report.Summary(), time.Now())
 	a.appendLog("error", "сеть: "+classifyFailureLogLine(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets)))
-	a.sm.markDegraded(time.Now()) // C1: классификация подтверждена → DEGRADED
-	if fc.Code == fcEgressDivergence {
-		a.blockUnsafePath(cc, "сеть: egress защищённого пути не совпадает с ожидаемым", report, fc.Code)
+	if !a.publishObservation(cc, report, observationDegraded, fc.Code) {
 		return
 	}
-	if fc.Code == fcWhitelistMode {
-		a.blockUnsafePath(cc, "сеть: признаки allowlist-ограничения; диагноз требует дополнительной проверки", report, fc.Code)
-		return
-	}
-	chanHealth.observeResult(currentChannelEpoch(), a.activeChannelIDForHealth(), false, fc.Code, time.Now())
-	switched, blocked := a.tryFailoverForClass(channels, inSelector, cc.SelectorDefault, fc.Code, cc)
+	switched, blocked := a.tryObservedFailover(cc, report, fc.Code)
 	if switched {
 		return
 	}
@@ -436,7 +548,7 @@ func (a *App) netChangeReprobe() {
 		return
 	}
 	// Кандидатов нет/исчерпаны: fail-closed как у сторожа (BLOCKED + авторетрай).
-	a.failSession(cc, lastReport, "сеть: защищённый путь недоступен на новой сети (все каналы, BLOCKED)", true)
+	a.failSession(cc, report, "сеть: путь не подтверждён; доступные попытки восстановления исчерпаны (BLOCKED)", true)
 }
 
 // tryPreferredChannelOnNetworkChange — мягкая переоценка предпочтения после
@@ -450,27 +562,29 @@ func (a *App) netChangeReprobe() {
 //     старый живой канал при ошибке;
 //  3. отсутствие класса/дескрипторов/предпочтения = no-op, не ошибка и не
 //     direct fallback; ручной SelectChannel не переопределяется.
-func (a *App) tryPreferredChannelOnNetworkChange(current *render.ClientConfig) {
-	if current == nil || a.closing.Load() {
+func (a *App) tryPreferredChannelOnNetworkChange(ctx context.Context, current *render.ClientConfig, observed ...*core.ProbeReport) {
+	if current == nil || !lifecyclePublicationCurrent(ctx) || a.closing.Load() {
 		return
 	}
-	netClass := currentNetClass()
+	netClass := currentNetClass(ctx)
+	if !lifecyclePublicationCurrent(ctx) {
+		return
+	}
 	if netClass == "" {
 		a.appendLog("info", "сеть: класс не определён — transport preference не применяется")
 		return
 	}
-	descs, err := render.LoadDescriptors()
-	if err != nil {
-		a.appendLog("warn", "сеть: дескрипторы preference недоступны — текущий канал не тронут: "+err.Error())
+	if len(observed) > 0 && (len(observed) != 1 || !a.currentProbeReport(current, observed[0])) {
 		return
 	}
+	descs := current.Descriptors
 	want := preferredChannelForNetworkChange(descs, current.SelectorDefault, netClass)
 	if want == "" {
 		a.appendLog("info", "сеть: для класса "+classLabel(netClass)+" нет нового live-verified preference — текущий канал не тронут")
 		return
 	}
 	a.appendLog("info", "сеть: probe-гейт PASS, пробую preference "+want+" для "+classLabel(netClass))
-	if err := a.switchChannelCoreFor(want, current); err != nil {
+	if err := a.switchChannelCoreFor(want, current, observed...); err != nil {
 		// switchChannelCore уже проверил новый канал и откатил живой старый
 		// (либо сделал fail-closed, если старый тоже мёртв). Здесь не запускаем
 		// второй failover и не меняем policy самостоятельно.
@@ -484,47 +598,9 @@ func (a *App) tryPreferredChannelOnNetworkChange(current *render.ClientConfig) {
 	a.appendLog("info", "сеть: preference применён после probe-гейта: "+want)
 }
 
-// currentNetFingerprint — факт ОС: каким интерфейсом машина идёт в дефолт
-// сейчас (переменная уровня пакета: тесты подменяют без сети; чистый
-// оригинал живёт отдельным именем netFingerprintOS для восстановления).
-//
-// Механика без PowerShell: UDP-connect на IP-литерал НЕ отправляет пакетов,
-// но выполняет route-lookup — LocalAddr = IPv4 интерфейса дефолтного
-// маршрута. Интерфейс и имя — сопоставлением IP с net.Interfaces().
-// Результат «snowden0» (TUN) = нулевой факт: физическую сеть в TUN-режиме
-// так не увидеть, а ложные down-переходы на старте/остановке туннеля
-// недопустимы.
+// Local Windows route observation, with original caller cancellation and a
+// cooperative whole-sample budget. No socket/UDP dial, DNS/HTTP or process.
+// Errors/unsupported/forbidden/stale snapshots are unknown, never all-link-down.
+// The separate complete non-loopback snapshot supplies explicit local down.
+// Neither native route/source/LUID nor its class proves Internet/protected path.
 var currentNetFingerprint = netFingerprintOS
-
-func netFingerprintOS() netFingerprint {
-	d := net.Dialer{Timeout: 700 * time.Millisecond}
-	conn, err := d.Dial("udp", "9.9.9.9:53")
-	if err != nil {
-		return netFingerprint{} // маршрута в дефолт нет (или сеть умирает)
-	}
-	udp, ok := conn.LocalAddr().(*net.UDPAddr)
-	conn.Close()
-	if !ok || udp.IP == nil {
-		return netFingerprint{}
-	}
-	local := udp.IP.String()
-	ifaces, ierr := net.Interfaces()
-	for i := range ifaces {
-		if ierr != nil {
-			break
-		}
-		if ifaces[i].Name == tunAdapterName {
-			continue // TUN-адаптер — не физическая сеть
-		}
-		addrs, aerr := ifaces[i].Addrs()
-		if aerr != nil {
-			continue
-		}
-		for _, a := range addrs {
-			if ipn, ok := a.(*net.IPNet); ok && ipn.IP.String() == local {
-				return netFingerprint{ifaceIndex: ifaces[i].Index, ip: local, alias: ifaces[i].Name}
-			}
-		}
-	}
-	return netFingerprint{}
-}

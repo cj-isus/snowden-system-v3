@@ -1,13 +1,14 @@
 package core
 
-// ProtectedProbe — доказательство «туннель работает и ничего не течёт мимо»
-// (FR-001/FR-003). Отличия от старого ядра (docs/old-core-review.md §3):
+// ProtectedProbe — ограниченный gate HTTPS/egress/OS control/DoH (FR-001/003),
+// не доказательство native DNS/UDP/IPv6 или отсутствия любой утечки.
+// Отличия от старого ядра (docs/old-core-review.md §3):
 //   - expected egress ОБЯЗАТЕЛЕН: egress должен совпасть с ожидаемым IP
 //     канала (данные из дескриптора), а не просто быть консистентным;
-//   - добавлен шаг direct-leak: тот же egress-цель напрямую (мимо туннеля)
-//     должен дать ДРУГОЙ адрес; совпадение = трафик не идёт через туннель;
-//   - DNS-шаг: разрешение через туннель должно отвечать (заглушка UDP не
-//     считается — проверяется полный путь до рекурсивного резолвера).
+//   - OS-control сравнивает сообщённые IP; совпадение/расхождение само по себе
+//     не доказывает локальный путь, утечку или отсутствие утечек;
+//   - DoH-шаг проверяет DNS wire response через HTTPS/SOCKS. Он не
+//     доказывает native DNS/UDP/IPv6 клиента или независимость измерителя.
 //
 // Отчёт структурен и пригоден для UI; секретов в нём нет.
 
@@ -16,34 +17,69 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/snowden-system/windows/backend/metadata"
+	"github.com/snowden-system/windows/backend/netprobe"
 )
 
 const (
+	maxProbeBody           = 4 << 10
 	defaultLeakCheckTarget = "https://api.ipify.org"
-	dnsCheckHost           = "example.com"
-	// dnsCheckEndpoint — DoH JSON-эндпоинт по IP-литералу: резолв самому
-	// эндпоинту не нужен (нет круговой зависимости), путь полностью через туннель.
-	dnsCheckEndpoint = "https://1.1.1.1/dns-query"
+	dnsCheckHost           = netprobe.DNSProbeHost
+	// Legacy source name, shared with the actual compiled resolver defaults.
+	dnsCheckEndpoint = metadata.PrimaryDNSProbeTarget
 )
 
 type ProbeResult struct {
-	Name   string `json:"name"`
-	Passed bool   `json:"passed"`
-	Status string `json:"status,omitempty"` // pass | fail | unavailable | leak
-	Detail string `json:"detail"`
+	Name        string           `json:"name"`
+	Passed      bool             `json:"passed"`
+	Status      string           `json:"status,omitempty"` // pass | fail | unavailable | leak
+	Detail      string           `json:"detail"`
+	Observation ProbeObservation `json:"observation,omitzero"`
+	Comparison  ProbeComparison  `json:"comparison,omitzero"`
+	Requirement string           `json:"requirement,omitempty"` // missing|required are required; finite informational allowlist
+	// Fixed value slots keep report copies isolated without another shared slice.
+	ResolverAttempts     [metadata.MaxDNSProbeTargets]ProbeObservation `json:"resolver_attempts,omitzero"`
+	ResolverAttemptCount int                                           `json:"resolver_attempt_count,omitempty"`
 }
 
 type ProbeReport struct {
-	AllPassed     bool          `json:"all_passed"`
-	LeakConfirmed bool          `json:"leak_confirmed"`
-	Results       []ProbeResult `json:"results"`
+	AllPassed             bool             `json:"all_passed"`
+	LeakConfirmed         bool             `json:"leak_confirmed"` // independent local violation evidence, never an IP relation
+	ProtectionUnavailable bool             `json:"protection_unavailable,omitempty"`
+	CleanupUnconfirmed    bool             `json:"cleanup_unconfirmed,omitempty"` // finite custody fault, never a network diagnosis
+	TrustUnavailable      bool             `json:"trust_unavailable,omitempty"`
+	TrustReason           string           `json:"trust_reason,omitempty"`
+	Results               []ProbeResult    `json:"results"`
+	SessionID             uint64           `json:"session_id,omitempty"`
+	OwnerID               uint64           `json:"owner_id,omitempty"`
+	OwnerGeneration       uint64           `json:"owner_generation,omitempty"`
+	IntentGeneration      uint64           `json:"intent_generation,omitempty"`
+	ObservationID         uint64           `json:"observation_id,omitempty"`
+	NetworkEpoch          int              `json:"network_epoch,omitempty"`
+	StartedAt             time.Time        `json:"started_at,omitzero"`
+	CompletedAt           time.Time        `json:"completed_at,omitzero"`
+	Stale                 bool             `json:"stale,omitempty"`
+	operationSource       *OperationSource // private negative identity, never serialized or an admission grant
+	observationPath       *atomic.Bool
+	restrictionObserved   bool // original scoped work produced a local/unsafe fact; never a public report assertion
+}
+
+func (r *ProbeReport) Clone() *ProbeReport {
+	if r == nil {
+		return nil
+	}
+	out := *r
+	out.Results = append([]ProbeResult(nil), r.Results...)
+	return &out
 }
 
 // Summary — однострочный redacted-итог для логов/ошибок.
@@ -51,82 +87,128 @@ func (r *ProbeReport) Summary() string {
 	if r == nil {
 		return "empty report"
 	}
-	failed := 0
+	failed, required, information := 0, 0, 0
 	first := ""
 	for _, res := range r.Results {
-		if !res.Passed {
+		res = res.NormalizeDiagnostic()
+		if res.Informational() {
+			information++
+			continue
+		}
+		required++
+		if !res.Passed || res.Status != "" && res.Status != "pass" || res.Observation.Schema != 0 && (res.Observation.Schema != 1 || !res.Observation.BodyComplete || res.Observation.ErrorKind != "") {
 			failed++
 			if first == "" {
 				first = res.Name + ": " + res.Detail
 			}
 		}
 	}
-	if failed == 0 {
-		return fmt.Sprintf("%d/%d passed", len(r.Results), len(r.Results))
+	if required == 0 {
+		return fmt.Sprintf("no required diagnostic steps; %d informational", information)
 	}
-	return fmt.Sprintf("%d of %d steps failed; first: %s", failed, len(r.Results), first)
+	if information != 0 {
+		if failed == 0 {
+			return fmt.Sprintf("%d/%d required passed; %d informational", required, required, information)
+		}
+		return fmt.Sprintf("%d of %d required steps failed; %d informational; first: %s", failed, required, information, first)
+	}
+	if failed == 0 {
+		return fmt.Sprintf("%d/%d passed", required, required)
+	}
+	return fmt.Sprintf("%d of %d steps failed; first: %s", failed, required, first)
 }
 
 // ProtectedProbe — конфигурация проверки. SOCKSAddr — адрес inbound'а ядра;
-// Targets — HTTPS-эхо egress (≥2, чтобы ловить MITM-рассинхрон); ExpectedEgress
-// — публичный IP origin-сервера канала.
+// Targets — HTTPS-эхо egress (≥2 для сравнения сообщений); ExpectedEgress —
+// ожидаемый адрес выхода из принятого профиля, не обязательно адрес origin.
 type ProtectedProbe struct {
-	SOCKSAddr      string
-	Targets        []string
-	Timeout        time.Duration
-	ExpectedEgress string
-	// AllowDirectEgress отключает direct-leak проверку (только для
+	// Only the original engine worker supplies this private protected-outbound
+	// dialer. It never authenticates to a public/local proxy listener.
+	tunnelDialContext func(context.Context, string, string) (net.Conn, error)
+	tunBinding        *workerTUNProbeBinding // actual worker phase only; no public plan/report can supply it
+	SOCKSAddr         string
+	Targets           []string
+	DNSProbeTargets   []string
+	Timeout           time.Duration
+	ExpectedEgress    string
+	// AllowDirectEgress отключает OS-control проверку (только для
 	// окружений, где direct запрещён политикой сети; по умолчанию false).
 	AllowDirectEgress bool
-	// DirectLeakThroughTunnel — семантика direct-leak в TUN-режиме
-	// (PLAN §2.3/V2-003: контракт «TUN-режим: равен»), восстановлена
-	// аудитом V2-037: auto_route заворачивает ВЕСЬ трафик ОС в туннель,
-	// поэтому direct-запрос обязан выйти через тот же egress.
-	//   SOCKS-режим (false): direct ≠ tunnel — совпадение = утечка/подмена;
-	//   TUN-режим   (true):  direct == tunnel — отличие = трафик прошёл мимо
-	//   туннеля (реальная утечка на сетевом уровне).
+	// DirectLeakThroughTunnel retains the existing caller's mode declaration.
+	// It is not evidence of the actual OS route. A same-image control is
+	// insufficient for TUN admission regardless of the two reported addresses.
 	DirectLeakThroughTunnel bool
-	// LeakCheckTarget — egress-эхо для direct-запроса (мимо туннеля).
+	// LeakCheckTarget — legacy field name for the OS-control egress echo.
+	// Proxy=nil declares intent; it does not attest the actual OS path.
 	// По умолчанию defaultLeakCheckTarget.
 	LeakCheckTarget string
 }
 
 func (pp *ProtectedProbe) validate() error {
-	if pp == nil || pp.SOCKSAddr == "" || pp.Timeout <= 0 {
+	if pp == nil || pp.SOCKSAddr == "" && pp.tunnelDialContext == nil {
 		return errors.New("invalid probe configuration: addr/timeout")
 	}
-	if len(pp.Targets) < 2 {
-		return errors.New("invalid probe configuration: at least 2 targets required")
+	return pp.validatePlan()
+}
+
+// A bounded diagnostic plan is not a ready dialer or a forwarding permit.
+func (pp *ProtectedProbe) validatePlan() error {
+	if pp == nil || pp.Timeout <= 0 || pp.Timeout > 30*time.Second {
+		return errors.New("invalid probe timeout")
+	}
+	if len(pp.Targets) < 2 || len(pp.Targets) > 8 {
+		return errors.New("invalid probe configuration: 2..8 targets required")
 	}
 	for _, target := range pp.Targets {
 		u, err := url.Parse(target)
 		if err != nil || u.Scheme != "https" || u.Host == "" {
-			return fmt.Errorf("invalid HTTPS target %q", target)
+			return errors.New("invalid HTTPS observation endpoint")
 		}
 	}
 	if net.ParseIP(strings.TrimSpace(pp.ExpectedEgress)) == nil {
-		return fmt.Errorf("expected egress is not a valid IP: %q", pp.ExpectedEgress)
+		return errors.New("expected egress is not a valid IP")
+	}
+	if err := metadata.ValidateDNSProbeTargets(pp.resolverTargets()); err != nil {
+		return err
 	}
 	return nil
 }
 
 // Run выполняет все шаги. Контекст отмены уважается на каждом шаге.
 //
-// Производительность (основа стабильности = меньше одновременных ожиданий на
-// пользователя): все сетевые шаги идут ПАРАЛЛЕЛЬНО — каждый шаг независим
-// (свой SOCKS-коннект через mixed-инбаунд), и консистентность/expected-egress
-// вычисляются после сбора всех результатов. Задержка probe ≈ самому медленному
-// шагу, а не их сумме (раньше 5 последовательных HTTPS → 4× меньше ожидание
-// Start на медленном канале). Порядок результатов фиксирован: egress-цели,
-// consistency, expected, direct-leak, DNS.
-func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
-	report := &ProbeReport{}
+// Egress, OS control и resolver step идут параллельно в общем bounded context.
+// Источники внутри resolver step пробуются последовательно, деля оставшийся
+// срок. Это не доказательство независимости путей или измеренного ускорения.
+// Порядок результатов фиксирован: egress-цели,
+// consistency, expected, OS control, DNS, required TUN boundary when requested.
+func (pp *ProtectedProbe) Run(ctx context.Context) (report *ProbeReport) {
+	if pp != nil {
+		owned := *pp
+		owned.Targets, owned.DNSProbeTargets = slices.Clone(pp.Targets), slices.Clone(pp.DNSProbeTargets)
+		pp = &owned
+	}
+	started := time.Now()
+	report = &ProbeReport{}
+	defer func() { report.StartedAt, report.CompletedAt = started.UTC(), time.Now().UTC() }()
+	if ctx == nil {
+		return &ProbeReport{Results: []ProbeResult{{Name: "контекст", Status: "unavailable", Detail: "probe context is nil"}}}
+	}
 	if err := pp.validate(); err != nil {
 		report.Results = append(report.Results, ProbeResult{
 			Name: "конфигурация probe", Detail: err.Error(),
 		})
 		return report
 	}
+	dnsRequests := len(pp.resolverTargets())
+	requests := len(pp.Targets) + dnsRequests // reserve every possible resolver attempt
+	if !pp.AllowDirectEgress {
+		requests++
+	}
+	ctx, release, err := AdmitDiagnostic(ctx, DiagnosticProtected, requests, int64(requests*(maxProbeBody+1)+dnsRequests*maxDNSProbeQuery), pp.Timeout)
+	if err != nil {
+		return &ProbeReport{Results: []ProbeResult{{Name: "бюджет probe", Status: "unavailable", Detail: "protected diagnostic budget unavailable; path not measured"}}}
+	}
+	defer release()
 	if err := ctx.Err(); err != nil {
 		report.Results = append(report.Results, ProbeResult{
 			Name: "контекст", Detail: err.Error(),
@@ -135,9 +217,11 @@ func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
 	}
 
 	tunnelClient := pp.tunnelClient()
+	defer tunnelClient.CloseIdleConnections()
 	// The control must ignore HTTP_PROXY/HTTPS_PROXY; routing in TUN is still
 	// governed by the OS, which is why TUN evidence is evaluated separately.
-	directClient := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: pp.Timeout}
+	directClient := &http.Client{Transport: &http.Transport{Proxy: nil, DisableCompression: true, MaxResponseHeaderBytes: 16 << 10}, Timeout: pp.Timeout, CheckRedirect: noProbeRedirect}
+	defer directClient.CloseIdleConnections()
 
 	// Один слот результата на каждый сетевой шаг; индексы фиксированы.
 	nTargets := len(pp.Targets)
@@ -153,7 +237,7 @@ func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
 		wg.Add(1)
 		go func(slot int, target string) {
 			defer wg.Done()
-			r, ip := checkHTTPS(ctx, tunnelClient, target)
+			r, ip := checkHTTPSVia(ctx, tunnelClient, target, pp.tunnelRoute())
 			steps[slot] = stepResult{res: r, ip: ip}
 		}(i, target)
 	}
@@ -165,7 +249,16 @@ func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r, directIP := checkHTTPS(ctx, directClient, leakTarget)
+			controlContext := ctx
+			if pp.DirectLeakThroughTunnel {
+				// Informational work gets a shorter child deadline, leaving
+				// time in the unchanged operation budget for required checks.
+				// Parent cancellation still invalidates the entire observation.
+				var cancel context.CancelFunc
+				controlContext, cancel = context.WithTimeout(ctx, pp.Timeout/2)
+				defer cancel()
+			}
+			r, directIP := checkHTTPSVia(controlContext, directClient, leakTarget, ProbeRouteOS)
 			r.Name = "Direct leak check"
 			steps[leakSlot] = stepResult{res: r, ip: directIP}
 		}()
@@ -192,37 +285,10 @@ func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
 		}
 	}
 
-	// Шаг: консистентность egress между целями.
-	if len(tunnelIPs) >= 2 {
-		consistent := true
-		for i := 1; i < len(tunnelIPs); i++ {
-			if tunnelIPs[i] != tunnelIPs[0] {
-				consistent = false
-				break
-			}
-		}
-		report.Results = append(report.Results, ProbeResult{
-			Name:   "Egress consistency",
-			Passed: consistent,
-			Detail: fmt.Sprintf("targets report: %v", tunnelIPs),
-		})
-		if !consistent {
-			failed++
-		}
-	}
-
-	// Шаг: expected egress (главное отличие от старого ядра).
-	if len(tunnelIPs) > 0 {
-		got := tunnelIPs[0]
-		pass := got == strings.TrimSpace(pp.ExpectedEgress)
-		detail := fmt.Sprintf("egress %s, expected %s", got, pp.ExpectedEgress)
-		if !pass {
-			detail += " — трафик идёт не через защищённый канал"
-		}
-		report.Results = append(report.Results, ProbeResult{
-			Name: "Expected egress", Passed: pass, Detail: detail,
-		})
-		if !pass {
+	// Both comparisons remain explicit even when no usable addresses arrived.
+	for _, result := range []ProbeResult{consistentEgressResult(tunnelIPs), expectedEgressResult(tunnelIPs, pp.ExpectedEgress)} {
+		report.Results = append(report.Results, result)
+		if !result.Passed {
 			failed++
 		}
 	}
@@ -231,8 +297,7 @@ func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
 	if !pp.AllowDirectEgress {
 		r := directLeakResult(pp.DirectLeakThroughTunnel, steps[leakSlot].res, steps[leakSlot].ip, tunnelIPs)
 		report.Results = append(report.Results, r)
-		report.LeakConfirmed = r.Status == "leak"
-		if !r.Passed {
+		if !r.Passed && !r.Informational() {
 			failed++
 		}
 	}
@@ -243,138 +308,76 @@ func (pp *ProtectedProbe) Run(ctx context.Context) *ProbeReport {
 	if !dnsRes.Passed {
 		failed++
 	}
+	if pp.DirectLeakThroughTunnel {
+		// The same-image control is informational. It never replaces this
+		// required original native fact or actual existing worker admission.
+		step := pp.tunBinding.result()
+		report.Results = append(report.Results, step)
+		if !step.Passed {
+			report.ProtectionUnavailable = true
+			failed++
+		}
+	}
 
+	if ctx.Err() != nil {
+		failed++
+		report.Results = append(report.Results, ProbeResult{Name: "контекст", Status: "unavailable", Detail: "protected observation deadline/cancellation; path not confirmed"})
+	}
 	report.AllPassed = failed == 0
 	return report
 }
 
 func (pp *ProtectedProbe) tunnelClient() *http.Client {
 	transport := &http.Transport{
-		DialContext: (&net.Dialer{Timeout: pp.Timeout}).DialContext,
+		DisableCompression:     true,
+		MaxResponseHeaderBytes: 16 << 10,
+		DialContext:            (&net.Dialer{Timeout: pp.Timeout}).DialContext,
 		Proxy: http.ProxyURL(&url.URL{
 			Scheme: "socks5h",
 			Host:   pp.SOCKSAddr,
 		}),
 	}
-	return &http.Client{Transport: transport, Timeout: pp.Timeout}
+	if pp.tunnelDialContext != nil {
+		transport.Proxy = nil
+		transport.DialContext = pp.tunnelDialContext
+	}
+	return &http.Client{Transport: transport, Timeout: pp.Timeout, CheckRedirect: noProbeRedirect}
 }
 
-// checkDNS — настоящий DNS-путь через туннель: DoH JSON-запрос к эндпоинту
-// по IP-литералу через SOCKS (socks5h). Это независимая проверка резолва
-// (старая версия дублировала первую HTTPS-цель тем же клиентом — «6/6»
-// завышало объём доказательств, V2-037). Успех = получен осмысленный
-// A-ответ на эталонное имя.
-func (pp *ProtectedProbe) checkDNS(ctx context.Context, client *http.Client) ProbeResult {
-	name := "DNS через туннель (DoH)"
-	u := fmt.Sprintf("%s?name=%s&type=A", dnsCheckEndpoint, dnsCheckHost)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("request failed: %v", err)}
+func (pp *ProtectedProbe) tunnelRoute() string {
+	if pp.tunnelDialContext != nil {
+		return ProbeRouteEngineOutbound
 	}
-	req.Header.Set("Accept", "application/dns-json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("DoH через туннель недоступен: %v", err)}
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-	if err != nil {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("read failed: %v", err)}
-	}
-	if resp.StatusCode != http.StatusOK {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("HTTP %d", resp.StatusCode)}
-	}
-	var payload struct {
-		Status int `json:"Status"`
-		Answer []struct {
-			Type int    `json:"type"`
-			Data string `json:"data"`
-		} `json:"Answer"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("некорректный DoH-ответ: %v", err)}
-	}
-	// Status 0 = NOERROR; A-записи (type 1) с валидным IP.
-	var ips []string
-	for _, ans := range payload.Answer {
-		if ans.Type == 1 && net.ParseIP(ans.Data) != nil {
-			ips = append(ips, ans.Data)
-		}
-	}
-	if payload.Status != 0 || len(ips) == 0 {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("DoH ответил без A-записей (Status=%d, ответов=%d)", payload.Status, len(payload.Answer))}
-	}
-	return ProbeResult{Name: name, Passed: true, Detail: fmt.Sprintf("%s → %v (резолв через туннель работает)", dnsCheckHost, ips)}
+	return ProbeRouteSOCKS
 }
 
-// directLeakResult — вердикт direct-leak шага по режиму (V2-037):
-//
-//	SOCKS (tunMode=false): direct-путь независим от туннеля; совпадение
-//	egress с туннельным = трафик пользователя НЕ идёт через туннель.
-//	TUN   (tunMode=true):  auto_route заворачивает весь трафик ОС в туннель;
-//	расхождение = трафик утёк мимо туннеля на сетевом уровне.
-//
-// Недоступный direct не доказывает отсутствие утечки. Отдельный статус
-// unavailable позволяет отличить нехватку evidence от подтверждённой leak.
-func directLeakResult(tunMode bool, r ProbeResult, directIP string, tunnelIPs []string) ProbeResult {
-	tunnelIP := firstOr(tunnelIPs, "")
-	switch {
-	case !r.Passed:
-		r.Status = "unavailable"
-		if tunMode {
-			r.Detail = "direct-путь недоступен (strict_route?) — отсутствие утечки не доказано (" + r.Detail + ")"
-		} else {
-			r.Detail = "direct-проверка недоступна из этой сети (" + r.Detail + "); leak-контроль ограничен"
-		}
-	case directIP == "" || tunnelIP == "":
-		r.Passed = false
-		r.Status = "unavailable"
-		r.Detail = "direct egress получен, туннельного нет — сопоставление невозможно"
-	case tunMode && directIP != tunnelIP:
-		r.Passed = false
-		r.Status = "leak"
-		r.Detail = fmt.Sprintf("direct egress %s отличается от туннельного %s — в TUN-режиме трафик утёк мимо туннеля", directIP, tunnelIP)
-	case !tunMode && directIP == tunnelIP:
-		r.Passed = false
-		r.Status = "leak"
-		r.Detail = fmt.Sprintf("direct egress %s совпадает с туннельным — трафик НЕ идёт через туннель", directIP)
-	default:
-		r.Status = "pass"
-		if tunMode {
-			r.Detail = fmt.Sprintf("direct egress %s идёт через туннель (TUN-режим: совпадение — норма)", directIP)
-		} else {
-			r.Detail = fmt.Sprintf("direct egress %s отличается от туннельного %s — утечки нет", directIP, tunnelIP)
-		}
-	}
-	return r
-}
+func noProbeRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func checkHTTPS(ctx context.Context, client *http.Client, target string) (ProbeResult, string) {
-	name := "HTTPS " + target
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("request failed: %v", err)}, ""
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("request failed: %v", err)}, ""
-	}
-	defer resp.Body.Close()
+	return checkHTTPSVia(ctx, client, target, "unspecified")
+}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 256))
+func checkHTTPSVia(ctx context.Context, client *http.Client, target, route string) (ProbeResult, string) {
+	fact, body, err := fetchProbeHTTP(ctx, client, target, route, "egress_http", "", maxProbeBody)
+	result := ProbeResult{Name: "HTTPS " + fact.Endpoint, Observation: fact}
 	if err != nil {
-		return ProbeResult{Name: name, Detail: fmt.Sprintf("read failed: %v", err)}, ""
+		result.Status, result.Detail = "unavailable", fact.Summary()
+		return result, ""
 	}
-
 	ip := extractIP(string(body))
-	if resp.StatusCode != http.StatusOK {
-		return ProbeResult{Name: name, Passed: false,
-			Detail: fmt.Sprintf("HTTP %d, body: %s", resp.StatusCode, truncateBytes(body, 64))}, ip
+	if fact.HTTPStatus != http.StatusOK {
+		result.Observation.ErrorKind = "http_status"
+		result.Detail = result.Observation.Summary()
+		return result, "" // an error page is not an authenticated egress echo
 	}
 	if net.ParseIP(ip) == nil {
-		return ProbeResult{Name: name, Detail: "response did not contain an egress IP"}, ""
+		result.Observation.ErrorKind = "invalid_response"
+		result.Detail = "response did not contain an egress IP; " + result.Observation.Summary()
+		return result, ""
 	}
-	return ProbeResult{Name: name, Passed: true, Detail: fmt.Sprintf("egress IP: %s", ip)}, ip
+	result.Passed, result.Status = true, "pass"
+	result.Detail = fmt.Sprintf("egress IP: %s; %s", ip, fact.Summary())
+	return result, ip
 }
 
 func extractIP(s string) string {

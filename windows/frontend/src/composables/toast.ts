@@ -1,6 +1,8 @@
 /**
  * Всплывающие уведомления. Тексты должны описывать фактическую ошибку,
  * без секретов и без гипотез о причинах (AGENTS.md §2.4, §3.3).
+ * Caller передаёт display-safe текст. Эта функция не очищает исключения;
+ * для отказов команд используются локальные api/failureMessages.
  */
 import { ref } from 'vue'
 import { uiLog } from './uiLog'
@@ -30,7 +32,7 @@ export function toast(kind: ToastKind, text: string, ttlMs = 5000): void {
   toasts.value.push({ id, kind, text })
   if (toasts.value.length > MAX_TOASTS) toasts.value.shift()
   if (kind === 'error') {
-    // Ошибки дублируем в журнал UI — для diagnostics (текст уже без секретов).
+    // Дублируем caller-supplied safe text; raw exception сюда передавать нельзя.
     uiLog('error', text)
   }
   window.setTimeout(() => dismissToast(id), ttlMs)

@@ -1,26 +1,23 @@
 package main
 
-// secrettests.go — живые тесты для каждого вида секрета (кнопка «Тест»
-// в карточке секрета). Правила:
-//   - значение секрета не покидает процесс и не попадает в логи/UI:
-//     сверка с сервером — только по SHA256-префиксам;
-//   - каждый шаг с человекочитаемым результатом (факты, не гипотезы);
-//   - «skipped» — честный исход, когда тест неприменим (не ошибка).
+// Production implementation of the explicit GUI secret diagnostic, not Go tests.
+// Credentials are used only for their purpose (SSH signing / HTTPS Authorization).
+// Results do not echo raw transport/server errors, output or credential strings.
+// This diagnostic is not protected-egress, server-configuration or trust acceptance.
 //
 // Ожидание для vps-ssh-key (fingerprint установленного на сервере ключа) —
 // в gitignored-файле .tmp/expectations.v1.json, не в коде: ключ ротируется.
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/snowden-system/windows/backend/render"
@@ -32,37 +29,6 @@ import (
 type SecretTestReport struct {
 	OK    bool            `json:"ok"`
 	Steps []ProbeStepView `json:"steps"`
-}
-
-// testServerHost — резервный origin канала A: используется ТОЛЬКО если
-// дескрипторы не читаются (повреждённая сборка), чтобы живой тест оставался
-// честным фактом о существующем сервере, а не молчал.
-const testServerHost = "203.0.113.10"
-
-// testEndpoints — контакты живых тестов из дескрипторов (FR-002: данные,
-// не хардкод). SSH (сверка хешей/вход ключом) — на origin-сервер VLESS-канала
-// (deployed-конфиг живёт там); UDP-достижимость — на origin:port hysteria2-
-// канала. Включённый канал важнее статуса: тест существует, чтобы статус
-// уточнить.
-func testEndpoints() (sshHost, hy2Host, hy2Port string) {
-	sshHost, hy2Host, hy2Port = testServerHost, testServerHost, "8444"
-	channels, err := render.LoadDescriptors()
-	if err != nil {
-		return
-	}
-	for _, ch := range channels {
-		if !ch.Enabled {
-			continue
-		}
-		if ch.Protocol == "vless" {
-			sshHost = ch.OriginServer
-		}
-		if ch.Protocol == "hysteria2" {
-			hy2Host = ch.OriginServer
-			hy2Port = strconv.Itoa(int(ch.Port))
-		}
-	}
-	return
 }
 
 const (
@@ -97,73 +63,59 @@ func pinnedHostKeyCallback() ssh.HostKeyCallback {
 	}
 }
 
-// keyExpectation — ожидания для теста vps-ssh-key.
-type keyExpectation struct {
-	PrivateKeyFingerprint string `json:"private_key_fingerprint"`
-}
-
-func expectationsPaths() []string {
-	paths := []string{}
-	if exe, err := os.Executable(); err == nil {
-		paths = append(paths, filepath.Join(filepath.Dir(exe), ".tmp", "expectations.v1.json"))
-	}
-	return append(paths, filepath.Join(".tmp", "expectations.v1.json"))
-}
-
-func loadKeyExpectation() (keyExpectation, bool) {
-	for _, p := range expectationsPaths() {
-		b, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		var e keyExpectation
-		if json.Unmarshal(b, &e) == nil && e.PrivateKeyFingerprint != "" {
-			return e, true
-		}
-	}
-	return keyExpectation{}, false
-}
-
 // ---------- диспетчер по виду секрета ----------
 
-// runSecretTest — точка входа из app.go. Возвращает отчёт; карточку обновляет
-// вызывающий (статус проверки живой тест не меняет — он про сеть, не про формат).
-func (a *App) runSecretTest(id string) (SecretTestReport, error) {
-	meta, err := a.refetchMeta(id)
-	if err != nil {
-		return SecretTestReport{}, err
+// The original encrypted source supplies both metadata and values. No App lock
+// or vault/journal lock crosses a network call. Rechecking does not undo an
+// already-sent credential, nor make the observation atomic with a later mutation.
+func runSecretTest(task *manualDiagnosticTask, vault *secretvault.Manager, id string) (SecretTestReport, secretvault.Meta, error) {
+	if err := task.currentError(); err != nil {
+		return SecretTestReport{}, secretvault.Meta{}, err
 	}
+	snapshot, err := vault.PrepareImportSnapshot(nil)
+	if err != nil {
+		return SecretTestReport{}, secretvault.Meta{}, errSecretTestUnavailable
+	}
+	meta, err := snapshot.MetaByID(id)
+	if err != nil {
+		return SecretTestReport{}, secretvault.Meta{}, errSecretTestUnavailable
+	}
+	value := ""
+	if meta.StoredValue != "" {
+		slot, err := snapshot.ExportReference(id, meta.Kind)
+		if err != nil {
+			return SecretTestReport{}, secretvault.Meta{}, errSecretTestUnavailable
+		}
+		value = slot.Value
+		meta.Fingerprint = secretvault.Fingerprint(value)
+	}
+	if err := vault.WithPreparedSnapshot(snapshot, task.currentError); err != nil {
+		return SecretTestReport{}, secretvault.Meta{}, errSecretTestUnavailable
+	}
+	var rep SecretTestReport
 	if meta.StoredValue == "" {
-		return SecretTestReport{OK: false, Steps: []ProbeStepView{{
-			Name: "значение", Status: "skipped",
-			Detail: "значение не задано — тестировать нечего (сначала «Задать значение»)",
-		}}}, nil
+		rep.Steps = []ProbeStepView{{Name: "значение", Status: "skipped", Detail: "значение не задано — проверка не выполнялась"}}
+	} else {
+		switch secretvault.Kind(meta.Kind) {
+		case secretvault.KindVlessUUID:
+			rep = testChannelSecret(task, snapshot, value, "uuid", meta.Fingerprint, "UUID VLESS")
+		case secretvault.KindHy2Password:
+			rep = testChannelSecret(task, snapshot, value, "hy2", meta.Fingerprint, "пароль HY2")
+		case secretvault.KindHy2ObfsPasword:
+			rep = testChannelSecret(task, snapshot, value, "obfs", meta.Fingerprint, "пароль obfs")
+		case secretvault.KindVpsSSHKey:
+			rep = testSSHKey(task, value, meta.Fingerprint)
+		case secretvault.KindCfApiToken:
+			rep = testCfToken(task, value, meta.Fingerprint)
+		default:
+			rep.Steps = []ProbeStepView{{Name: "сетевая проверка", Status: "skipped", Detail: "для этого вида сетевой сценарий не определён"}}
+		}
 	}
-	value, err := a.vault.Value(id)
-	if err != nil {
-		return SecretTestReport{}, fmt.Errorf("значение недоступно: %w", err)
+	value = "" // drops this reference only, not a memory-erasure claim
+	if err := vault.WithPreparedSnapshot(snapshot, task.currentError); err != nil {
+		return SecretTestReport{}, secretvault.Meta{}, errSecretTestUnavailable
 	}
-
-	switch secretvault.Kind(meta.Kind) {
-	case secretvault.KindVlessUUID:
-		return testChannelSecret(value, "uuid", meta.Fingerprint,
-			"UUID VLESS", "users[0].uuid в vless-инбаунде"), nil
-	case secretvault.KindHy2Password:
-		return testChannelSecret(value, "hy2", meta.Fingerprint,
-			"пароль HY2", "users[0].password в hysteria2-инбаунде"), nil
-	case secretvault.KindHy2ObfsPasword:
-		return testChannelSecret(value, "obfs", meta.Fingerprint,
-			"пароль obfs (salamander)", "obfs.password в hysteria2-инбаунде"), nil
-	case secretvault.KindVpsSSHKey:
-		return testSSHKey(value, meta.Fingerprint), nil
-	case secretvault.KindCfApiToken:
-		return testCfToken(value, meta.Fingerprint), nil
-	default:
-		return SecretTestReport{OK: false, Steps: []ProbeStepView{{
-			Name: "живой тест", Status: "skipped",
-			Detail: "для произвольных значений живой тест не определён — доступна только проверка формата",
-		}}}, nil
-	}
+	return rep, meta, nil
 }
 
 // ---------- канальные секреты: сверка хешей с сервером ----------
@@ -194,290 +146,259 @@ type srvHashes struct {
 	Obfs string `json:"obfs"`
 }
 
-// testChannelSecret — общий сценарий для uuid/hy2/obfs:
-//  1. формат значения (локально, тот же валидатор, что при сохранении);
-//  2. TCP 22 сервера достижим;
-//  3. SSH-сессия: сервер сам считает хеши deployed-конфига, сравниваем префиксы;
-//  4. итог по конкретному секрету.
-func testChannelSecret(value, key, localFp, human, where string) SecretTestReport {
+// This legacy diagnostic still uses pinned SSH host keys, not the pending
+// signed purpose-bound SSH trust delivery. No keyscan/TOFU/direct IP fallback.
+// Capture one unambiguous descriptor host before dialing; never reread it during
+// the handshake. A TCP open/SSH echo/hash prefix is not VPN-path acceptance.
+func secretSSHAddress() (string, error) {
+	channels, err := render.LoadDescriptors()
+	if err != nil {
+		return "", errSecretTestUnavailable
+	}
+	host := ""
+	for _, ch := range channels {
+		if !ch.Enabled || ch.Protocol != "vless" {
+			continue
+		}
+		candidate := ch.OriginServer
+		if candidate == "" || len(candidate) > 253 || strings.ContainsAny(candidate, " \t\r\n/\\?#@") || host != "" && candidate != host {
+			return "", errSecretTestUnavailable
+		}
+		host = candidate
+	}
+	if host == "" {
+		return "", errSecretTestUnavailable
+	}
+	return net.JoinHostPort(host, "22"), nil
+}
+
+const secretCommandLimit = 4096
+
+// Session stdout and stderr are copied concurrently by x/crypto/ssh. Keep one
+// synchronized, bounded sink; overflow cancels the original task/socket rather
+// than retaining unbounded CombinedOutput or spawning a timeout waiter.
+type secretCommandOutput struct {
+	mu       sync.Mutex
+	data     []byte
+	overflow bool
+	task     *manualDiagnosticTask
+}
+
+func (out *secretCommandOutput) Write(p []byte) (int, error) {
+	out.mu.Lock()
+	n := len(p)
+	remaining := secretCommandLimit - len(out.data)
+	if n > remaining {
+		n = remaining
+		out.overflow = true
+	}
+	out.data = append(out.data, p[:n]...)
+	overflow := out.overflow
+	out.mu.Unlock()
+	if overflow {
+		out.task.cancel()
+		return n, io.ErrShortBuffer
+	}
+	return n, nil
+}
+
+func runSecretSSH(task *manualDiagnosticTask, addr string, signer ssh.Signer, command, stdin string) ([]byte, error) {
+	conn, err := task.dialSSH(addr)
+	if err != nil {
+		return nil, errSecretTestUnavailable
+	}
+	defer conn.Close()
+	cfg := &ssh.ClientConfig{User: testSSHUser, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: pinnedHostKeyCallback(), Timeout: testDialTimeout}
+	c, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
+	if err != nil {
+		return nil, errSecretTestUnavailable
+	}
+	client := ssh.NewClient(c, chans, reqs)
+	defer func() {
+		sequence := &appCleanupSequence{}
+		defer func() {
+			if sequence.result != nil {
+				task.cleanupFailed.Store(true)
+			}
+		}()
+		defer appCleanupStep("wait original SSH client", sequence, func() error { _ = client.Wait(); return nil })
+		defer appCleanupStep("close original SSH client", sequence, func() error { _ = client.Close(); return nil })
+	}()
+	if task.currentError() != nil {
+		return nil, errSecretTestUnavailable
+	}
+	sess, err := client.NewSession()
+	if err != nil {
+		return nil, errSecretTestUnavailable
+	}
+	defer sess.Close()
+	out := &secretCommandOutput{task: task, data: make([]byte, 0, secretCommandLimit)}
+	sess.Stdout, sess.Stderr = out, out
+	if stdin != "" {
+		sess.Stdin = strings.NewReader(stdin)
+	}
+	// Run waits for the command and its stdin/stdout/stderr copy functions. The
+	// task remains admitted through this call and all connection/watcher defers.
+	if task.currentError() != nil {
+		return nil, errSecretTestUnavailable
+	}
+	err = sess.Run(command)
+	out.mu.Lock()
+	data, overflow := out.data, out.overflow
+	out.mu.Unlock()
+	if err != nil || overflow || task.currentError() != nil {
+		return nil, errSecretTestUnavailable
+	}
+	return data, nil
+}
+
+func secretHashValid(value string) bool {
+	if len(value) != 16 {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func testChannelSecret(task *manualDiagnosticTask, snapshot *secretvault.PreparedImport, value, key, localFp, human string) SecretTestReport {
 	rep := SecretTestReport{Steps: []ProbeStepView{}}
 	fail := func(step, detail string) SecretTestReport {
 		rep.Steps = append(rep.Steps, ProbeStepView{Name: step, Status: "fail", Detail: detail})
 		return rep
 	}
-
-	kind := map[string]secretvault.Kind{
-		"uuid": secretvault.KindVlessUUID,
-		"hy2":  secretvault.KindHy2Password,
-		"obfs": secretvault.KindHy2ObfsPasword,
-	}[key]
+	kind := map[string]secretvault.Kind{"uuid": secretvault.KindVlessUUID, "hy2": secretvault.KindHy2Password, "obfs": secretvault.KindHy2ObfsPasword}[key]
 	if err := secretvault.ValidateKind(kind, value); err != nil {
-		return fail("формат значения", err.Error())
+		return fail("формат значения", "значение не прошло проверку формата")
 	}
-	rep.Steps = append(rep.Steps, ProbeStepView{
-		Name: "формат значения", Status: "pass",
-		Detail: fmt.Sprintf("%s: формат корректен (fingerprint %s)", human, localFp),
-	})
-
-	addr := addrForSSH()
-	conn, err := net.DialTimeout("tcp", addr, testDialTimeout)
+	rep.Steps = append(rep.Steps, ProbeStepView{Name: "формат значения", Status: "pass", Detail: human + ": формат корректен (fingerprint " + localFp + ")"})
+	// Resolve the unique SSH credential from the SAME encrypted vault snapshot.
+	// Ambiguous/missing credentials fail; never silently use ~/.ssh/vps_key.
+	sshValue, err := snapshot.Get(string(secretvault.KindVpsSSHKey))
 	if err != nil {
-		return fail("SSH-транспорт", fmt.Sprintf("TCP %s: %v", addr, err))
+		return fail("SSH-ключ", "в этом снимке vault нет единственного доступного SSH-ключа")
 	}
-	defer conn.Close()
-	rep.Steps = append(rep.Steps, ProbeStepView{
-		Name: "SSH-транспорт", Status: "pass", Detail: "TCP 22 открыт",
-	})
-
-	hashes, detail, ok := runSrvHashScript(conn)
-	if !ok {
-		return fail("серверные хеши", detail)
-	}
-	rep.Steps = append(rep.Steps, ProbeStepView{Name: "серверные хеши", Status: "pass", Detail: detail})
-
-	got := map[string]string{"uuid": hashes.UUID, "hy2": hashes.HY2, "obfs": hashes.Obfs}[key]
-	switch {
-	case got == "":
-		return fail("итог", "сервер не вернул хеш для "+where)
-	case got == localFp:
-		rep.Steps = append(rep.Steps, ProbeStepView{
-			Name: "итог", Status: "pass",
-			Detail: fmt.Sprintf("хеш на сервере (%s) совпадает с локальным значением — сервер работает с этим %s", got, human),
-		})
-	default:
-		return fail("итог", fmt.Sprintf("РАСХОЖДЕНИЕ: на сервере %s, локально %s — сервер работает с другим значением", got, localFp))
-	}
-	rep.OK = true
-	return rep
-}
-
-// runSrvHashScript исполняет srvHashScript в SSH-сессии (скрипт — через stdin,
-// `python3`). Значения секретов через сеть не ходят — только 16-hex префиксы.
-func runSrvHashScript(conn net.Conn) (srvHashes, string, bool) {
-	signers, err := keySigners()
+	signer, err := ssh.ParsePrivateKey([]byte(sshValue))
+	sshValue = ""
 	if err != nil {
-		return srvHashes{}, err.Error(), false
+		return fail("SSH-ключ", "SSH-ключ из снимка vault не разобран")
 	}
-	cfg := &ssh.ClientConfig{
-		User:            testSSHUser,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signers...)},
-		HostKeyCallback: pinnedHostKeyCallback(),
-		Timeout:         testDialTimeout,
-	}
-	c, chans, reqs, err := ssh.NewClientConn(conn, addrForSSH(), cfg)
+	addr, err := secretSSHAddress()
 	if err != nil {
-		return srvHashes{}, "SSH-рукопожатие/аутентификация: " + err.Error(), false
+		return fail("назначение SSH", "нет единственного адреса в доступных дескрипторах; запасной адрес не используется")
 	}
-	defer c.Close()
-	client := ssh.NewClient(c, chans, reqs)
-	defer client.Close()
-
-	sess, err := client.NewSession()
+	out, err := runSecretSSH(task, addr, signer, "python3", srvHashScript)
 	if err != nil {
-		return srvHashes{}, "SSH-сессия: " + err.Error(), false
-	}
-	defer sess.Close()
-	sess.Stdin = strings.NewReader(srvHashScript)
-	out, err := sess.CombinedOutput("python3")
-	if err != nil {
-		return srvHashes{}, "серверный скрипт: " + err.Error() + "; вывод: " + truncateStr(out, 200), false
+		return fail("SSH-запрос", "закреплённый SSH-сеанс и команда не подтверждены; причина по этому ответу не установлена")
 	}
 	var hashes srvHashes
-	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &hashes); err != nil {
-		return srvHashes{}, "не JSON в ответе сервера: " + truncateStr(out, 160), false
+	if json.Unmarshal(out, &hashes) != nil || !secretHashValid(hashes.UUID) || !secretHashValid(hashes.HY2) || !secretHashValid(hashes.Obfs) {
+		return fail("серверный ответ", "ответ не соответствует ограниченному формату хешей")
 	}
-	return hashes, fmt.Sprintf("сервер: uuid=%s hy2=%s obfs=%s", hashes.UUID, hashes.HY2, hashes.Obfs), true
-}
-
-func addrForSSH() string {
-	sshHost, _, _ := testEndpoints()
-	return net.JoinHostPort(sshHost, "22")
-}
-
-// keySigners — подписанты из ~/.ssh/vps_key (путь — владелецский, не секрет).
-func keySigners() ([]ssh.Signer, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("домашний каталог: %w", err)
+	got := map[string]string{"uuid": hashes.UUID, "hy2": hashes.HY2, "obfs": hashes.Obfs}[key]
+	if got != localFp {
+		return fail("сверка префикса", "сервер вернул другой SHA256-префикс; привязка конфигурации требует проверки")
 	}
-	key, err := os.ReadFile(filepath.Join(home, ".ssh", "vps_key"))
-	if err != nil {
-		return nil, fmt.Errorf("файл ~/.ssh/vps_key не прочитан (%v): доступ по ключу не настроен", err)
-	}
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("~/.ssh/vps_key: %w", err)
-	}
-	return []ssh.Signer{signer}, nil
-}
-
-func truncateStr(b []byte, n int) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > n {
-		s = s[:n] + "…"
-	}
-	return s
-}
-
-// ---------- vps-ssh-key: реальный вход ключом ИЗ ХРАНИЛИЩА ----------
-
-// testSSHKey проверяет само значение из хранилища: парсим PEM, сверяем с
-// ожиданием (если файл ожиданий есть), затем делаем настоящий SSH-вход этим
-// ключом и исполняем echo. Значение не печатается и не логируется.
-func testSSHKey(value, localFp string) SecretTestReport {
-	rep := SecretTestReport{Steps: []ProbeStepView{}}
-	fail := func(step, detail string) SecretTestReport {
-		rep.Steps = append(rep.Steps, ProbeStepView{Name: step, Status: "fail", Detail: detail})
-		return rep
-	}
-
-	signer, err := ssh.ParsePrivateKey([]byte(value))
-	if err != nil {
-		return fail("разбор ключа", "PEM не разобран: "+err.Error())
-	}
-	rep.Steps = append(rep.Steps, ProbeStepView{
-		Name: "разбор ключа", Status: "pass",
-		Detail: "приватный ключ корректен (fingerprint " + localFp + ")",
-	})
-
-	if exp, ok := loadKeyExpectation(); ok {
-		if exp.PrivateKeyFingerprint == localFp {
-			rep.Steps = append(rep.Steps, ProbeStepView{
-				Name: "сверка с ожиданием", Status: "pass",
-				Detail: "fingerprint совпадает с ожидаемым (этот ключ установлен на сервере)",
-			})
-		} else {
-			return fail("сверка с ожиданием",
-				fmt.Sprintf("fingerprint %s не совпадает с ожидаемым %s — в хранилище не тот ключ", localFp, exp.PrivateKeyFingerprint))
-		}
-	} else {
-		rep.Steps = append(rep.Steps, ProbeStepView{
-			Name: "сверка с ожиданием", Status: "skipped",
-			Detail: "файл ожиданий .tmp/expectations.v1.json отсутствует — сверка пропущена, живой вход продолжается",
-		})
-	}
-
-	addr := addrForSSH()
-	dialer := &net.Dialer{Timeout: testDialTimeout}
-	conn, err := dialer.DialContext(context.Background(), "tcp", addr)
-	if err != nil {
-		return fail("SSH-транспорт", fmt.Sprintf("TCP %s: %v", addr, err))
-	}
-	defer conn.Close()
-	rep.Steps = append(rep.Steps, ProbeStepView{Name: "SSH-транспорт", Status: "pass", Detail: "TCP 22 открыт"})
-
-	cfg := &ssh.ClientConfig{
-		User:            testSSHUser,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: pinnedHostKeyCallback(),
-		Timeout:         testDialTimeout,
-	}
-	c, chans, reqs, err := ssh.NewClientConn(conn, addrForSSH(), cfg)
-	if err != nil {
-		return fail("аутентификация ключом", "сервер отклонил ключ из хранилища: "+err.Error())
-	}
-	client := ssh.NewClient(c, chans, reqs)
-	defer client.Close()
-
-	sess, err := client.NewSession()
-	if err != nil {
-		return fail("аутентификация ключом", "SSH-сессия: "+err.Error())
-	}
-	defer sess.Close()
-	type cmdResult struct {
-		out []byte
-		err error
-	}
-	resCh := make(chan cmdResult, 1)
-	go func() {
-		o, e := sess.CombinedOutput("echo ok")
-		resCh <- cmdResult{out: o, err: e}
-	}()
-	select {
-	case res := <-resCh:
-		if res.err != nil || strings.TrimSpace(string(res.out)) != "ok" {
-			return fail("аутентификация ключом", "вход выполнен, команда не подтверждена: "+errStr(res.err))
-		}
-	case <-time.After(10 * time.Second):
-		return fail("аутентификация ключом", "сервер не ответил на команду за 10 с")
-	}
-	rep.Steps = append(rep.Steps, ProbeStepView{
-		Name: "аутентификация ключом", Status: "pass",
-		Detail: "сервер принял ключ из хранилища, команда выполнена — ключ живой и авторизован",
-	})
+	rep.Steps = append(rep.Steps, ProbeStepView{Name: "сверка префикса", Status: "pass", Detail: "SHA256-префикс ответа совпал со значением этого снимка. Это не проверка VPN-пути или всей конфигурации сервера."})
 	rep.OK = true
 	return rep
 }
 
-func errStr(e error) string {
-	if e == nil {
-		return "пустой ответ"
-	}
-	return e.Error()
-}
-
-// ---------- cf-api-token: живая проверка через API Cloudflare ----------
-
-// testCfToken — реальный вызов /user/tokens/verify. Значение уходит только
-// в заголовок Authorization к api.cloudflare.com (это единственное назначение
-// токена); в логи/UI не попадает.
-func testCfToken(value, localFp string) SecretTestReport {
+func testSSHKey(task *manualDiagnosticTask, value, localFp string) SecretTestReport {
 	rep := SecretTestReport{Steps: []ProbeStepView{}}
 	fail := func(step, detail string) SecretTestReport {
 		rep.Steps = append(rep.Steps, ProbeStepView{Name: step, Status: "fail", Detail: detail})
 		return rep
 	}
-
-	if err := secretvault.ValidateKind(secretvault.KindCfApiToken, value); err != nil {
-		return fail("формат значения", err.Error())
-	}
-	rep.Steps = append(rep.Steps, ProbeStepView{
-		Name: "формат значения", Status: "pass",
-		Detail: "длина корректна (fingerprint " + localFp + ")",
-	})
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
-		"https://api.cloudflare.com/client/v4/user/tokens/verify", nil)
+	signer, err := ssh.ParsePrivateKey([]byte(value))
 	if err != nil {
-		return fail("HTTP-запрос", err.Error())
+		return fail("разбор ключа", "ключ не разобран")
+	}
+	rep.Steps = append(rep.Steps, ProbeStepView{Name: "разбор ключа", Status: "pass", Detail: "ключ разобран (fingerprint " + localFp + ")"})
+	// Preserve the existing operator expectation refusal. This optional local
+	// file is legacy metadata, NOT authenticated host-key rotation/delivery.
+	exp, err := loadKeyExpectation(task)
+	if err != nil {
+		rep.Steps = append(rep.Steps, ProbeStepView{Name: "локальное ожидание", Status: "unavailable", Detail: err.Error()}) // finite local errors only
+		return rep
+	}
+	if exp != nil {
+		if exp.PrivateKeyFingerprint != localFp {
+			return fail("локальное ожидание", "fingerprint не совпадает с локальным ожиданием")
+		}
+		rep.Steps = append(rep.Steps, ProbeStepView{Name: "локальное ожидание", Status: "pass", Detail: "fingerprint локального значения совпал с ожиданием на момент чтения; это не аттестация сервера"})
+	} else {
+		rep.Steps = append(rep.Steps, ProbeStepView{Name: "локальное ожидание", Status: "skipped", Detail: "оба допустимых файла ожиданий отсутствуют; локальная сверка не выполнялась"})
+	}
+	addr, err := secretSSHAddress()
+	if err != nil {
+		return fail("назначение SSH", "нет единственного адреса в доступных дескрипторах; запасной адрес не используется")
+	}
+	out, err := runSecretSSH(task, addr, signer, "echo ok", "")
+	if err != nil || strings.TrimSpace(string(out)) != "ok" {
+		return fail("SSH-запрос", "закреплённый SSH-сеанс и команда не подтверждены; причина по этому ответу не установлена")
+	}
+	rep.Steps = append(rep.Steps, ProbeStepView{Name: "SSH-запрос", Status: "pass", Detail: "в этом сеансе сервер принял подпись и вернул ожидаемый ответ команды. VPN-путь не проверен."})
+	rep.OK = true
+	return rep
+}
+
+func testCfToken(task *manualDiagnosticTask, value, localFp string) SecretTestReport {
+	rep := SecretTestReport{Steps: []ProbeStepView{}}
+	fail := func(step, detail string) SecretTestReport {
+		rep.Steps = append(rep.Steps, ProbeStepView{Name: step, Status: "fail", Detail: detail})
+		return rep
+	}
+	if secretvault.ValidateKind(secretvault.KindCfApiToken, value) != nil {
+		return fail("формат значения", "значение не прошло проверку формата")
+	}
+	if task.currentError() != nil {
+		return fail("запрос", "проверка отменена")
+	}
+	rep.Steps = append(rep.Steps, ProbeStepView{Name: "формат значения", Status: "pass", Detail: "формат корректен (fingerprint " + localFp + ")"})
+	req, err := http.NewRequestWithContext(task.ctx, http.MethodGet, "https://api.cloudflare.com/client/v4/user/tokens/verify", nil)
+	if err != nil {
+		return fail("HTTP-запрос", "запрос не создан")
 	}
 	req.Header.Set("Authorization", "Bearer "+value)
-	client := &http.Client{Timeout: testHTTPTimeout}
+	dialer := &net.Dialer{Timeout: testDialTimeout}
+	transport := &http.Transport{Proxy: http.ProxyFromEnvironment, DialContext: task.ownedDialer(dialer.DialContext),
+		TLSHandshakeTimeout: testDialTimeout, ResponseHeaderTimeout: testDialTimeout,
+		MaxResponseHeaderBytes: 16 << 10, MaxConnsPerHost: 1, DisableCompression: true, DisableKeepAlives: true}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Timeout: testHTTPTimeout, Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fail("HTTP-запрос", "сеть недоступна: "+err.Error())
+		return fail("HTTP-запрос", "ответ API не получен; причина по этому ответу не установлена")
 	}
 	defer resp.Body.Close()
-
+	if resp.StatusCode != http.StatusOK {
+		return fail("ответ API", "API не подтвердил запрос (HTTP "+strconv.Itoa(resp.StatusCode)+"); статус токена не установлен")
+	}
+	const limit = 16 << 10
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil || len(raw) > limit || task.currentError() != nil {
+		return fail("ответ API", "ответ не прочитан в пределах разрешённого объёма и времени")
+	}
 	var body struct {
 		Success bool `json:"success"`
 		Result  *struct {
-			ID     string `json:"id"`
 			Status string `json:"status"`
 		} `json:"result"`
-		Errors []struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"errors"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return fail("ответ API", fmt.Sprintf("HTTP %d, тело не разобрано: %v", resp.StatusCode, err))
+	// Unmarshal consumes one complete bounded JSON document, rejecting trailing data.
+	if json.Unmarshal(raw, &body) != nil || !body.Success || body.Result == nil {
+		return fail("ответ API", "API не передал подтверждённый статус токена")
 	}
-	switch {
-	case body.Success && body.Result != nil && body.Result.Status == "active":
-		rep.Steps = append(rep.Steps, ProbeStepView{
-			Name: "ответ API", Status: "pass",
-			Detail: "Cloudflare: токен ACTIVE (id " + body.Result.ID + ")",
-		})
-		rep.OK = true
-	case body.Success:
-		return fail("ответ API", fmt.Sprintf("Cloudflare: токен в состоянии %q — не активен", body.Result.Status))
-	default:
-		msg := "отказ без деталей"
-		if len(body.Errors) > 0 {
-			msg = fmt.Sprintf("Cloudflare: код %d — %s", body.Errors[0].Code, body.Errors[0].Message)
-		}
-		return fail("ответ API", msg+" (токен отозван/неверен/истёк)")
+	if body.Result.Status != "active" {
+		return fail("ответ API", "API не подтвердил активный статус; причина не установлена")
 	}
+	rep.Steps = append(rep.Steps, ProbeStepView{Name: "ответ API", Status: "pass", Detail: "API сообщил active для этого запроса. Права операций, будущая доступность и VPN-путь не проверены."})
+	rep.OK = true
 	return rep
 }

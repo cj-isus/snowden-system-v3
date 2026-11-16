@@ -1,21 +1,19 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"crypto/rand"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/snowden-system/windows/backend/core"
+	"github.com/snowden-system/windows/backend/metadata"
 	"github.com/snowden-system/windows/backend/render"
 	"github.com/snowden-system/windows/backend/secretvault"
+	"github.com/snowden-system/windows/backend/update"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -23,46 +21,103 @@ import (
 //
 // Намерение защиты независимо от состояния engine; сбой не равен Disconnect.
 type App struct {
-	ctx     context.Context
-	vault   *secretvault.Manager
-	mu      sync.Mutex
-	state   AppState
-	logs    []LogLine
-	tests   map[string]*bool  // последний результат по id (nil = не запускался)
-	tdetail map[string]string // детализация последнего результата
-	tsteps  map[string][]ProbeStepView
-	tlast   map[string]time.Time
-	closing atomic.Bool     // true = идёт контролируемое завершение (окно закрыто)
-	fpol    *failoverPolicy // A4: автоматическое переключение каналов (failover.go)
-	sm      controllerSM    // C1: машина состояний адаптивного цикла (controller.go, V2-060)
-	// logFileCh — асинхронный durable-писатель (V2-034): appendLog под a.mu
-	// больше не делает файловый I/O (MkdirAll+Open+write на КАЖДУЮ строку —
-	// на всплеске 224 строк это сотни syscall'ов под мьютексом, тормозящих
-	// все UI-биндинги). Строки уходят в канал, один писатель батчит их в диск.
+	ctx                        context.Context
+	vault                      *secretvault.Manager
+	mu                         sync.Mutex
+	state                      AppState
+	logs                       []LogLine
+	tests                      map[string]*bool  // последний результат по id (nil = не запускался)
+	tdetail                    map[string]string // детализация последнего результата
+	tsteps                     map[string][]ProbeStepView
+	tlast                      map[string]time.Time
+	tscope                     map[string]diagnosticScope // fixed known IDs; original completion/intent/path, guarded by mu
+	diagnosticContextLast      *DiagnosticContextView     // immutable last presentation tuple, guarded by mu
+	diagnosticContextRevision  uint64
+	diagnosticContextExhausted bool
+	closing                    atomic.Bool     // true = идёт контролируемое завершение (окно закрыто)
+	watchdogBlocked            atomic.Bool     // one-way negative task fence; never health or retirement proof
+	lifetimeWake               chan struct{}   // immutable cap1 wake for the existing watchdog; never closed
+	fpol                       *failoverPolicy // A4: автоматическое переключение каналов (failover.go)
+	sm                         controllerSM    // C1: машина состояний адаптивного цикла (controller.go, V2-060)
+	// One retained disk writer. Send/close use mu; early/late records stay in
+	// bounded memory/UI, never synchronous filesystem work under this lock.
+	logWriter   *appLogWriter
 	logFileCh   chan LogLine
 	logFileDone chan struct{}
 	// engineLogDone — сигнал остановки tailer'у engine-лога sing-box (V2-046).
-	engineLogDone chan struct{}
+	engineLogDone    chan struct{}
+	engineLogRetired chan struct{}         // original tailer return, guarded by mu; never replaced
+	engineLogState   *tailerState          // original I/O owner; results only after engineLogRetired
+	backgroundProbe  *backgroundProbeTask  // original task, guarded by bgReg.mu; never replaced
+	metricsSealed    atomic.Bool           // irreversible terminal admission fence; original I/O stays in metricsPolls
+	diagnosticTask   *manualDiagnosticTask // shared explicit GUI diagnostic, guarded by mu; retained until actual return
 	// retry — планировщик авто-повтора после fail-closed (V2-053): растущий
 	// backoff 30с→10м, попытка = полный startCore с probe-гейтом. Все поля
 	// под a.mu; см. autoretry.go. retryLaunch — точка запуска попытки
 	// (nil = реальный startCore; тесты подменяют, чтобы не ходить в сеть).
 	retry       retryTimer
 	retryLaunch func()
+	pinWake     *pinActivationWake // one authenticated future Next; guarded by mu
 	// operationMu serializes prepare/apply/publication. Other operation fields
 	// are protected by a.mu. Stop cancels before waiting for operationMu.
-	operationMu       sync.Mutex
-	onboardingCommit  importCommitFn
-	operationCancel   context.CancelFunc
-	operationID       uint64
-	protectionDesired bool
-	policy            protectionPolicy // nil: production WFP; tests inject no OS effects
-	probeFactory      func(*render.ClientConfig) core.Probe
+	operationMu             sync.Mutex
+	lifecycleOutcome        *appLifecycleOutcome        // original Start/Switch frame only; guarded by operationMu
+	updateMu                sync.Mutex                  // one installer/staging owner in this App process
+	pairImage               *core.InstalledPairLease    // original handles retained on uncertain close; guarded by updateMu
+	pairRoot                *core.InstallationRootLease // original directory/lock handles; guarded by updateMu
+	pairTransaction         *update.PairTransaction     // partial staging/pending owner; guarded by updateMu
+	pairRecovery            *update.PairRecovery        // forward-only repair writer receipts; guarded by updateMu
+	pairRecoveryCheck       *core.UpdateCodeAcceptance  // original companion verification Job/image, held through pair placement
+	recoveryEntrypointImage *core.RecoveryImageLease    // headless companion's original self image; guarded by updateMu
+	pairArchive             string                      // last retained/uncertain finalization receipt; not authority; guarded by updateMu
+	pairAcceptance          *core.UpdateCodeAcceptance  // prospective image + original verification process/Job; guarded by updateMu
+	restartGUI              *core.RestartGUIOwner       // ordinary restart original process/Job/image; guarded by operationMu
+	elevatedGUI             *core.ElevatedGUIRequest    // original UAC process/Job/image/token request, not child ACK; operationMu
+	updateGUISession        *core.UpdateGUISession      // bootstrap lifetime Job/image; fixed before Wails
+	updateGUIStorageReady   bool                        // startup recovery result; guarded by mu
+	updateGUIDOMStarted     bool                        // one DOM-ready activation; guarded by mu
+	updateGUIRendererEpoch  uint64                      // navigation invalidates a waiting renderer receipt; guarded by mu
+	updateGUIStartupDone    chan struct{}               // Wails startup and navigation callbacks run concurrently
+	restartCommit           *restartHandoff             // committed apply/launch; guarded by mu
+	releaseCommit           *protectionReleaseCommit    // committed Disconnect native phase; guarded by mu
+	quitRequested           bool                        // explicit terminal request, not cleanup success; guarded by mu
+	quitTaskStarted         bool                        // original terminal worker/backstop reservation; guarded by mu
+	terminalRetirementErr   error                       // diagnostic only, never readiness or Release; guarded by mu
+	closeTask               *appCloseTask               // single original pre-Quit lifecycle worker; guarded by mu
+	startupAttempted        bool                        // original synchronous preparation only; guarded by operationMu
+	startupErr              error                       // sticky abnormal preparation; guarded by mu
+	installedImageChanged   bool                        // sticky for this mapped process after an install mutation attempt
+	publicProfiles          publicProfileSourceState
+	onboardingCommit        importCommitFn
+	operationCancel         context.CancelFunc
+	operationID             uint64
+	intentSource            *core.OperationSource   // original App intent, survives normal operation completion; guarded by mu
+	startupIntent           intentRegistration      // immutable initial bootstrap identity; never adopts a later user action
+	lastObservation         uint64                  // newest accepted App observation, guarded by a.mu
+	lastHealthObservation   uint64                  // deduplicate strong health publication
+	nativeObservation       *nativeProbeObservation // optional facts; never a mandatory probe/health watermark
+	protectionDesired       bool
+	profileTransition       bool             // blocks starts/retries until profile commit or explicit Disconnect
+	policy                  protectionPolicy // nil: production WFP; tests inject no OS effects
+	probeFactory            func(*render.ClientConfig) core.Probe
+	tunnelBoundary          tunnelBoundary          // nil: native guard; custom probe requires explicit boundary
+	observedClock           *metadata.ObservedClock // process clock continuity, not authenticated UTC
+	trustBlocked            bool                    // clock/profile/storage correction required; guarded by mu
+	proxyConflict           bool                    // automatic work denied until an accepted explicit Start; guarded by mu
+	uiLifecycle             *uiLifecycleState       // original UI ordering/callback owners; guarded by mu
+	updatePreviewBusy       bool                    // one original preview callback; guarded by mu
+	updateApproval          *updatePreviewApproval  // one-use target selection only; guarded by mu
+	proxyRecovery           *appProxyRecovery       // original preview/callback owner; guarded by mu, I/O by operationMu
+	proxyRecoveryCanceledID string                  // one early-cancel tombstone; producer retains its actual pending request
 }
 
 // NewApp — конструктор для main.go.
 func NewApp() *App {
+	initial := core.NewOperationSource()
 	return &App{
+		lifetimeWake:  make(chan struct{}, 1),
+		intentSource:  initial, // initial maintenance identity only; zero cannot start forwarding
+		startupIntent: intentRegistration{source: initial},
 		tests:         map[string]*bool{},
 		tdetail:       map[string]string{},
 		tsteps:        map[string][]ProbeStepView{},
@@ -72,159 +127,168 @@ func NewApp() *App {
 	}
 }
 
-// startLogWriter — один фоновый писатель durable-журнала на процесс.
-// Буфер 1024 строк: всплеск конкурентного теста (сотни строк за <30мс)
-// не блокирует вызывающих; при переполнении строка пропускается честно
-// (лог не должен ломать lifecycle — тот же контракт, что у молчаливых
-// ошибок записи). Флаш: каждые 250мс или 64 строки, что раньше.
-func (a *App) startLogWriter() {
-	a.logFileCh = make(chan LogLine, 1024)
-	a.logFileDone = make(chan struct{})
-	go func() {
-		defer close(a.logFileDone)
-		const flushEvery = 64
-		ticker := time.NewTicker(250 * time.Millisecond)
-		defer ticker.Stop()
-		pending := make([]LogLine, 0, flushEvery)
-		flush := func() {
-			if len(pending) == 0 {
-				return
-			}
-			persistLogLines(pending)
-			pending = pending[:0]
-		}
-		for {
-			select {
-			case line, ok := <-a.logFileCh:
-				if !ok {
-					flush()
-					return
-				}
-				pending = append(pending, line)
-				if len(pending) >= flushEvery {
-					flush()
-				}
-			case <-ticker.C:
-				flush()
-			}
-		}
-	}()
-}
-
-// stopLogWriter — дренировать канал и дождаться финального флаша.
-func (a *App) stopLogWriter() {
-	if a.logFileCh != nil {
-		close(a.logFileCh)
-		<-a.logFileDone
-		a.logFileCh = nil
-	}
-}
-
-// maxAppLogSize — предел durable-журнала: при превышении app.log ротируется
-// в app.log.1 (хранится одна предыдущая копия). Дефект v2 (V2-052): ротации
-// не было, и за несколько дней волн деградации app.log вырос до 15 ГБ —
-// риск исчерпания диска на машине агента. Оценка сверху: 2×maxAppLogSize.
-var maxAppLogSize int64 = 64 << 20 // 64 MiB
-
-// rotateAppLog — одноразовая ротация при превышении предела. Ошибки молча
-// опускаются: лог не должен ломать lifecycle.
-func rotateAppLog(dir string) {
-	path := filepath.Join(dir, "app.log")
-	st, err := os.Stat(path)
-	if err != nil || st.Size() < maxAppLogSize {
-		return
-	}
-	_ = os.Rename(path, path+".1") // прошлая .1 перезаписывается Rename'ом
-}
-
-// persistLogLines — батч-запись строк durable-журнала (одно открытие файла
-// на батч вместо трёх syscall'ов на строку). Ошибки записи молча опускаются:
-// лог не должен ломать lifecycle. Секретов в логе нет — appendLog зовётся
-// только с человеческими сообщениями (§7).
-func persistLogLines(lines []LogLine) {
-	if len(lines) == 0 {
-		return
-	}
-	dir := logsDir()
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return
-	}
-	rotateAppLog(dir)
-	path := filepath.Join(dir, "app.log")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	w := bufio.NewWriter(f)
-	for _, line := range lines {
-		fmt.Fprintf(w, "%s [%s] %s\n", line.T, line.Level, line.Text)
-	}
-	_ = w.Flush()
-}
-
 // startup — сохраняем контекст Wails и готовим хранилище.
 func (a *App) startup(ctx context.Context) {
+	profileErr, startServices := a.prepareStartup(ctx)
+	if startServices {
+		a.startNetworkServices(profileErr, a.startupIntent)
+	}
+}
+
+// Reuse the lifecycle serializer for synchronous resource acquisition. Close
+// either wins before this scope (no startup effects) or cleans up after it.
+// Release this lock before network setup/automatic Start can acquire it again.
+func (a *App) prepareStartup(ctx context.Context) (profileErr error, startServices bool) {
+	a.operationMu.Lock()
+	defer a.operationMu.Unlock()
+	outcome := &startupOutcome{app: a}
+	defer outcome.finish(&profileErr, &startServices)
+	profileErr, startServices = a.prepareStartupBody(ctx, outcome)
+	outcome.returned = true
+	return
+}
+
+func (a *App) prepareStartupBody(ctx context.Context, outcome *startupOutcome) (error, bool) {
+	a.mu.Lock()
+	if a.startupAttempted {
+		a.mu.Unlock()
+		return nil, false
+	}
+	a.startupAttempted = true
+	outcome.owned = true
+	outcome.done = a.updateGUIStartupDone // only this original preparation may close it
+	outcome.registration = a.intentRegistrationLocked()
 	a.ctx = ctx
-	a.closing.Store(false)
+	skip := ctx == nil || a.closing.Load() || a.quitRequested
+	a.mu.Unlock()
+	if skip || ctx.Err() != nil {
+		return nil, false
+	}
 
 	// Асинхронный durable-писатель журнала (V2-034) — до любых appendLog.
 	a.startLogWriter()
 
-	// Tailer engine-лога sing-box (V2-046) — до первого Start ядра.
-	a.startEngineLogTailer()
+	// The SDK raw logger is disabled at its private configuration boundary.
+	// Do not tail an old engine.log into a new App session. Existing files stay
+	// untouched; lifecycle/probe producers emit the operational App journal.
 
 	vaultPath := filepath.Join(vaultDir(), "vault.v1.json")
-	a.vault = secretvault.NewManager(vaultPath)
+	vault := secretvault.NewManager(vaultPath)
+	a.mu.Lock()
+	a.vault = vault
+	a.mu.Unlock()
 	profileErr := a.recoverOnboardingImport()
-	// Предзаполняем типовые слоты (без значений). Ошибка не фатальна:
-	// UI покажет список пустым, а конкретная ошибка уйдёт в журнал.
+	// Migration/seed use the same bound vault writer as UI/import. A failed
+	// storage operation must not authorize startup readiness or auto-connect.
 	if profileErr != nil {
-		a.appendLog("warn", "onboarding recovery: "+profileErr.Error())
+		a.appendLog("warn", "Восстановление импорта профиля не подтверждено; подключение заблокировано до восстановления профиля.")
 	} else {
-		migrateLegacyVault()
-		if err := a.vault.Seed(); err != nil {
-			a.appendLog("warn", "seed: "+err.Error())
+		profileErr = migrateLegacyVault(a.vault)
+		if profileErr != nil {
+			a.appendLog("warn", "Перенос локального хранилища не подтверждён; подключение заблокировано до восстановления профиля.")
+		} else if profileErr = a.vault.Seed(); profileErr != nil {
+			a.appendLog("warn", "Подготовка локального хранилища не подтверждена; подключение заблокировано до восстановления профиля.")
 		}
 	}
 
-	// Startup self-heal: если прошлый процесс погиб, не восстановив системный
-	// прокси (kill/crash/сон), ProxyEnable=1 указывает на мёртвый loopback —
-	// чиним до любых операций с ядром (иначе probe пойдёт в мёртвый прокси).
-	if healed, herr := core.HealStaleSystemProxy(); herr != nil {
-		a.appendLog("warn", "proxy self-heal: "+herr.Error())
-	} else if healed {
-		a.appendLog("info", "proxy self-heal: устранён зависший системный прокси после аварийного завершения")
-	}
+	// A loopback port/dead listener is not an original write receipt. Startup
+	// never resets foreign HKCU settings. Cross-process crash recovery remains
+	// unavailable until the persistent proxy owner/receipt protocol is accepted.
 
 	// Startup never releases a retained policy, including legacy/unknown state.
 	reportRetainedKillSwitch(a.appendLog)
 
-	a.state = AppState{
-		State:        "stopped",
-		ProxyMode:    "",
-		Active:       nil,
-		Probe:        nil,
-		Error:        "",
-		CoreReady:    false,
-		CoreBlockMsg: "Ядро не запущено; подключение проходит обязательную проверку защищённого пути.",
+	retained := strictProtectionRetained() // filesystem observation outside value lock
+	ready := func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.closing.Load() || a.quitRequested || ctx.Err() != nil {
+			return false
+		}
+		if a.startupIntent.currentLocked(a) {
+			// Preserve a Start/Stop that registered while waiting for operationMu.
+			a.state = AppState{
+				State:        "stopped",
+				ProxyMode:    "",
+				Active:       nil,
+				Probe:        nil,
+				Error:        "",
+				CoreReady:    false,
+				CoreBlockMsg: "Ядро не запущено; подключение проходит обязательную проверку защищённого пути.",
+			}
+			if retained {
+				a.protectionDesired = true
+				a.state.State = "error"
+				a.state.BlockedReason = "protection_retained"
+				a.state.Error = "Сохранено состояние системной защиты. Strict WFP допускает повторное подключение; устаревшее или повреждённое состояние сначала требует явного отключения с правами администратора."
+			}
+			if profileErr != nil {
+				a.state.State = "error"
+				a.state.BlockedReason = "profile_recovery_required"
+				a.state.Error = "Импорт профиля не завершён; восстановление данных не удалось. Подключение заблокировано до восстановления профиля."
+			}
+			if a.installedImageChanged {
+				a.blockChangedImageLocked()
+				a.state.BlockedReason = "update_recovery_required"
+				a.state.Error = "Целостность установки не подтверждена. Восстановите полный комплект приложения перед подключением."
+			}
+		}
+		return true
+	}()
+	if !ready {
+		return profileErr, false
 	}
-	if strictProtectionRetained() {
-		a.protectionDesired = true
-		a.state.State = "error"
-		a.state.BlockedReason = "protection_retained"
-		a.state.Error = "Сохранено состояние системной защиты. Strict WFP допускает повторное подключение; устаревшее или повреждённое состояние сначала требует явного отключения с правами администратора."
+	if profileErr == nil {
+		a.appendLog("info", "Локальное хранилище подготовлено.")
 	}
-	if profileErr != nil {
-		a.state.State = "error"
-		a.state.BlockedReason = "profile_recovery_required"
-		a.state.Error = "Импорт профиля не завершён; восстановление данных не удалось. Подключение заблокировано до восстановления профиля."
-	}
-	a.appendLog("info", "vault: "+vaultPath)
 	a.pushState()
 
 	// Системный трей (V2-048/F13): меню = lifecycle + каналы + автозапуск.
 	a.startTray()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return profileErr, !a.installedImageChanged && !a.closing.Load() && !a.quitRequested && ctx.Err() == nil
+}
+
+// The ordinary startup and a DOM-ready accepted update share these producers.
+// A restricted bootstrap must not start them before installation acceptance.
+func (a *App) startNetworkServices(profileErr error, registration intentRegistration) {
+	if !a.prepareNetworkServices() {
+		return
+	}
+
+	// Automatic Start acquires the lifecycle serializer itself. Its original
+	// registration/closing checks run after producer publication released it.
+	if profileErr == nil && autoConnectRequested() {
+		if err := a.startForStartupIntent(registration); err == nil {
+			a.appendLog("info", "автоподключение после переключения режима")
+		}
+	}
+}
+
+func (a *App) prepareNetworkServices() (ready bool) {
+	a.operationMu.Lock()
+	defer a.operationMu.Unlock()
+	outcome := &startupOutcome{app: a, owned: true}
+	a.mu.Lock()
+	outcome.registration = a.intentRegistrationLocked()
+	a.mu.Unlock()
+	var preparationErr error
+	defer outcome.finish(&preparationErr, &ready)
+	ready = a.prepareNetworkServicesBody()
+	outcome.returned = true
+	return ready
+}
+
+func (a *App) prepareNetworkServicesBody() bool {
+	restricted := func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || a.quitRequested || a.installedImageChanged || a.startupErr != nil
+	}()
+	if restricted {
+		return false
+	}
 
 	// Наблюдатель смены сети (V2-054): up/change при живом туннеле →
 	// внеочередной probe; после fail-closed → немедленный авто-ретрай.
@@ -235,30 +299,74 @@ func (a *App) startup(ctx context.Context) {
 	a.startBgProbes()
 	// Сетевые эпохи (V2-057, PLAN A0): журнал эпох живёт на App.
 	globalAppForEpoch = a
-
-	// Автоподключение после переключения режима (TUN⇄SOCKS): VPN работал до
-	// перезапуска — восстанавливаем состояние без второго нажатия.
-	if profileErr == nil && autoConnectRequested() {
-		a.appendLog("info", "автоподключение после переключения режима")
-		_ = a.Start()
-		return
+	// One existing App-lifetime watchdog also restores disconnected observers.
+	// Start it before the auto-connect branch can return after a failed Start.
+	if err := a.ensureWatchdog(); err != nil {
+		a.appendLog("warn", "контроль туннеля пока не подтверждён; исходная задача сохранена")
+		return false
 	}
-	// Наблюдение за туннелем: на каждом тике повторный protected probe;
-	// деградация защищённого пути → fail-closed Stop (см. corebridge.go).
-	a.ensureWatchdog()
+
+	return true // producer publication only, never VPN readiness or Release
 }
 
 // ---------- контракт §4.1: состояние и lifecycle ----------
 
 // GetState возвращает текущее фактическое состояние (без выдумок).
-// GetSplitDirect — активный список процессов прямого обхода (V2-048/F10,
-// read-only: список доставляется подписанным envelope, не редактируется в UI).
-func (a *App) GetSplitDirect() []string { return render.SplitDirect() }
+// GetSplitDirect returns applied split names while running, otherwise the
+// currently loadable configured policy. It performs no network operation.
+func (a *App) GetSplitDirect() []string {
+	runtime_.mu.Lock()
+	cc, manager := runtime_.cc, runtime_.manager
+	runtime_.mu.Unlock()
+	if cc != nil && manager != nil && manager.State() == core.StateRunning {
+		return append([]string{}, cc.SplitDirect...)
+	}
+	snapshot, err := render.LoadDescriptorSnapshot()
+	if err != nil {
+		return []string{}
+	}
+	return append([]string{}, snapshot.SplitDirect...)
+}
 
 func (a *App) GetState() AppState {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.state
+	return a.stateSnapshotLocked()
+}
+
+// Projection only: native callback never calls App/UI code. A later snapshot
+// cannot reuse cached Ready while the original power continuity is revoked.
+func (a *App) stateSnapshotLocked() AppState {
+	snapshot := a.state
+	snapshot.DiagnosticContext = a.diagnosticContextLocked()
+	if a.watchdogBlocked.Load() {
+		snapshot.CoreReady, snapshot.ProbeRunning = false, false
+		snapshot.CoreBlockMsg = "Исходная задача контроля туннеля не подтверждена. Нужны очистка и перезапуск приложения."
+		if a.protectionDesired && (snapshot.State == "running" || snapshot.State == "starting" || snapshot.State == "reloading") {
+			snapshot.State, snapshot.BlockedReason = "error", "cleanup_unconfirmed"
+			if snapshot.Error == "" {
+				snapshot.Error = snapshot.CoreBlockMsg
+			}
+		}
+	}
+	if netEpoch.powerBlocked.Load() {
+		snapshot.CoreReady, snapshot.ProbeRunning = false, false
+		snapshot.CoreBlockMsg = "Непрерывность системной сессии не подтверждена. Нужны очистка и новый запуск."
+		if a.protectionDesired && (snapshot.State == "running" || snapshot.State == "starting" || snapshot.State == "reloading") {
+			snapshot.State = "error"
+			if snapshot.BlockedReason == "" || snapshot.BlockedReason == "protection_retained" {
+				snapshot.BlockedReason = "cleanup_unconfirmed"
+			}
+			if snapshot.Error == "" {
+				snapshot.Error = snapshot.CoreBlockMsg
+			}
+		}
+	}
+	if a.proxyConflict && (snapshot.BlockedReason == "" || snapshot.BlockedReason == "protection_retained") {
+		snapshot.BlockedReason = "proxy_conflict" // keep the explicit-start requirement visible after manual Stop
+	}
+	snapshot.LifecycleActions = a.lifecycleActionsLocked(snapshot)
+	return snapshot
 }
 
 // Start — запуск VPN: полный путь ядра (render → engine → system proxy →
@@ -266,15 +374,40 @@ func (a *App) GetState() AppState {
 func (a *App) Start() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	busy := a.state.State == "starting" || a.state.State == "running" || a.state.State == "stopping"
-	if busy {
-		return fmt.Errorf("Start: операция уже выполняется (состояние %s)", a.state.State)
+	if a.uiLifecycle != nil {
+		return errUILifecycleRequest // modern UI cannot bypass ordered request registration
 	}
-	if a.closing.Load() {
-		return fmt.Errorf("Start: приложение закрывается")
+	return a.startLockedForUser(true)
+}
+
+// Automatic successor resume must not override a Disconnect/Close/other intent
+// that registered while startup/activation was waiting. Same atomic Start path.
+func (a *App) startForStartupIntent(expected intentRegistration) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !expected.currentLocked(a) {
+		return context.Canceled
+	}
+	return a.startLocked()
+}
+
+// Caller owns mu. Automatic resume cannot acknowledge a foreign proxy change.
+func (a *App) startLocked() error {
+	return a.startLockedForUser(false)
+}
+
+func (a *App) startLockedForUser(explicit bool) error {
+	if _, err := a.startRejectionLocked(explicit); err != nil {
+		return err
+	}
+	if err := a.advanceOperationLocked(); err != nil {
+		return err
+	}
+	if explicit {
+		a.proxyConflict = false // accepted new intent only; all cleanup/trust/native gates still apply
 	}
 	a.protectionDesired = true
-	a.operationID++
+	a.trustBlocked = false // explicit retry still passes all retained clock/trust gates
 	id := a.operationID
 	a.state.State = "starting"
 	a.cancelFailClosedRetryLocked() // ручной запуск важнее автоматики (V2-053)
@@ -312,8 +445,9 @@ func (a *App) EnableTUN() error {
 	return a.switchMode(true)
 }
 
-// DisableTUN — вернуться в SOCKS-режим: перезапуск БЕЗ elevation (--tun
-// снимается). VPN останавливается перед перезапуском.
+// DisableTUN — вернуться в SOCKS-режим без нового запроса UAC (--tun снимается).
+// Обычный spawn наследует token: снижение привилегий — отдельный открытый gate.
+// VPN останавливается перед перезапуском.
 func (a *App) DisableTUN() error {
 	return a.switchMode(false)
 }
@@ -322,42 +456,98 @@ func (a *App) DisableTUN() error {
 func (a *App) IsTUNMode() bool { return tunRequested() }
 
 func (a *App) switchMode(enable bool) error {
+	// This is a compiled admission gate, not a caller setting or a probe report.
+	// Refuse before Stop/UAC: an unavailable target must not disrupt a usable VPN.
+	if err := modeRequestRejection(enable); err != nil {
+		return err
+	}
+	intent, err := func() (intentRegistration, error) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.uiLifecycle != nil {
+			return intentRegistration{}, errUILifecycleRequest
+		}
+		return a.restartIntentLocked()
+	}()
+	if err != nil {
+		return err
+	}
+	return a.switchModeRegistered(enable, intent)
+}
+
+func (a *App) switchModeRegistered(enable bool, intent intentRegistration) error {
+	if err := modeRequestRejection(enable); err != nil {
+		return err
+	}
+	if !a.restartIntentCurrent(intent) {
+		return context.Canceled
+	}
 	if enable == tunRequested() {
 		return fmt.Errorf("режим уже %s", map[bool]string{true: "TUN", false: "SOCKS"}[enable])
 	}
-	// Capture intent before Stop changes the lifecycle state to stopped.
-	a.mu.Lock()
-	wasRunning := a.state.State == "running"
-	a.mu.Unlock()
 	// 1. Остановить работающий туннель (если был) — два экземпляра на одном
 	// SOCKS-порте недопустимы.
-	if err := a.stopCoreFor(stopRestart); err != nil {
+	handoff, err := a.beginRestartHandoff(intent)
+	if err != nil {
 		a.appendLog("warn", "переключение режима: остановка: "+err.Error())
 		return err
 	}
+	defer handoff.release()
 	// 2. Перезапуск: TUN требует elevation (UAC), SOCKS — обычный запуск.
 	// --auto-connect добавляется только если VPN был запущен до переключения
 	// (иначе новый процесс честно остаётся stopped — дефект V2-019:
 	// старый код ALWAYS добавлял флаг и молча автоподключался «из ниоткуда»).
-	args := modeSwitchArgs(enable, wasRunning)
-	if err := restartWithArgs(enable, args...); err != nil {
-		a.appendLog("error", "переключение режима: "+err.Error())
-		a.mu.Lock()
-		a.state.State = "error"
-		a.state.Error = "переключение режима: " + err.Error()
-		a.pushStateLocked()
-		a.mu.Unlock()
+	if err := handoff.commit(); err != nil {
 		return err
+	}
+	// Reuse the existing maintenance operation slot with this exact committed
+	// registration. A network-path/operation/lifetime loss is a negative fence,
+	// never permission to bind the OS request to a newer global operation.
+	ctx, cancel, err := a.beginCommittedUpdate(handoff)
+	if err != nil {
+		handoff.failed(err)
+		return err
+	}
+	defer a.endOperation(cancel)
+	ctx, timeout := context.WithTimeout(ctx, 30*time.Second)
+	defer timeout()
+	guard := func(ctx context.Context) error {
+		if !lifecyclePublicationCurrent(ctx) || !handoff.codeAcceptanceCurrent() {
+			return context.Canceled
+		}
+		if enable && !core.NativeTUNForwardingAvailable() {
+			return fmt.Errorf("TUN пока недоступен: системный допуск трафика не принят")
+		}
+		if enable && !core.ElevatedGUIAvailable() {
+			return fmt.Errorf("передача новому процессу с правами администратора недоступна")
+		}
+		return nil
+	}
+	launched := false
+	if enable {
+		// Native request ownership is distinct from an R1 child ACK. TUN
+		// remains unavailable until its independent compiled admission gate.
+		launched, err = a.launchElevatedModeGUI(ctx, handoff, handoff.request.wasRunning, guard)
+	} else {
+		launched, err = a.launchOwnedModeGUI(ctx, handoff, false, handoff.request.wasRunning, guard)
+	}
+	if !launched {
+		if err == nil {
+			err = core.ErrUpdateGUIBootstrap
+		}
+		a.appendLog("error", "переключение режима: "+err.Error())
+		handoff.failed(err)
+		return err
+	}
+	if err != nil {
+		a.appendLog("warn", "переключение режима: передача завершена с поздней ошибкой: "+err.Error())
 	}
 	a.appendLog("info", "переключение режима: перезапуск "+map[bool]string{true: "в TUN (elevated)", false: "в SOCKS"}[enable])
 	a.pushState()
-	// Дренировать журнал: перезапуск убьёт процесс, отложенные строки пропали бы.
-	a.stopEngineLogTailer()
-	a.stopLogWriter()
 	// Гарантированный выход (Quit+fallback): проглоченный Quit оставил бы старый
 	// процесс живым поверх мьютекса SingleInstance — новый не смог бы стартовать.
 	a.requestQuit(300 * time.Millisecond) // окно на доставку событий UI
-	return nil
+	return err
 }
 
 // wasRunningFlag — маркер автоподключения для следующего процесса:
@@ -367,6 +557,18 @@ const autoConnectFlag = "--auto-connect"
 // autoConnectRequested — флаг из argv (задаётся switchMode, если VPN был
 // запущен до переключения режима).
 func autoConnectRequested() bool {
+	if activeElevatedGUISession != nil {
+		_, resume := activeElevatedGUISession.Mode()
+		return resume
+	}
+	if activeRestartGUISession != nil {
+		_, resume := activeRestartGUISession.Mode()
+		return resume
+	}
+	if activeUpdateGUISession != nil {
+		_, resume := activeUpdateGUISession.Mode()
+		return resume
+	}
 	for _, arg := range os.Args[1:] {
 		if arg == autoConnectFlag {
 			return true
@@ -395,240 +597,113 @@ func modeSwitchArgs(enable, wasRunning bool) []string {
 // OnBeforeClose — контролируемое завершение при закрытии окна: если туннель
 // ещё работает, останавливаем его (restore системного прокси) и только затем
 // выходим. Без этого kill-on-close оставлял ProxyEnable=1 на мёртвый порт —
-// ровно тот инцидент, от которого защищает HealStaleSystemProxy.
+// без persistent original receipt startup не имеет права автоматически сбросить
+// такое значение; crash recovery остаётся отдельной задачей W3b.
 // Выход — через requestQuit, а не голый Quit: live 2026-09-11 Quit от горутины
 // был проглочен event-loop'ом и окно пережило закрытие, пока владелец не
 // нажал крест второй раз.
 func (a *App) OnBeforeClose(ctx context.Context) bool {
-	if a.closing.Swap(true) {
-		return false // уже завершаемся — не блокируем
-	}
 	a.mu.Lock()
-	a.cancelFailClosedRetryLocked() // закрытие окна — тоже ручное действие (V2-053)
-	a.mu.Unlock()
-	_ = ctx // выход идёт через a.ctx (см. requestQuit); параметр — контракт Wails
-	go func() {
-		if err := a.stopCoreFor(stopQuit); err != nil {
-			a.appendLog("warn", "закрытие: остановка туннеля: "+err.Error())
+	launch := false
+	defer func() {
+		a.mu.Unlock()
+		if launch {
+			a.closeAfterLifecycle()
 		}
-		// Дренировать журнал до выхода: os.Exit в requestQuit пропускает
-		// финальный флаш писателя (V2-034).
-		a.stopEngineLogTailer()
-		a.stopNetWatch()
-		a.stopBgProbes()
-		a.stopLogWriter()
-		a.requestQuit(0)
 	}()
+	if handoff := a.restartCommit; handoff != nil {
+		if handoff.launched {
+			return false
+		}
+		handoff.closeRequested = true
+		return true // wait for pending apply/UAC result before ordinary terminal cleanup
+	}
+	if commit := a.releaseCommit; commit != nil {
+		commit.closeRequested = true
+		return true // the original native Disconnect phase transfers Close after its terminal result
+	}
+	if a.quitRequested {
+		return false // caller has explicitly entered the terminal Quit phase
+	}
+	if a.closing.Swap(true) {
+		return true // repeated window Close cannot bypass the original cleanup task
+	}
+	launch = true
+	a.cancelFailClosedRetryLocked() // закрытие окна — тоже ручное действие (V2-053)
+	// Выход идёт через a.ctx; параметр остаётся частью контракта Wails.
+	_ = ctx
 	return true // отменить закрытие: приложение закроется из горутины
 }
 
-// quitFallbackDelay — сколько ждать после runtime.Quit перед жёстким выходом.
+// Closing was registered under App.mu. Shared by the window callback and a
+// pending close transferred from an unsuccessful committed restart.
+func (a *App) closeAfterLifecycle() {
+	a.mu.Lock()
+	if a.closeTask != nil || a.quitTaskStarted || a.quitRequested {
+		a.mu.Unlock()
+		return
+	}
+	task := &appCloseTask{app: a, done: make(chan struct{})}
+	a.closeTask = task // publish the original owner before its goroutine
+	a.closing.Store(true)
+	a.mu.Unlock()
+	go task.run()
+}
+
+// Reuse the existing original-task join, with the observer cleanup budget.
+// A deadline leaves the same owner pending; only its actual done fence counts.
+func joinAppProducer(done <-chan struct{}, unavailable error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), terminalProducerTimeout)
+	defer cancel()
+	return joinAppProducerContext(ctx, done, unavailable)
+}
+
+const terminalProducerTimeout = 2 * time.Second
+
+func joinAppProducerContext(ctx context.Context, done <-chan struct{}, unavailable error) error {
+	if done == nil {
+		return nil // no original task was published
+	}
+	if ctx == nil {
+		return unavailable
+	}
+	err := joinTerminalNetworkTask(ctx, true, done, unavailable)
+	if err != nil {
+		select {
+		case <-done:
+			return nil // final re-read of this original fence after deadline
+		default:
+		}
+	}
+	return err
+}
+
+// Grace after the producer budget, independent of whether Wails Quit returns.
 const quitFallbackDelay = 3 * time.Second
 
-// requestQuit — гарантированный выход из GUI-приложения. runtime.Quit, посланный
-// из горутины, может быть проглочен event-loop'ом (наблюдаемо live 2026-09-11:
-// окно пережило OnBeforeClose → Quit и висло до второго WM_CLOSE; тот же путь
-// используется switchMode, где незакрытый процесс держал бы SingleInstance-мьютекс
-// и ломал перезапуск в TUN/SOCKS). Поэтому: Quit → короткое окно → os.Exit(0).
-// Все критические cleanup-пути (stopCore: движок + restore системного прокси)
-// выполняются ДО вызова; os.Exit пропускает только defers, не реестр и не порты.
+// Callers attempt lifecycle cleanup or settle accepted successor custody first.
+// Reserve once before scheduling, then arm an independent backstop before any
+// producer/file/native/UI work. No hard scheduler or cleanup bound is inferred;
+// the caller's pre-request lifecycle/mutex wait is outside this backstop.
+// Terminal permission is not a successful cleanup or browser-tree receipt.
 func (a *App) requestQuit(delay time.Duration) {
-	go func() {
-		if delay > 0 {
-			time.Sleep(delay)
-		}
-		if a.ctx != nil {
-			runtime.Quit(a.ctx)
-		}
-		// Quit сработал → процесса уже нет и эта строка не выполняется.
-		time.Sleep(quitFallbackDelay)
-		os.Exit(0)
-	}()
-}
-
-// ---------- контракт §4.1: тесты ----------
-
-// testIDs — реестр тестов Phase A. Каждый элемент — проверяемый факт.
-func testIDs() []struct {
-	id   string
-	desc string
-} {
-	return []struct {
-		id   string
-		desc string
-	}{
-		{"udp-availability", "UDP доступен в текущей сети (QUIC к 8.8.8.8:443). Определяет, можно ли проверять HY2 здесь."},
-		{"hy2-reachability", "UDP-пакеты до канала HY2 (8444/udp) не глохнут на пути. Требует заданный пароль HY2."},
-		{"vless-config-present", "Слоты секретов VLESS/HY2 заполнены (значения заданы и проверены локально)."},
-		{"elevated-process", "Процесс запущен с правами администратора (нужно для TUN-режима)."},
-		{"freeze-check", "Диагностика 16КБ-заморозки ТСПУ: скачивание контролируемых объёмов через живой туннель и напрямую. Требует запущенный VPN."},
-		{"core-wired", "Ядро VPN (backend/core) подключено к Wails и готово к запуску."},
-	}
-}
-
-// ListTests — карточки тестов с последними результатами (nil = не запускался).
-func (a *App) ListTests() []TestResultView {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	out := make([]TestResultView, 0)
-	for _, t := range testIDs() {
-		tv := TestResultView{ID: t.id, Detail: t.desc, CheckedAt: ""}
-		if ok, exists := a.tests[t.id]; exists {
-			tv.OK = ok
-			tv.Detail = a.tdetail[t.id]
-			if last, l := a.tlast[t.id]; l {
-				tv.CheckedAt = last.Format(time.RFC3339)
-			}
-			tv.Steps = a.tsteps[t.id]
-		} else {
-			tv.Detail = t.desc
-		}
-		out = append(out, tv)
-	}
-	return out
-}
-
-// RunTest выполняет один тест и возвращает фактический результат.
-func (a *App) RunTest(id string) (TestResultView, error) {
-	tv := a.runTest(id)
-	return tv, nil
-}
-
-func (a *App) runTest(id string) TestResultView {
-	var ok bool
-	var detail string
-	var steps []ProbeStepView
-	switch id {
-	case "udp-availability":
-		ok, detail, steps = testUDPAvailability()
-	case "hy2-reachability":
-		ok, detail, steps = a.testHY2Reachability()
-	case "vless-config-present":
-		ok, detail = a.testSecretsPresent()
-	case "elevated-process":
-		ok, detail = testElevated()
-	case "freeze-check":
-		ok, detail, steps = a.testFreezeCheck()
-	case "core-wired":
-		a.mu.Lock()
-		ok = a.state.CoreReady
-		detail = a.state.CoreBlockMsg
+	if a.quitTaskStarted || a.quitRequested {
 		a.mu.Unlock()
-	default:
-		ok = false
-		detail = "неизвестный тест: " + id
+		return
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	now := time.Now()
-	BoolPtr := &ok
-	a.tests[id] = BoolPtr
-	a.tdetail[id] = detail
-	a.tsteps[id] = steps
-	a.tlast[id] = now
-	level := "info"
-	if !ok {
-		level = "warn"
-	}
-	a.appendLogLocked(level, "тест «"+id+"»: "+resultWord(ok)+" — "+detail)
-	return TestResultView{ID: id, OK: BoolPtr, Detail: detail, CheckedAt: now.Format(time.RFC3339), Steps: steps}
-}
-
-func resultWord(ok bool) string {
-	if ok {
-		return "пройдено"
-	}
-	return "не пройдено"
-}
-
-// testUDPAvailability — реальная проверка: ждём ответ (любой) на QUIC Initial
-// к 8.8.8.8:443. Таймаут 3с. В сети агента это закономерно молчит.
-func testUDPAvailability() (bool, string, []ProbeStepView) {
-	steps := []ProbeStepView{
-		{Name: "QUIC Initial → 8.8.8.8:443", Status: "running", Detail: "ожидание любого ответа, 3 с"},
-	}
-	success := false
-	for attempt := 0; attempt < 2 && !success; attempt++ {
-		conn, err := net.DialTimeout("udp", "8.8.8.8:443", 3*time.Second)
-		if err != nil {
-			continue
-		}
-		// QUIC v1 Initial: случайные 1200 байт достаточно, чтобы Router/NAT
-		// пропустил, а ответ (или его отсутствие) показал фильтрацию UDP.
-		payload := make([]byte, 1200)
-		if _, err := rand.Read(payload); err == nil {
-			_, _ = conn.Write(payload)
-			buf := make([]byte, 1500)
-			_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-			if n, rerr := conn.Read(buf); rerr == nil && n > 0 {
-				success = true
-			}
-		}
-		_ = conn.Close()
-	}
-	steps[0].Status = map[bool]string{true: "pass", false: "fail"}[success]
-	if success {
-		return true, "UDP работает: получен ответ на QUIC-пробу (HY2 можно проверять из этой сети)", steps
-	}
-	return false, "UDP отфильтрован: ответа нет (типично для сети агента). HY2 проверять из сети без UDP-фильтра", steps
-}
-
-// testHY2Reachability — UDP-пакет на сервер канала HY2. Секрет не читается:
-// проверяется только достижимость порта (ответ/тишина). Адрес и порт — из
-// дескрипторов (FR-002), не из хардкода.
-//
-// V2-042, два урока из live: (1) проба обязана идти на АКТИВНЫЙ канал
-// (a.state.ActiveID), а не на «первый hysteria2 по списку»: failover-on-start
-// переключает активный канал, и у активного vless цель hy2 ничего не говорит
-// о текущем пути (живой туннель через HY2 при «fail» теста — противоречие,
-// пойманное в журнале владельца). (2) Hysteria2 сознательно молчит на мусорные
-// пакеты (anti-probe по дизайну) — тишина ≠ «порт фильтруется». Доказательство
-// достижимости — только транспортный probe самого HY2-канала; UDP-проба —
-// утилитарная подсказка, не вердикт.
-func (a *App) testHY2Reachability() (bool, string, []ProbeStepView) {
-	a.mu.Lock()
-	activeID := a.state.ActiveID
-	running := a.state.State == "running"
+	a.quitTaskStarted = true
+	a.closing.Store(true) // reject any new producer before taking its original owner
 	a.mu.Unlock()
-
-	_, host, port := testEndpoints()
-	if activeID != "" {
-		if ch := descriptorByID(activeID); ch != nil && ch.Protocol == "hysteria2" {
-			host = ch.OriginServer
-			port = strconv.Itoa(int(ch.Port))
-		}
+	if delay < 0 {
+		delay = 0
 	}
-	steps := []ProbeStepView{
-		{Name: "UDP → канал HY2", Status: "running", Detail: fmt.Sprintf("порт %s/udp хоста %s", port, host)},
-	}
-
-	if running && activeID != "" && descriptorByID(activeID) != nil && descriptorByID(activeID).Protocol != "hysteria2" {
-		// Активен другой канал (например, vless): проба HY2 не описывает
-		// текущий путь — честная пометка вместо ложного fail.
-		steps[0].Status = "skipped"
-		steps[0].Detail = "активен канал " + activeID + " (не HY2) — достижимость HY2 не про текущий путь"
-		return true, "пропущено как нерелевантное: сейчас активен " + activeID + ", туннель идёт не через HY2. Достижимость HY2 проверит его собственный probe при переключении", steps
-	}
-
-	conn, err := net.DialTimeout("udp", net.JoinHostPort(host, port), 3*time.Second)
-	if err != nil {
-		steps[0].Status = "fail"
-		steps[0].Detail = "dial: " + err.Error()
-		return false, "UDP-сокет до сервера не создан: " + err.Error(), steps
-	}
-	defer conn.Close()
-	payload := make([]byte, 64)
-	_, _ = rand.Read(payload)
-	_, _ = conn.Write(payload)
-	buf := make([]byte, 1500)
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if n, rerr := conn.Read(buf); rerr == nil && n > 0 {
-		steps[0].Status = "pass"
-		return true, "сервер ответил на UDP-пробу (путь до HY2 жив; аутентификация проверяется probe) ", steps
-	}
-	steps[0].Status = "fail"
-	steps[0].Detail = "ответа нет за 3 с"
-	return false, "тишина на " + port + "/udp: hysteria2 по дизайну молчит на мусорные пакеты (anti-probe), поэтому это НЕ доказательство фильтрации. Доказательство достижимости — транспортный probe канала HY2 (probe pass при активации = путь жив)", steps
+	fallback := time.NewTimer(delay + terminalProducerTimeout + quitFallbackDelay)
+	go func() {
+		<-fallback.C
+		os.Exit(0) // not conditional on Flush/Close, callback, or Quit returning
+	}()
+	go a.runQuitTask(delay)
 }
 
 // descriptorByID — дескриптор канала по ID (nil = нет такого).
@@ -645,48 +720,6 @@ func descriptorByID(id string) *render.ChannelDescriptor {
 	return nil
 }
 
-// testSecretsPresent — все ли ключевые слоты заполнены и проверены локально.
-func (a *App) testSecretsPresent() (bool, string) {
-	metas, err := a.vault.List()
-	if err != nil {
-		return false, "хранилище недоступно: " + err.Error()
-	}
-	need := map[secretvault.Kind]bool{
-		secretvault.KindVlessUUID:   false,
-		secretvault.KindHy2Password: false,
-	}
-	missing, unverified := 0, 0
-	for _, mt := range metas {
-		k := secretvault.Kind(mt.Kind)
-		if _, req := need[k]; req {
-			if mt.StoredValue == "" {
-				missing++
-			} else if mt.VerifyStatus != "ok" {
-				unverified++
-			}
-		}
-	}
-	switch {
-	case missing > 0:
-		return false, fmt.Sprintf("не задано значений: %d (заполните слоты в разделе «Секреты»)", missing)
-	case unverified > 0:
-		return false, fmt.Sprintf("значений без успешной проверки: %d (нажмите «Проверить» у карточки)", unverified)
-	default:
-		return true, "ключевые слоты заполнены и проверены локально (актуальность подтвердит probe)"
-	}
-}
-
-// testElevated — проверка прав администратора (нужно для TUN).
-func testElevated() (bool, string) {
-	if isAdmin() {
-		return true, "процесс Elevated: TUN-режим доступен"
-	}
-	// V2-042: не-elevated в SOCKS-режиме — ШТАТНОЕ состояние приложения
-	// (принцип минимальных привилегий, контракт WIN-TUN-1), а не ошибка.
-	// Fail честен только как «TUN сейчас недоступен».
-	return false, "процесс без elevation: TUN-режим недоступен (контракт WIN-TUN-1), SOCKS-режим — штатный и работает без прав администратора"
-}
-
 // ---------- контракт §4.1: секреты ----------
 
 // ListSecrets — карточки секретов (без значений).
@@ -695,7 +728,7 @@ func (a *App) ListSecrets() ([]secretvault.Meta, error) {
 	defer a.mu.Unlock()
 	metas, err := a.vault.List()
 	if err != nil {
-		a.appendLogLocked("error", "list secrets: "+err.Error())
+		a.appendLogLocked("error", "list secrets: список не получен")
 		return nil, err
 	}
 	return metas, nil
@@ -705,8 +738,9 @@ func (a *App) ListSecrets() ([]secretvault.Meta, error) {
 func (a *App) SaveSecret(id, value string) (secretvault.Meta, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.invalidateCredentialDiagnosticLocked()
 	if err := a.vault.Save(id, value); err != nil {
-		a.appendLogLocked("warn", "save secret: "+err.Error())
+		a.appendLogLocked("warn", "save secret: результат сохранения не подтверждён")
 		return secretvault.Meta{}, err
 	}
 	a.appendLogLocked("info", "secret: значение обновлено (fingerprint изменён, статус проверки сброшен)")
@@ -717,12 +751,13 @@ func (a *App) SaveSecret(id, value string) (secretvault.Meta, error) {
 func (a *App) AddSecret(kind, title, value, hint string) (secretvault.Meta, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.invalidateCredentialDiagnosticLocked()
 	meta, err := a.vault.AddSave(kind, title, value, hint)
 	if err != nil {
-		a.appendLogLocked("warn", "add secret: "+err.Error())
+		a.appendLogLocked("warn", "add secret: результат сохранения не подтверждён")
 		return secretvault.Meta{}, err
 	}
-	a.appendLogLocked("info", "secret: «"+title+"» сохранён (DPAPI)")
+	a.appendLogLocked("info", "secret: слот сохранён в локальном хранилище")
 	return meta, nil
 }
 
@@ -730,8 +765,9 @@ func (a *App) AddSecret(kind, title, value, hint string) (secretvault.Meta, erro
 func (a *App) DeleteSecret(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.invalidateCredentialDiagnosticLocked()
 	if err := a.vault.Remove(id); err != nil {
-		a.appendLogLocked("warn", "delete secret: "+err.Error())
+		a.appendLogLocked("warn", "delete secret: удаление не подтверждено")
 		return err
 	}
 	a.appendLogLocked("info", "secret: слот удалён")
@@ -742,10 +778,11 @@ func (a *App) DeleteSecret(id string) error {
 func (a *App) VerifySecret(id string) (secretvault.Meta, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.invalidateCredentialDiagnosticLocked()
 	meta, err := a.vault.Verify(id)
 	if err != nil {
 		// Ошибка валидации — нормальный результат проверки, не паника.
-		a.appendLogLocked("warn", "verify secret: "+err.Error())
+		a.appendLogLocked("warn", "verify secret: локальная проверка не подтверждена")
 		if meta.ID != "" {
 			return meta, err
 		}
@@ -765,26 +802,32 @@ func (a *App) VerifySecret(id string) (secretvault.Meta, error) {
 //
 // Значение не покидает процесс (кроме как по прямому назначению — SSH-подпись
 // или заголовок Authorization) и никогда не попадает в логи/UI.
-func (a *App) TestSecret(id string) (SecretTestReport, secretvault.Meta, error) {
+// Wails v2 dispatch expects data,error. Metadata is refreshed separately by the
+// existing UI store; a third Go result would drop both report and error there.
+func (a *App) TestSecret(id string) (report SecretTestReport, resultErr error) {
+	task, vault, err := a.beginSecretTest()
+	if err != nil {
+		return SecretTestReport{}, errSecretTestUnavailable
+	}
+	outcome := &manualDiagnosticOutcome{app: a, task: task, credentials: true}
+	defer outcome.finishSecret(&report, &resultErr)
+	report, resultErr = a.testSecretBody(task, vault, id)
+	outcome.returned = true
+	return
+}
+
+func (a *App) testSecretBody(task *manualDiagnosticTask, vault *secretvault.Manager, id string) (SecretTestReport, error) {
+	rep, _, err := runSecretTest(task, vault, id)
+	if err != nil {
+		return SecretTestReport{}, errSecretTestUnavailable
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	rep, err := a.runSecretTest(id)
-	if err != nil {
-		a.appendLogLocked("warn", "тест секрета: "+err.Error())
-		return SecretTestReport{}, secretvault.Meta{}, err
+	if a.diagnosticTask != task || a.vault != vault || a.closing.Load() || task.credentialsChanged.Load() ||
+		!task.registration.currentLocked(a) || task.currentError() != nil {
+		return SecretTestReport{}, errSecretTestUnavailable
 	}
-	level := "info"
-	word := "пройден"
-	if !rep.OK {
-		level, word = "warn", "не пройден"
-	}
-	meta, merr := a.refetchMeta(id)
-	if merr == nil {
-		a.appendLogLocked(level, fmt.Sprintf("тест секрета «%s» %s: шагов %d", meta.Title, word, len(rep.Steps)))
-		return rep, meta, nil
-	}
-	a.appendLogLocked(level, fmt.Sprintf("тест секрета %s: %s (шагов %d)", id, word, len(rep.Steps)))
-	return rep, secretvault.Meta{}, nil
+	return rep, nil
 }
 
 // RevealSecret — значение по явному запросу (UI копирует в буфер).
@@ -793,7 +836,7 @@ func (a *App) RevealSecret(id string) (string, error) {
 	defer a.mu.Unlock()
 	v, err := a.vault.Reveal(id)
 	if err != nil {
-		a.appendLogLocked("warn", "reveal secret: "+err.Error())
+		a.appendLogLocked("warn", "reveal secret: значение не получено")
 		return "", err
 	}
 	return v, nil
@@ -832,8 +875,8 @@ func (a *App) TailLogs() []LogLine {
 
 func (a *App) appendLog(level, text string) {
 	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.appendLogLocked(level, text)
-	a.mu.Unlock()
 }
 
 // appendLogLocked — то же под уже удержанным a.mu. sync.Mutex нерекурсивен:
@@ -841,6 +884,7 @@ func (a *App) appendLog(level, text string) {
 // найдена аудитом 2026-09-11 в secret-методах, runTest и switchMode). Для
 // таких мест вызывающий сам держит a.mu и зовёт Locked-вариант.
 func (a *App) appendLogLocked(level, text string) {
+	level, text = projectAppLogRecord(level, text)
 	// Ловушка гонки: без мьютекса события уходят в UI до записи в a.logs и
 	// TailLogs после «всплеска» событий отдаёт хвост без свежих строк.
 	line := LogLine{T: time.Now().Format(time.RFC3339Nano), Level: level, Text: text}
@@ -849,16 +893,17 @@ func (a *App) appendLogLocked(level, text string) {
 		a.logs = a.logs[len(a.logs)-500:]
 	}
 	ctx := a.ctx
-	if a.logFileCh != nil {
+	if owner := a.logWriter; owner != nil && a.logFileCh == owner.input {
 		select {
-		case a.logFileCh <- line:
+		case <-owner.done:
+			owner.dropped.Add(1) // failed original writer is retained; no replacement
 		default:
-			// Канал полон (штатно невозможно): строка теряется в памяти,
-			// но не в UI и не в lifecycle — лог не критичный путь.
+			select {
+			case owner.input <- line:
+			default:
+				owner.dropped.Add(1) // memory/UI remain available under disk backpressure
+			}
 		}
-	} else {
-		// Писатель ещё не поднят (ранние строки до startup): синхронный фолбэк.
-		persistLogLines([]LogLine{line})
 	}
 	if ctx != nil {
 		runtime.EventsEmit(ctx, "log", line)
@@ -869,8 +914,8 @@ func (a *App) appendLogLocked(level, text string) {
 // нести полуобновлённый стейт при конкурентных Start/probe/heal).
 func (a *App) pushState() {
 	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.pushStateLocked()
-	a.mu.Unlock()
 }
 
 // pushStateLocked — публикация стейта под уже удержанным a.mu (см.
@@ -891,7 +936,7 @@ func (a *App) pushStateLocked() {
 		a.state.RetryAttempt = 0
 		a.state.NextRetryAt = ""
 	}
-	snapshot := a.state
+	snapshot := a.stateSnapshotLocked()
 	ctx := a.ctx
 	if ctx != nil {
 		runtime.EventsEmit(ctx, "state", snapshot)

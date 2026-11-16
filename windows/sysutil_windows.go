@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/snowden-system/windows/backend/secretvault"
 )
 
 // appDataDir — корень данных приложения в профиле пользователя.
@@ -87,24 +89,13 @@ func logsDir() string { return filepath.Join(appDataDir(), "logs") }
 // (build/bin/secrets, где его стирал ребилд) в AppData. Перенос ТОЛЬКО если
 // в новом месте файла ещё нет, а в старом он есть и непуст — данные
 // пользователя не перезаписываются никогда.
-func migrateLegacyVault() {
-	newPath := filepath.Join(vaultDir(), "vault.v1.json")
-	if fileExists(newPath) {
-		return
-	}
+func migrateLegacyVault(manager *secretvault.Manager) error {
 	exe, err := osExecutable()
 	if err != nil {
-		return
+		return err
 	}
 	oldPath := filepath.Join(exeDir(exe), "secrets", "vault.v1.json")
-	data, err := os.ReadFile(oldPath)
-	if err != nil || len(data) == 0 {
-		return
-	}
-	if err := os.MkdirAll(vaultDir(), 0o700); err != nil {
-		return
-	}
-	_ = os.WriteFile(newPath, data, 0o600)
+	return manager.MigrateLegacy(oldPath)
 }
 
 // execExplorer открывает папку в Проводнике.

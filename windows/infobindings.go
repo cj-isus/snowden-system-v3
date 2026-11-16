@@ -3,77 +3,67 @@ package main
 // infobindings.go — биндинги фактов для информационных разделов UI (панель,
 // сеть, трафик, профиль доставки, автозащита). Правило фактов (AGENTS.md §3.6):
 // нет данных — пустая строка/false/0 + честная причина, никаких выдумок.
-// Значения НЕ хардкодятся: сеть — из ОС (PowerShell/netsh, Windows-сборщик),
+// Сеть — из native route/MIB; SSID — bounded system netsh observation,
 // egress — из HTTP-наблюдения, профиль доставки — из metadata-стора,
 // автозащита — из failoverPolicy.
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
-
-	"github.com/snowden-system/windows/backend/metadata"
 )
 
 // NetworkFacts — факты о текущем сетевом подключении хоста.
 // Пустая строка = факт недоступен (UI покажет «нет данных»).
 type NetworkFacts struct {
-	ConnectionType string `json:"connectionType"` // Wi-Fi | Ethernet | "" (неизвестно)
-	SSID           string `json:"ssid"`           // имя Wi-Fi сети (netsh)
-	LocalIP        string `json:"localIP"`        // локальный IPv4 интерфейса по умолчанию
-	ISP            string `json:"isp"`            // провайдер прямого канала (пусто = недоступен)
-	PublicIP       string `json:"publicIP"`       // egress-IP, видимый из этой машины (прямой)
-	TunnelIP       string `json:"tunnelIP"`       // egress-IP через локальный SOCKS; пусто = путь не доказан
-	Country        string `json:"country"`        // страна egress (echo сервиса)
-	CountryOrigin  string `json:"countryOrigin"`  // источник факта страны
-	DNSViaTunnel   bool   `json:"dnsViaTunnel"`   // DNS/HTTP реально проходит через 127.0.0.1:1080 (socks5h)
-	NetClass       string `json:"netClass"`       // wifi | ethernet | mobile | "" (V2-054, MediaType фактом)
-	CheckedAt      string `json:"checkedAt"`      // RFC3339
+	ConnectionType   string              `json:"connectionType"`   // Wi-Fi | Ethernet | "" (неизвестно)
+	SSID             string              `json:"ssid"`             // имя Wi-Fi сети (netsh)
+	LocalIP          string              `json:"localIP"`          // source address of the locally selected route
+	ISP              string              `json:"isp"`              // organization reported by OS-routed HTTPS, not physical ISP identity
+	PublicIP         string              `json:"publicIP"`         // OS-routed response; another VPN is not excluded
+	TunnelIP         string              `json:"tunnelIP"`         // egress-IP через локальный SOCKS; пусто = путь не доказан
+	Country          string              `json:"country"`          // страна egress (echo сервиса)
+	CountryOrigin    string              `json:"countryOrigin"`    // источник факта страны
+	DNSViaTunnel     bool                `json:"dnsViaTunnel"`     // legacy SOCKS HTTPS outcome, not DNS/TUN path proof
+	NetClass         string              `json:"netClass"`         // wifi | ethernet | mobile | "" (V2-054, MediaType фактом)
+	CheckedAt        string              `json:"checkedAt"`        // RFC3339
+	LocalRouteTarget string              `json:"localRouteTarget"` // local route lookup, not a sent packet
+	Egress           *NetworkEgressFacts `json:"egress,omitempty"` // per-route optional observations, not admission
 }
 
 // RuntimeInfo — факты именно о запущенном бинарнике. Версия приходит из
 // ldflags production-сборки, поэтому UI не дублирует wails.json вручную.
 type RuntimeInfo struct {
-	Version      string `json:"version"`
-	OS           string `json:"os"`
-	Arch         string `json:"arch"`
-	PID          int    `json:"pid"`
-	CoreVersion  string `json:"coreVersion"`
-	ShellVersion string `json:"shellVersion"`
+	Version      string                `json:"version"`
+	OS           string                `json:"os"`
+	Arch         string                `json:"arch"`
+	PID          int                   `json:"pid"`
+	CoreVersion  string                `json:"coreVersion"`
+	ShellVersion string                `json:"shellVersion"`
+	ProcessMode  *ProcessModeFactsView `json:"processMode,omitempty"`
 }
 
-// NetStats — счётчики адаптера маршрута по умолчанию (Traffic-карточка).
-// Значения — из Get-NetAdapterStatistics (факт ОС), а не выдумка UI.
+// NetStats — route-selected whole-adapter counters, including virtual adapters.
+// Route lookup is local; these are not VPN-only counters or throughput.
 type NetStats struct {
-	InOctets  uint64 `json:"inOctets"`
-	OutOctets uint64 `json:"outOctets"`
-	SpeedBps  uint64 `json:"speedBps"`
-	Alias     string `json:"alias"` // имя интерфейса
-}
-
-// DeliveryProfile — факты доставленного подписанного metadata-envelope (FR-008).
-type DeliveryProfile struct {
-	Present         bool   `json:"present"`         // подписанный envelope применён (false = встроенный набор)
-	Version         uint64 `json:"version"`         // metadata_version принятого envelope
-	KeyID           string `json:"keyId"`           // key_id подписанта (16 hex)
-	ExpiresAt       string `json:"expiresAt"`       // RFC3339 (действует до)
-	TrustedKeys     int    `json:"trustedKeys"`     // размер таблицы доверенных ключей
-	ChannelsApplied int    `json:"channelsApplied"` // каналов из обновления (после ревокаций)
-	Error           string `json:"error"`           // причина, почему envelope не применён (факт, не гадание)
+	InOctets     uint64 `json:"inOctets"`
+	OutOctets    uint64 `json:"outOctets"`
+	SpeedBps     uint64 `json:"speedBps"`
+	Alias        string `json:"alias"` // имя интерфейса
+	SourceSchema int    `json:"sourceSchema"`
+	Source       string `json:"source"`
+	AdapterID    string `json:"adapterId"` // native LUID:index, not protection authority
+	RouteTarget  string `json:"routeTarget"`
 }
 
 // FailoverStatus — снимок сторожа автозащиты (failoverPolicy, A4).
 type FailoverStatus struct {
-	Enabled     bool   `json:"enabled"`     // сторож реально тикает (watchdog запущен)
+	Enabled     bool   `json:"enabled"`     // исходная задача вошла в цикл и ещё не остановлена; не freshness/health proof
 	State       string `json:"state"`       // closed | open | half-open
 	Switches    int    `json:"switches"`    // авто-переключений за текущий инцидент
 	LastError   string `json:"lastError"`   // последняя причина (без секретов)
@@ -83,115 +73,191 @@ type FailoverStatus struct {
 	SmClass     string `json:"smClass"`     // код THEORY последнего классифицированного отказа ("" = нет)
 }
 
-// ---------- кеш фактов (PowerShell-опрос дорогой — не ддосим сами себя) ----------
+// ---------- single-entry facts cache; local counters bypass it ----------
 
 const factsTTL = 5 * time.Second
 
+var errNetworkFactsUnavailable = errors.New("network facts observation unavailable")
+
+// A cache/publication frame only. Optional HTTP owns its separate original
+// resource domain; this token is not a native network-resource receipt.
+type factsCollectSource struct {
+	app     *App
+	parent  context.Context
+	path    *networkPathSource
+	epoch   int
+	tun     bool
+	started time.Time
+	egress  factsEgressSource
+}
+
+func (source *factsCollectSource) current() bool {
+	return source != nil && source.app.observationParentCurrent(source.parent) &&
+		source.path != nil && source.path.current.Load() && source.tun == tunRequested() && source.egressCurrent()
+}
+
+func (source *factsCollectSource) same(other *factsCollectSource) bool {
+	return source != nil && other != nil && source.app == other.app && source.parent == other.parent && source.path == other.path && source.epoch == other.epoch && source.tun == other.tun && source.egress == other.egress
+}
+
 var factsCache struct {
-	mu      sync.Mutex
-	at      time.Time
-	refresh bool // идёт сбор прямо сейчас
-	facts   NetworkFacts
-	stats   NetStats
-	err     error
+	mu             sync.Mutex
+	at             time.Time
+	active, source *factsCollectSource
+	facts          NetworkFacts
+	err            error
 }
 
 // snapshotFacts — свежий (≤TTL) снимок фактов; при устаревании пересобирает.
-func snapshotFacts() (NetworkFacts, NetStats, error) {
+func (a *App) snapshotFacts(parent context.Context) (facts NetworkFacts, result error) {
+	if !a.observationParentCurrent(parent) {
+		return facts, errNetworkFactsUnavailable
+	}
+	netEpoch.mu.Lock()
+	path, epoch := netEpoch.pathSourceLocked(), netEpoch.num
+	netEpoch.mu.Unlock()
+	source := &factsCollectSource{app: a, parent: parent, path: path, epoch: epoch, tun: tunRequested(), started: time.Now()}
+	source.captureEgressSource()
+	if !source.current() {
+		return facts, errNetworkFactsUnavailable
+	}
+	cached, reserved := false, false
+	func() {
+		factsCache.mu.Lock()
+		defer factsCache.mu.Unlock() // only this short metadata frame owns the lock
+		if factsCache.active != nil {
+			result = errNetworkFactsUnavailable
+			return
+		}
+		if source.same(factsCache.source) && !factsCache.at.IsZero() && time.Since(factsCache.at) < factsTTL {
+			facts, result, cached = factsCache.facts, factsCache.err, true
+			return
+		}
+		factsCache.active, reserved = source, true
+	}()
+	if cached {
+		if !source.current() {
+			return NetworkFacts{}, errNetworkFactsUnavailable
+		}
+		return facts, result
+	}
+	if !reserved {
+		return NetworkFacts{}, errNetworkFactsUnavailable
+	}
+	returned := false
+	defer func() {
+		if !returned {
+			_ = recover()
+			facts, result = NetworkFacts{}, errNetworkFactsUnavailable
+		}
+		current := returned && source.current()
+		factsCache.mu.Lock()
+		defer factsCache.mu.Unlock()
+		if factsCache.active != source {
+			facts, result = NetworkFacts{}, errNetworkFactsUnavailable
+			return
+		}
+		if !returned {
+			factsCache.err = errNetworkFactsUnavailable
+			return
+		} // original interrupted frame retained
+		factsCache.active = nil
+		if !current {
+			factsCache.source, factsCache.at, factsCache.facts, factsCache.err = nil, time.Time{}, NetworkFacts{}, errNetworkFactsUnavailable
+			facts, result = NetworkFacts{}, errNetworkFactsUnavailable
+			return
+		}
+		if result != nil {
+			facts = NetworkFacts{}
+		}
+		factsCache.source, factsCache.at, factsCache.facts, factsCache.err = source, source.started, facts, result
+	}()
+	facts, result = collectFacts(source)
+	returned = true
+	return facts, result
+}
+
+// Value-only historical organization label, never a physical ISP identity.
+// No App lock under health/epoch/cache locks; match the requested observed epoch.
+func cachedFactsISP(epoch int) string {
 	factsCache.mu.Lock()
-	defer factsCache.mu.Unlock()
-	now := time.Now()
-	if !factsCache.at.IsZero() && !factsCache.refresh && now.Sub(factsCache.at) < factsTTL {
-		return factsCache.facts, factsCache.stats, factsCache.err
-	}
-	if factsCache.refresh {
-		// Сбор уже идёт в другой горутине: отдаём прошлое значение (может быть пустым при первом вызове — это честно).
-		return factsCache.facts, factsCache.stats, factsCache.err
-	}
-	factsCache.refresh = true
-	// Сбор под кеш-мьютексом: вызов биндинга редкий (UI-поллинг), а конкурентный
-	// двойной PowerShell-опрос дороже, чем короткая блокировка второго читателя.
+	source, at, isp, err, active := factsCache.source, factsCache.at, factsCache.facts.ISP, factsCache.err, factsCache.active
 	factsCache.mu.Unlock()
-	facts, stats, err := collectFacts()
-	factsCache.mu.Lock()
-	factsCache.refresh = false
-	factsCache.at = now
-	factsCache.facts, factsCache.stats, factsCache.err = facts, stats, err
-	return facts, stats, err
+	if source == nil || active != nil || err != nil || at.IsZero() || time.Since(at) >= factsTTL ||
+		source.epoch != epoch || source.parent.Err() != nil || source.app.closing.Load() || source.path == nil || !source.path.current.Load() || !source.egress.registration.source.Current() || source.egress.control != nil && !source.egress.control.Current() {
+		return ""
+	}
+	return isp
 }
 
 // collectFacts — сбор всех сетевых фактов за один проход.
-func collectFacts() (NetworkFacts, NetStats, error) {
-	out := NetworkFacts{CheckedAt: time.Now().Format(time.RFC3339)}
-	stats := NetStats{}
+func collectFacts(source *factsCollectSource) (NetworkFacts, error) {
+	out := NetworkFacts{CheckedAt: source.started.UTC().Format(time.RFC3339Nano)}
 	if runtime.GOOS != "windows" {
-		return out, stats, fmt.Errorf("сетевые факты: сбор поддерживается только на Windows")
+		return out, fmt.Errorf("сетевые факты: сбор поддерживается только на Windows")
 	}
-	ip, alias, media, speed, inB, outB, err := defaultAdapterFacts()
+	parent := context.WithValue(source.parent, networkPathContextKey{}, source.path) // original captured path, never a replacement
+	adapter, err := observeAdapterFacts(parent)
 	if err != nil {
-		return out, stats, fmt.Errorf("сетевые факты: %w", err)
+		return out, fmt.Errorf("сетевые факты: %w", err)
 	}
-	out.LocalIP = ip
-	stats = NetStats{Alias: alias, SpeedBps: speed, InOctets: inB, OutOctets: outB}
-	if tunRequested() && alias == tunAdapterName {
+	out.LocalIP, out.NetClass, out.LocalRouteTarget = adapter.address, adapter.netClass, adapter.stats.RouteTarget
+	if source.tun && adapter.stats.Alias == tunAdapterName {
 		// A request with Proxy:nil is still routed by the TUN adapter. Do not
 		// label that route as an independent physical/direct observation.
 		out.LocalIP = ""
-		media = ""
+		out.NetClass = ""
 	}
 	switch {
-	case media == "Native802.11":
+	case out.NetClass == "wifi":
 		out.ConnectionType = "Wi-Fi"
-		out.NetClass = "wifi"
-		if ssid, err := netshShowInterfaces(); err == nil {
+		if ssid, err := netshShowInterfaces(parent, adapter.stats.Alias); err == nil {
 			out.SSID = ssid
 		}
-	case media == "802.3":
+	case out.NetClass == "ethernet":
 		out.ConnectionType = "Ethernet"
-		out.NetClass = "ethernet"
 	}
-	if out.NetClass == "" {
-		// MediaType не распознан (WWAN и прочее) — класс по общей
-		// классификации адаптера (V2-054: mobile и т.п.).
-		out.NetClass = adapterNetClass(alias)
+	if !source.current() {
+		return NetworkFacts{}, errNetworkFactsUnavailable
 	}
-	// Прямой и туннельный egress независимы; опрашиваем параллельно, чтобы
-	// один медленный внешний путь не задерживал второй на дополнительные 6 с.
-	var wg sync.WaitGroup
-	if !tunRequested() {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			out.PublicIP, out.Country, out.CountryOrigin, out.ISP = egressFacts()
-		}()
-	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		out.TunnelIP, out.DNSViaTunnel = tunnelEgressFacts()
-	}()
-	wg.Wait()
-	return out, stats, nil
+	source.collectEgress(&out)
+	return out, nil
 }
 
 // ---------- биндинги ----------
 
 // GetNetworkFacts — факты о сети хоста для панелей «Активная сеть» / «Сеть».
-func (a *App) GetNetworkFacts() (NetworkFacts, error) {
-	facts, _, err := snapshotFacts()
+func (a *App) GetNetworkFacts() (facts NetworkFacts, err error) {
+	returned := false
+	defer func() {
+		if !returned {
+			_ = recover()
+			facts, err = NetworkFacts{}, errNetworkFactsUnavailable
+		}
+	}()
+	facts, err = a.snapshotFacts(a.observationParent())
+	if err == nil {
+		facts = facts.withEgressAge(time.Now())
+	}
+	returned = true
 	return facts, err
 }
 
-// GetNetStats — счётчики трафика адаптера по умолчанию.
+// GetNetStats — local route-selected counters; no egress HTTP/cache wait.
 func (a *App) GetNetStats() (NetStats, error) {
-	_, stats, err := snapshotFacts()
-	return stats, err
+	parent := a.observationParent()
+	adapter, err := observeAdapterFacts(parent)
+	if err != nil || !a.observationParentCurrent(parent) {
+		return NetStats{}, errAdapterObservation
+	}
+	return adapter.stats, nil
 }
 
 // GetRuntimeInfo — версия/платформа текущего процесса, а не frontend-константа.
 func (a *App) GetRuntimeInfo() RuntimeInfo {
+	pid := os.Getpid()
 	return RuntimeInfo{
-		Version: runningVersion, OS: runtime.GOOS, Arch: runtime.GOARCH, PID: os.Getpid(),
+		Version: runningVersion, OS: runtime.GOOS, Arch: runtime.GOARCH, PID: pid, ProcessMode: processModeFacts(pid),
 		CoreVersion:  dependencyVersion("github.com/sagernet/sing-box"),
 		ShellVersion: dependencyVersion("github.com/wailsapp/wails/v2"),
 	}
@@ -213,59 +279,18 @@ func dependencyVersion(path string) string {
 	return ""
 }
 
-// GetDeliveryProfile — факты доставленного metadata-envelope (FR-008).
-func (a *App) GetDeliveryProfile() (DeliveryProfile, error) {
-	out := DeliveryProfile{}
-	dir, err := metadata.DefaultStoreDir()
-	if err != nil {
-		out.Error = "хранилище метаданных недоступно: " + err.Error()
-		return out, err
-	}
-	store := &metadata.Store{Dir: dir}
-	env, present, err := store.LoadEnvelope()
-	if err != nil {
-		// Повреждённый/неподписанный envelope — факт отказа, UI показывает его.
-		out.Error = err.Error()
-		return out, nil
-	}
-	keys, keysPresent, err := store.LoadKeys()
-	if err != nil {
-		out.Error = err.Error()
-		return out, nil
-	}
-	out.TrustedKeys = len(keys)
-	if !present {
-		// Нет envelope — действует встроенный набор: это факт, не ошибка.
-		return out, nil
-	}
-	out.Present = true
-	out.Version = env.MetadataVersion
-	out.KeyID = env.KeyID
-	out.ExpiresAt = env.ExpiresAt.Format(time.RFC3339)
-	revoked := map[string]bool{}
-	for _, id := range env.Revocations {
-		revoked[id] = true
-	}
-	applied := 0
-	for _, c := range env.Channels {
-		if !revoked[c.ID] {
-			applied++
-		}
-	}
-	out.ChannelsApplied = applied
-	if !keysPresent {
-		out.Error = "envelope есть, доверенных ключей нет (fail-closed)"
-	}
-	return out, nil
-}
-
 // GetFailoverStatus — снимок сторожа автозащиты + машины состояний C1.
 func (a *App) GetFailoverStatus() (FailoverStatus, error) {
 	state, switches, lastErr := a.fpol.snapshot()
 	sm := a.sm.snapshot()
-	runtime_.mu.Lock()
-	watchOn := runtime_.watchOn
-	runtime_.mu.Unlock()
+	watchOn, watchdogErr := a.watchdogStatus()
+	nextCheck := a.fpol.nextAttemptIn(time.Now())
+	if !watchOn {
+		nextCheck = 0
+	}
+	if watchdogErr != nil {
+		lastErr = errWatchdogUnavailable.Error() // local task failure, never remote channel evidence
+	}
 	smSince := ""
 	if !sm.Since.IsZero() {
 		smSince = sm.Since.Format(time.RFC3339)
@@ -275,84 +300,9 @@ func (a *App) GetFailoverStatus() (FailoverStatus, error) {
 		State:       state,
 		Switches:    switches,
 		LastError:   lastErr,
-		NextCheckIn: a.fpol.nextAttemptIn(time.Now()),
+		NextCheckIn: nextCheck,
 		SmState:     sm.State,
 		SmSince:     smSince,
 		SmClass:     sm.Class,
 	}, nil
-}
-
-// ---------- сетевые наблюдения (кроссплатформенные) ----------
-
-// egressFacts — публичный egress-IP и страна: то, что сеть реально видит.
-// Источник фиксируется в ответе (честная ссылка на происхождение факта).
-func egressFacts() (ip, country, origin, isp string) {
-	// Явно отключаем Proxy: «прямой» факт не должен незаметно пройти через
-	// системный прокси, WinHTTP или переменные окружения.
-	client := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: 6 * time.Second}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://ipapi.co/json/", nil)
-	if err != nil {
-		return "", "", "", ""
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", "", "", ""
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if err != nil {
-		return "", "", "", ""
-	}
-	var payload struct {
-		IP          string `json:"ip"`
-		CountryName string `json:"country_name"`
-		Org         string `json:"org"`
-	}
-	if json.Unmarshal(body, &payload) == nil && payload.IP != "" {
-		return payload.IP, payload.CountryName, "https://ipapi.co/json/", payload.Org
-	}
-	// Фолбэк: текстовый ответ вида "1.2.3.4".
-	if v := string(body); net.ParseIP(trimSpace(v)) != nil {
-		return trimSpace(v), "", "https://ipapi.co/ip/", ""
-	}
-	return "", "", "", ""
-}
-
-// tunnelEgressFacts — факт работающего пути через туннель: HTTPS через
-// socks5h://127.0.0.1:1080 (тот же путь, что у protected-probe: если это
-// работает и вернулся IP, DNS и egress идут через туннель.
-func tunnelEgressFacts() (string, bool) {
-	transport := &http.Transport{
-		Proxy: http.ProxyURL(&url.URL{Scheme: "socks5h", Host: "127.0.0.1:1080"}),
-	}
-	client := &http.Client{Transport: transport, Timeout: 6 * time.Second}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.ipify.org", nil)
-	if err != nil {
-		return "", false
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", false
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64))
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return "", false
-	}
-	ip := trimSpace(string(body))
-	if net.ParseIP(ip) == nil {
-		return "", false
-	}
-	return ip, true
-}
-
-func trimSpace(s string) string {
-	start, end := 0, len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\n' || s[start] == '\r' || s[start] == '\t') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\n' || s[end-1] == '\r' || s[end-1] == '\t') {
-		end--
-	}
-	return s[start:end]
 }

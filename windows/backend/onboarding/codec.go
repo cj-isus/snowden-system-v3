@@ -11,6 +11,8 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/snowden-system/windows/backend/delivery"
 )
 
 type bundleCodec struct{ kdf *kdfExecutor }
@@ -21,6 +23,19 @@ func (c bundleCodec) seal(payload *BundlePayload, passphrase string) (string, er
 	}
 	if len(passphrase) > MaxPassphraseSize {
 		return "", ErrTooLarge
+	}
+	if len(payload.PinPolicy) != 0 {
+		if len(payload.PinPolicy) > delivery.MaxPinPolicyBytes || payload.Delivery == nil {
+			return "", ErrBadFormat
+		}
+		policy := bytes.Clone(payload.PinPolicy) // own public bytes across the KDF
+		core := *payload
+		core.PinPolicy = nil
+		protected, err := c.seal(&core, passphrase)
+		if err != nil {
+			return "", err
+		}
+		return wrapPinTransfer(protected, policy)
 	}
 	cp := *payload
 	if cp.Schema == 0 {
@@ -100,8 +115,19 @@ func payloadSizeAllowed(p *BundlePayload) bool {
 		remaining -= n
 		return true
 	}
-	if !consume(len(p.DeviceName)) || !consume(len(p.Envelope)) {
+	if !consume(len(p.DeviceName)) || !consume(len(p.Envelope)) || !consume(len(p.Recovery)) || !consume(len(p.EpochGrant)) {
 		return false
+	}
+	if p.Delivery != nil {
+		d := p.Delivery
+		if d.Package == nil || len(d.Package.Metadata) > 64 || !consume(len(d.TargetPath)) || !consume(len(d.ProfileBytes)) {
+			return false
+		}
+		for name, data := range d.Package.Metadata {
+			if !consume(len(name)) || !consume(len(data)) {
+				return false
+			}
+		}
 	}
 	for _, k := range p.TrustedKeys {
 		if !consume(len(k.KeyID)) || !consume(len(k.Public)) || !consume(len(k.Comment)) {
@@ -136,10 +162,25 @@ func decodeStrict(data []byte, dst any) error {
 }
 
 func (c bundleCodec) open(transport, passphrase string) (*BundlePayload, error) {
-	if len(transport) > MaxBundleSize || len(passphrase) > MaxPassphraseSize {
+	if len(passphrase) > MaxPassphraseSize {
 		return nil, ErrTooLarge
 	}
-	transport = strings.TrimSpace(transport)
+	protected, policy, err := splitPinTransfer(transport)
+	if err != nil {
+		return nil, err
+	}
+	if len(policy) != 0 {
+		payload, err := c.open(protected, passphrase) // exactly one nonnested SNOB1 core
+		if err != nil {
+			return nil, err
+		}
+		if payload.Delivery == nil {
+			return nil, ErrBadFormat
+		}
+		payload.PinPolicy = policy
+		return payload, nil
+	}
+	transport = protected
 	prefix := magic + "1."
 	if !strings.HasPrefix(transport, prefix) {
 		return nil, ErrBadFormat
@@ -200,6 +241,18 @@ func (c bundleCodec) open(transport, passphrase string) (*BundlePayload, error) 
 	defer clear(payloadJSON)
 	if len(payloadJSON) > MaxBundleSize {
 		return nil, ErrTooLarge
+	}
+	if checkPublicJSON(payloadJSON) != nil {
+		return nil, ErrBadFormat
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(payloadJSON, &fields) != nil {
+		return nil, ErrBadFormat
+	}
+	for name := range fields {
+		if strings.EqualFold(name, "pin_policy") {
+			return nil, ErrBadFormat // no null/aliased second inner source
+		}
 	}
 	var payload BundlePayload
 	if err := decodeStrict(payloadJSON, &payload); err != nil {

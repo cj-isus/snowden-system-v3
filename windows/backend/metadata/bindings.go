@@ -68,7 +68,7 @@ func MigrateLegacyBindings(source *Envelope, plan *BindingMigration, keys map[st
 	}
 	// An expired but authentic source can be renewed explicitly. Validate its
 	// structure at issuance; new validity must pass against the current clock.
-	if err := source.Validate(source.IssuedAt, 0); err != nil {
+	if err := source.ValidateCandidate(source.IssuedAt); err != nil {
 		return nil, fmt.Errorf("migration: source shape: %w", err)
 	}
 	if plan.Schema != 1 {
@@ -138,7 +138,7 @@ func MigrateLegacyBindings(source *Envelope, plan *BindingMigration, keys map[st
 	out.SplitDirect = slices.Clone(source.SplitDirect)
 	out.MetadataVersion, out.IssuedAt, out.ExpiresAt = plan.MetadataVersion, plan.IssuedAt, plan.ExpiresAt
 	out.Signature = ""
-	if err := out.Validate(now, source.MetadataVersion); err != nil {
+	if err := out.ValidateVersion(now, source.ProfileVersion()); err != nil {
 		return nil, fmt.Errorf("migration: new validity or profile: %w", err)
 	}
 	return &out, nil

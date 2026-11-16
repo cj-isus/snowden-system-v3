@@ -1,6 +1,8 @@
 // Package filetxn commits a bounded set of local files with a rollback journal.
-// The caller serializes writers/readers and supplies fixed target paths again
-// during recovery: journal contents can never choose filesystem destinations.
+// The caller serializes readers and supplies fixed target paths again during
+// recovery: journal contents can never choose filesystem destinations. Store
+// and WithWriter share the cooperative Windows writer lock. WithRead uses the
+// existing lock for explicit coherent snapshots; bare loaders do not acquire it.
 package filetxn
 
 import (
@@ -17,12 +19,17 @@ import (
 )
 
 const maxFileSize = 16 << 20
+const maxManifestSize = 4 << 10 // at most eight fixed names/digests, not a payload
 
 var ErrRecoveryRequired = errors.New("filetxn: unfinished import requires recovery")
 
 type File struct {
 	Name, Path string
 	Data       []byte
+	// Keep retains this target's current contents or absence at commit. It
+	// remains in the fixed backup/recovery set; no journal-chosen path or
+	// persistent manifest extension is needed. Keep forbids replacement Data.
+	Keep bool
 }
 type entry struct {
 	Name    string `json:"name"`
@@ -36,7 +43,12 @@ type manifest struct {
 
 type Store struct {
 	Dir string
-	// Private fault boundaries; production always uses the native operations.
+	// BeforeCommit repeats the caller's source/validity fence after staging
+	// and syncing the complete backup/new set, before publishing the journal.
+	// Caller still owns serialization; this callback must not mutate targets.
+	// Store holds the writer scope: do not call WithWriter/Commit/Recover here.
+	BeforeCommit func() error
+	// Private fault boundaries; production uses the concrete filetxn operations.
 	replace func(string, []byte) error
 	rename  func(string, string) error
 	remove  func(string) error
@@ -45,6 +57,9 @@ type Store struct {
 func Check(dir string) error {
 	if dir == "" {
 		return nil
+	}
+	if err := journalFor(dir).fault(); err != nil {
+		return err // absence of a pathname cannot retire an uncertain original I/O
 	}
 	_, err := os.Lstat(dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -57,82 +72,166 @@ func Check(dir string) error {
 }
 
 func (s *Store) Commit(files []File) (err error) {
+	domain := journalFor(s.Dir)
+	if err := domain.enter(); err != nil {
+		return err
+	}
+	defer domain.operation.Unlock()
+	completed := false
+	var releaseWriter func() error
+	defer func() { domain.finishWriter(releaseWriter, &err, completed) }()
+	defer func() { domain.retireTargets(&err, completed) }()
+	ownedStage, published := false, false
+	defer func() {
+		if p := recover(); p != nil {
+			err = domain.fail(fmt.Errorf("filetxn: panic during commit (%T)", p))
+		}
+		if err != nil && published && domain.fault() == nil {
+			recoveryErr := s.recover(files, domain)
+			err = errors.Join(err, recoveryErr)
+			if recoveryErr == nil {
+				published = false
+			}
+		}
+		if ownedStage && !published && domain.fault() == nil {
+			cleanupErr := domain.cleanupPending()
+			// A completed commit/rollback remains completed when bounded debris
+			// cleanup fails. The retained receipt/CleanupError blocks new staging.
+			if err != nil {
+				err = errors.Join(err, cleanupErr)
+			}
+		}
+	}()
 	files, err = validate(s.Dir, files)
+	if err != nil {
+		return err
+	}
+	releaseWriter, err = domain.acquireWriter()
 	if err != nil {
 		return err
 	}
 	if err = Check(s.Dir); err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Dir(s.Dir), 0700); err != nil {
+	if err = domain.cleanupPending(); err != nil {
 		return err
 	}
-	stage, err := os.MkdirTemp(filepath.Dir(s.Dir), ".import-stage-")
+	if err = domain.pinTargets(files); err != nil {
+		return err
+	}
+	ownedStage = true
+	stage, err := domain.newStage(filepath.Dir(s.Dir))
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(stage) // exact directory just created by this operation
 	m := manifest{Schema: 1}
 	for _, file := range files {
-		old, exists, readErr := readTarget(file.Path)
+		old, exists, readErr := domain.readTarget(file.Path)
 		if readErr != nil {
 			return readErr
 		}
 		m.Entries = append(m.Entries, entry{Name: file.Name, Existed: exists, SHA256: digest(old)})
-		if err = writeSync(filepath.Join(stage, file.Name+".old"), old); err != nil {
+		if err = domain.write(filepath.Join(stage, file.Name+".old"), old, true); err != nil {
 			return err
 		}
-		if err = writeSync(filepath.Join(stage, file.Name+".new"), file.Data); err != nil {
+		domain.pending.record(file.Name+".old", old)
+		if err = domain.write(filepath.Join(stage, file.Name+".new"), file.Data, true); err != nil {
 			return err
 		}
+		domain.pending.record(file.Name+".new", file.Data)
 	}
 	data, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
-	if err = writeSync(filepath.Join(stage, "manifest.json"), data); err != nil {
+	if err = domain.write(filepath.Join(stage, "manifest.json"), data, true); err != nil {
+		return err
+	}
+	domain.pending.record("manifest.json", data)
+	if s.BeforeCommit != nil {
+		if err = s.BeforeCommit(); err != nil {
+			if errors.Is(err, ErrWriteRetirement) || errors.Is(err, ErrReadClose) {
+				return domain.fail(err) // caller's original I/O also keeps the writer scope
+			}
+			return err
+		}
+	}
+	if err = domain.checkTargets(); err != nil {
 		return err
 	}
 	if err = s.move(stage, s.Dir); err != nil {
 		return err
 	}
-	published := true
-	defer func() {
-		if p := recover(); p != nil {
-			err = fmt.Errorf("filetxn: panic during commit (%T)", p)
-		}
-		if err != nil && published {
-			err = errors.Join(err, s.Recover(files))
-		}
-	}()
+	published = true
 	for _, file := range files {
+		if file.Keep {
+			continue
+		}
 		if err = s.write(file.Path, file.Data); err != nil {
 			return fmt.Errorf("filetxn: commit %s: %w", file.Name, err)
 		}
 	}
-	// Removing the recovery barrier is the commit point. If it fails, restore
-	// all originals. Leftover committed stage cleanup cannot turn success into
-	// a reported failure after the commit point.
+	// Removing the recovery barrier is the commit point. An uncertain move
+	// keeps the process-local recovery fault, even if the name disappeared.
+	// Unknown outcome never authorizes a second rollback/move. Later debris
+	// cleanup cannot change the completed commit result.
+	if err = domain.checkTargets(); err != nil {
+		return err
+	}
 	if err = s.move(s.Dir, stage); err != nil {
 		return err
 	}
 	published = false
+	completed = true
 	return nil
 }
 
-func (s *Store) Recover(files []File) error {
+func (s *Store) Recover(files []File) (finalErr error) {
+	domain := journalFor(s.Dir)
+	if err := domain.enter(); err != nil {
+		return err
+	}
+	defer domain.operation.Unlock()
+	var releaseWriter func() error
+	defer func() { domain.finishWriter(releaseWriter, &finalErr, finalErr == nil) }()
+	defer func() { domain.retireTargets(&finalErr, finalErr == nil) }()
+	defer func() {
+		if p := recover(); p != nil {
+			finalErr = domain.fail(fmt.Errorf("filetxn: panic during recovery (%T)", p))
+		}
+	}()
 	files, err := validate(s.Dir, files)
 	if err != nil {
 		return err
 	}
-	if err := Check(s.Dir); err == nil {
-		return nil
+	if Check(s.Dir) == nil && domain.pending == nil {
+		return nil // no cold journal/debris: do not create a lock or parent directory
 	}
-	stat, err := os.Lstat(s.Dir)
-	if err != nil || !stat.IsDir() || stat.Mode()&os.ModeSymlink != 0 {
+	releaseWriter, err = domain.acquireWriter()
+	if err != nil {
 		return errors.Join(ErrRecoveryRequired, err)
 	}
-	data, exists, err := readTarget(filepath.Join(s.Dir, "manifest.json"))
+	return s.recover(files, domain)
+}
+
+// The caller already holds the one journal operation gate. Internal rollback
+// must not recursively acquire the exported Recover gate or the caller lock.
+func (s *Store) recover(files []File, domain *journalDomain) (finalErr error) {
+	defer func() {
+		if p := recover(); p != nil {
+			finalErr = domain.fail(fmt.Errorf("filetxn: panic during rollback (%T)", p))
+		}
+	}()
+	if err := domain.fault(); err != nil {
+		return err
+	}
+	if err := Check(s.Dir); err == nil {
+		return domain.cleanupPending()
+	}
+	if err := domain.bindRecovery(s.Dir); err != nil {
+		return errors.Join(ErrRecoveryRequired, err)
+	}
+	data, exists, err := domain.read(filepath.Join(s.Dir, "manifest.json"), maxManifestSize)
 	if err != nil || !exists {
 		return errors.Join(ErrRecoveryRequired, err)
 	}
@@ -146,6 +245,7 @@ func (s *Store) Recover(files []File) error {
 	if err := dec.Decode(&extra); err != io.EOF || m.Schema != 1 || len(m.Entries) != len(files) {
 		return ErrRecoveryRequired
 	}
+	domain.pending.record("manifest.json", data)
 	backups := make([][]byte, len(files))
 	// Authenticate the complete local backup set before restoring any file.
 	// Hashes detect accidental corruption, not an attacker who can rewrite both.
@@ -154,11 +254,30 @@ func (s *Store) Recover(files []File) error {
 		if e.Name != file.Name {
 			return ErrRecoveryRequired
 		}
-		old, exists, err := readTarget(filepath.Join(s.Dir, file.Name+".old"))
-		if err != nil || !exists || digest(old) != e.SHA256 {
+		old, exists, err := domain.read(filepath.Join(s.Dir, file.Name+".old"), maxFileSize)
+		if err != nil || !exists || digest(old) != e.SHA256 || !e.Existed && len(old) != 0 {
 			return errors.Join(ErrRecoveryRequired, err)
 		}
 		backups[i] = old
+		domain.pending.record(file.Name+".old", old)
+		// New bytes are irrelevant to rollback authority. On cold recovery
+		// observe them only for bounded debris cleanup; never apply them.
+		if !domain.pending.contains(file.Name + ".new") {
+			raw, present, cleanupErr := domain.read(filepath.Join(s.Dir, file.Name+".new"), maxFileSize)
+			if err := domain.fault(); err != nil {
+				return err
+			}
+			if cleanupErr != nil {
+				domain.pending.uncertain = true
+			} else if present {
+				domain.pending.record(file.Name+".new", raw)
+			}
+		}
+	}
+	// Cold recovery creates/pins target parents only after every old backup
+	// authenticates. Internal rollback reuses the operation's original parents.
+	if err := domain.pinTargets(files); err != nil {
+		return errors.Join(ErrRecoveryRequired, err)
 	}
 	var failures []error
 	for i, file := range files {
@@ -173,21 +292,25 @@ func (s *Store) Recover(files []File) error {
 		if err != nil {
 			failures = append(failures, fmt.Errorf("filetxn: restore %s: %w", file.Name, err))
 		}
+		// Never churn targets after uncertain original retirement.
+		if err := domain.fault(); err != nil {
+			return err
+		}
 	}
 	if len(failures) > 0 {
 		return errors.Join(append([]error{ErrRecoveryRequired}, failures...)...)
 	}
-	trash, err := os.MkdirTemp(filepath.Dir(s.Dir), ".import-recovered-")
-	if err != nil {
-		return errors.Join(ErrRecoveryRequired, err)
+	if err := domain.checkTargets(); err != nil {
+		return err
 	}
-	if err = os.Remove(trash); err != nil {
+	trash, err := recoveryDestination(filepath.Dir(s.Dir))
+	if err != nil {
 		return errors.Join(ErrRecoveryRequired, err)
 	}
 	if err = s.move(s.Dir, trash); err != nil {
 		return errors.Join(ErrRecoveryRequired, err)
 	}
-	_ = os.RemoveAll(trash) // exact temporary recovery directory created above
+	_ = domain.cleanupPending() // separate retained debris outcome after completed rollback
 	return nil
 }
 
@@ -196,6 +319,10 @@ func validate(dir string, files []File) ([]File, error) {
 		return nil, errors.New("filetxn: invalid transaction shape")
 	}
 	dir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	lockPath, err := journalWriterPath(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -210,63 +337,21 @@ func validate(dir string, files []File) ([]File, error) {
 		}
 		p, err := filepath.Abs(file.Path)
 		key := strings.ToLower(p)
-		if err != nil || file.Path == "" || !valid || seenNames[file.Name] || seenPaths[key] || len(file.Data) > maxFileSize || strings.EqualFold(p, dir) || strings.HasPrefix(key, strings.ToLower(dir)+string(filepath.Separator)) {
+		if err != nil || file.Path == "" || !valid || seenNames[file.Name] || seenPaths[key] || len(file.Data) > maxFileSize || file.Keep && len(file.Data) != 0 || strings.EqualFold(p, dir) || strings.EqualFold(p, lockPath) || strings.HasPrefix(key, strings.ToLower(dir)+string(filepath.Separator)) {
 			return nil, errors.New("filetxn: invalid or duplicate target")
 		}
 		seenNames[file.Name], seenPaths[key] = true, true
-		out[i] = File{Name: file.Name, Path: p, Data: bytes.Clone(file.Data)}
+		out[i] = File{Name: file.Name, Path: p, Data: bytes.Clone(file.Data), Keep: file.Keep}
 	}
 	return out, nil
 }
 
-func readTarget(path string) ([]byte, bool, error) {
-	st, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, err
-	}
-	if !st.Mode().IsRegular() || st.Size() > maxFileSize {
-		return nil, false, errors.New("filetxn: non-regular or oversized file")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, false, err
-	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, maxFileSize+1))
-	if len(data) > maxFileSize {
-		return nil, false, errors.New("filetxn: oversized file")
-	}
-	return data, true, err
-}
-
-func writeSync(path string, data []byte) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	_, writeErr := f.Write(data)
-	syncErr := f.Sync()
-	return errors.Join(writeErr, syncErr, f.Close())
-}
+// Existing private fault-injection callers retain this helper. Actual Store
+// writes use their own journal domain, including legitimate empty files.
+var standaloneWriter = newJournalWriter()
 
 func atomicWrite(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".import-write-")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	defer os.Remove(tmp)
-	_, writeErr := f.Write(data)
-	if err := errors.Join(writeErr, f.Sync(), f.Close()); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return standaloneWriter.Write(path, data)
 }
 
 func digest(data []byte) string { h := sha256.Sum256(data); return hex.EncodeToString(h[:]) }
@@ -279,26 +364,71 @@ func invoke(fn func() error) (err error) {
 	return fn()
 }
 func (s *Store) write(path string, data []byte) error {
+	if err := journalFor(s.Dir).checkTarget(path); err != nil {
+		return err
+	}
 	return invoke(func() error {
 		if s.replace != nil {
 			return s.replace(path, data)
 		}
-		return atomicWrite(path, data)
+		return journalFor(s.Dir).write(path, data, false)
 	})
 }
 func (s *Store) move(from, to string) error {
-	return invoke(func() error {
+	domain := journalFor(s.Dir)
+	if err := domain.fault(); err != nil {
+		return err
+	}
+	if domain.pending == nil || journalKey(domain.pending.path) != journalKey(from) {
+		return domain.fail(ErrStagingCleanup)
+	}
+	if err := domain.sameDirectory(domain.pending); err != nil {
+		return domain.fail(err)
+	}
+	if _, err := os.Lstat(to); !errors.Is(err, os.ErrNotExist) {
+		return domain.fail(errors.Join(ErrStagingCleanup, err)) // never knowingly replace an occupied directory
+	}
+	domain.pending.nextPath = to
+	err := invoke(func() error {
 		if s.rename != nil {
 			return s.rename(from, to)
 		}
+		if domain.pending.directory != nil {
+			return domain.pending.directory.Move(from, to)
+		}
 		return os.Rename(from, to)
 	})
+	if err != nil {
+		return domain.fail(err)
+	}
+	var info os.FileInfo
+	if domain.pending.directory != nil {
+		info, err = domain.pending.directory.Inspect(to)
+	} else {
+		info, err = domain.snapshotDirectory(to)
+	}
+	if err != nil || !sameBoundedReadFile(domain.pending.identity, info) {
+		return domain.fail(errors.Join(ErrStagingCleanup, err))
+	}
+	domain.pending.path, domain.pending.nextPath = to, ""
+	return nil
 }
 func (s *Store) erase(path string) error {
-	return invoke(func() error {
+	domain := journalFor(s.Dir)
+	if err := domain.checkTarget(path); err != nil {
+		return err
+	}
+	err := invoke(func() error {
 		if s.remove != nil {
 			return s.remove(path)
 		}
+		if domain.targets != nil {
+			return domain.targets.Erase(path)
+		}
 		return os.Remove(path)
 	})
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return domain.fail(err)
+	}
+	return err
 }

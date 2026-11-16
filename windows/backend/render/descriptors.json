@@ -5,71 +5,82 @@
       "id": "channel-a-vless",
       "protocol": "vless",
       "transport": "ws",
-      "hostname": "vpn.example.com",
+      "hostname": "channel-1.example.invalid",
       "port": 443,
       "origin_server": "203.0.113.10",
       "expected_egress": "203.0.113.10",
-      "credential_refs": ["vless-uuid"],
+      "credential_refs": [
+        "vless-uuid"
+      ],
       "multiplex": true,
-      "probe_targets": ["https://vpn.example.com/ip", "https://api.ipify.org"],
-      "diagnostic_url": "https://vpn.example.com/range",
-      "fd": { "carrier": "cloudflare", "asn": "AS57043" },
-      "validation_status": "live-verified",
-      "validated_at": "2026-09-09",
-      "enabled": true
+      "probe_targets": [
+        "https://channel.example.invalid/ip"
+      ],
+      "diagnostic_url": "https://channel.example.invalid/range",
+      "validation_status": "untested",
+      "enabled": false
     },
     {
       "id": "channel-a-hy2",
       "protocol": "hysteria2",
       "transport": "quic",
-      "hostname": "vpn.example.com",
-      "port": 8444,
+      "hostname": "channel-2.example.invalid",
+      "port": 443,
       "origin_server": "203.0.113.10",
       "expected_egress": "203.0.113.10",
-      "credential_refs": ["hy2-password", "hy2-obfs-password"],
-      "probe_targets": ["https://vpn.example.com/ip", "https://api.ipify.org"],
-      "server_ports": ["443:443", "8444:8444", "40000:41000"],
-      "hop_interval": "30s",
-      "fd": { "asn": "AS57043" },
-      "validation_status": "live-verified",
-      "validated_at": "2026-09-09",
-      "enabled": true
+      "credential_refs": [
+        "hy2-password",
+        "hy2-obfs-password"
+      ],
+      "probe_targets": [
+        "https://channel.example.invalid/ip"
+      ],
+      "validation_status": "untested",
+      "enabled": false
     },
     {
       "id": "channel-a-reality",
       "protocol": "vless",
       "transport": "tcp-reality",
-      "hostname": "www.samsung.com",
-      "port": 8443,
+      "hostname": "channel-3.example.invalid",
+      "port": 443,
       "origin_server": "203.0.113.10",
       "expected_egress": "203.0.113.10",
-      "credential_refs": ["vless-uuid-c", "reality-public-key-c", "reality-short-id-c"],
+      "credential_refs": [
+        "vless-uuid-c",
+        "reality-public-key-c",
+        "reality-short-id-c"
+      ],
       "uuid_ref": "vless-uuid-c",
       "reality_public_key_ref": "reality-public-key-c",
       "reality_short_id_ref": "reality-short-id-c",
-      "probe_targets": ["https://vpn.example.com/ip", "https://api.ipify.org"],
-      "probe_primary_host": "vpn.example.com",
-      "fd": { "asn": "AS57043" },
-      "validation_status": "live-verified",
-      "validated_at": "2026-09-12",
-      "enabled": true
+      "probe_targets": [
+        "https://channel.example.invalid/ip"
+      ],
+      "probe_primary_host": "vpn.example.invalid",
+      "validation_status": "untested",
+      "enabled": false
     },
     {
       "id": "channel-a-shadowtls",
       "protocol": "vless",
       "transport": "shadowtls",
-      "hostname": "www.samsung.com",
-      "port": 8445,
+      "hostname": "channel-4.example.invalid",
+      "port": 443,
       "origin_server": "203.0.113.10",
       "expected_egress": "203.0.113.10",
-      "credential_refs": ["vless-uuid-d", "shadowtls-password-d"],
+      "credential_refs": [
+        "vless-uuid-d",
+        "shadowtls-password-d"
+      ],
       "uuid_ref": "vless-uuid-d",
       "shadowtls_password_ref": "shadowtls-password-d",
-      "probe_targets": ["https://vpn.example.com/ip", "https://api.ipify.org"],
-      "probe_primary_host": "vpn.example.com",
-      "fd": { "asn": "AS57043" },
-      "validation_status": "configured",
-      "enabled": true
+      "probe_targets": [
+        "https://channel.example.invalid/ip"
+      ],
+      "probe_primary_host": "vpn.example.invalid",
+      "validation_status": "untested",
+      "enabled": false
     }
   ]
 }

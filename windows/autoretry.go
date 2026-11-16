@@ -22,11 +22,10 @@ package main
 // Гонок «двойного запуска» нет: startCore сам guarded через startBusy, а
 // будильники (таймер и netwatch, V2-054) сериализованы begin-гвардом.
 //
-// V2-054 (wake): наблюдатель сети (netwatch.go) будит попытку НЕМЕДЛЕННО,
-// когда сеть сменилась — ждать остаток backoff на старой сети бессмысленно
-// (смена сети = смена return-пути = смена шансов). Попытка та же самая
-// (startCore + probe), счётчик эпизода сохраняется, exactly-once через
-// retry.done.
+// Network wake использует до двух внеочередных запросов на fail-closed эпизод,
+// не более одного на original path source. После лимита остаётся backoff.
+// Каждый запрос — новый startCore + probe, без переноса старого ctx/report;
+// serial/intent/done защищают от stale timer и гонки wake с callback.
 
 import (
 	"fmt"
@@ -48,15 +47,23 @@ const (
 // только в schedule/cancel/fire/wake, которые берут a.mu сами). Нулевое
 // значение готово к использованию.
 type retryTimer struct {
-	timer   *time.Timer
-	attempt int       // номер следующей авто-попытки эпизода (1..); 0 = нет эпизода
-	due     time.Time // нулевое = ничего не запланировано
-	done    bool      // попытка уже начата (begin); страховка от двойного запуска
+	timer         *time.Timer
+	attempt       int       // номер следующей авто-попытки эпизода (1..); 0 = нет эпизода
+	due           time.Time // нулевое = ничего не запланировано
+	done          bool      // попытка уже начата (begin); страховка от двойного запуска
+	serial        uint64    // callback identity, never reset/reused after manual actions
+	intent        uint64    // exact operation that registered this timer
+	networkIntent uint64
+	networkBursts int
+	networkPath   *networkPathSource
 }
 
 // failClosedState — true, если текущее состояние = fail-closed без живого
 // туннеля (обе фактические формы). Требует удержания a.mu.
 func (a *App) failClosedState() bool {
+	if a.ctx == nil || a.ctx.Err() != nil || a.profileTransition || a.trustBlocked || a.proxyConflict || a.restartCommit != nil || a.releaseCommit != nil || a.installedImageChanged || a.state.BlockedReason == "cleanup_unconfirmed" || a.state.BlockedReason == "restart_failed" {
+		return false // no old-profile retry or network wakeup over unresolved local custody
+	}
 	if a.state.State == "error" {
 		return true
 	}
@@ -80,18 +87,34 @@ func retryDelay(attempt int) time.Duration {
 // Требует удержания a.mu (все вызывающие уже держат мьютекс). Проекцию
 // NextRetryAt/RetryAttempt в state делает pushStateLocked.
 func (a *App) scheduleFailClosedRetryLocked(now time.Time) {
-	if !a.protectionDesired || a.closing.Load() || !a.failClosedState() {
+	if a.trustBlocked || !a.protectionDesired || a.closing.Load() || !a.failClosedState() {
 		return
 	}
-	a.stopRetryTimerLocked() // прошлый таймер не наследуется; счётчик эпизода растёт
 	a.retry.attempt++
-	a.retry.done = false // новый будильник — попытка ещё не начата
 	d := retryDelay(a.retry.attempt)
 	attempt := a.retry.attempt
-	a.retry.due = now.Add(d)
+	if !a.armFailClosedRetryLocked(now, d, nil) {
+		a.pushStateLocked()
+		return
+	}
 	a.pushStateLocked()
 	a.appendLogLocked("info", fmt.Sprintf("fail-closed: авто-повтор запуска №%d через %s (backoff; probe обязателен на каждой попытке, FR-001)", attempt, d))
-	a.retry.timer = time.AfterFunc(d, func() { a.fireFailClosedRetry(attempt) })
+}
+
+// a.mu is held. Timer.Stop is not a join; serial+intent revoke a callback
+// that already entered or is waiting for this mutex. Fast path is value-only.
+func (a *App) armFailClosedRetryLocked(now time.Time, delay time.Duration, path *networkPathSource) bool {
+	a.stopRetryTimerLocked()
+	if a.retry.serial == ^uint64(0) {
+		a.retry.due, a.retry.done = time.Time{}, true
+		return false // saturate instead of reusing a callback identity
+	}
+	a.retry.intent = a.operationID
+	a.retry.done = false
+	a.retry.due = now.Add(delay)
+	attempt, serial, intent := a.retry.attempt, a.retry.serial, a.retry.intent
+	a.retry.timer = time.AfterFunc(delay, func() { a.fireFailClosedRetryForSchedule(attempt, serial, intent, path) })
+	return true
 }
 
 // beginFailClosedRetryLocked — взять право на попытку ровно один раз:
@@ -110,8 +133,15 @@ func (a *App) beginFailClosedRetryLocked() bool {
 // beginRetryLaunchLocked — общая точка после begin: перевод state в starting
 // и выбор точки запуска (тесты подменяют retryLaunch). Требует a.mu.
 func (a *App) beginRetryLaunchLocked() func() {
-	a.operationID++
+	previous := a.operationID
+	if err := a.advanceOperationLocked(); err != nil {
+		return nil
+	}
 	id := a.operationID // capture before unlocking: delayed launch cannot adopt a newer Start
+	if a.retry.networkIntent != previous {
+		a.retry.networkBursts, a.retry.networkPath = 0, nil
+	}
+	a.retry.networkIntent = id // carry the bounded episode across automatic IDs
 	a.state.State = "starting"
 	a.state.Error = ""
 	a.state.BlockedReason = ""
@@ -123,17 +153,37 @@ func (a *App) beginRetryLaunchLocked() func() {
 	return launch
 }
 
-// fireFailClosedRetry — сработавший таймер: честный переход в starting и
-// обычный startCore (полный перебор каналов с probe-гейтом). attempt —
-// токен-защита от устаревшего срабатывания: если планировщик уже переигрывали
-// (cancel/новый schedule), старый таймер игнорируется. Счётчик эпизода
-// СОХРАНЯЕТСЯ: следующий schedule (после провала startCore) возьмёт attempt+1
-// — backoff растёт через весь эпизод, а не сбрасывается на каждый прогон.
+// Keep the existing private current-schedule entry point. Actual asynchronous
+// callbacks must carry the registration they captured, never this late snapshot.
 func (a *App) fireFailClosedRetry(attempt int) {
 	a.mu.Lock()
-	if a.closing.Load() || !a.protectionDesired || !a.failClosedState() || attempt != a.retry.attempt {
+	serial, intent := a.retry.serial, a.retry.intent
+	a.mu.Unlock()
+	a.fireFailClosedRetryForSchedule(attempt, serial, intent, nil)
+}
+
+// fireFailClosedRetryForSchedule — сработавший таймер: честный переход в starting и
+// обычный startCore (полный перебор каналов с probe-гейтом). Exact serial/intent
+// не дают старому callback совпасть с повторно использованным attempt. Счётчик эпизода
+// СОХРАНЯЕТСЯ: следующий schedule (после провала startCore) возьмёт attempt+1
+// — backoff растёт через весь эпизод, а не сбрасывается на каждый прогон.
+func (a *App) fireFailClosedRetryForSchedule(attempt int, serial, intent uint64, path *networkPathSource) {
+	a.mu.Lock()
+	if a.retry.timer == nil || attempt != a.retry.attempt || serial != a.retry.serial || intent != a.retry.intent || intent != a.operationID {
 		a.mu.Unlock()
 		return
+	}
+	if a.trustBlocked || a.closing.Load() || !a.protectionDesired || !a.failClosedState() {
+		a.cancelFailClosedRetryLocked() // only this exact callback owns the obsolete schedule
+		a.pushStateLocked()
+		a.mu.Unlock()
+		return
+	}
+	if path != nil && !path.current.Load() {
+		a.armFailClosedRetryLocked(time.Now(), retryDelay(attempt), nil)
+		a.pushStateLocked()
+		a.mu.Unlock()
+		return // this fast-path source was revoked; keep ordinary backoff
 	}
 	if !a.beginFailClosedRetryLocked() {
 		a.mu.Unlock()
@@ -141,21 +191,50 @@ func (a *App) fireFailClosedRetry(attempt int) {
 	}
 	launch := a.beginRetryLaunchLocked()
 	a.mu.Unlock()
+	if launch == nil {
+		return
+	}
 	a.appendLog("info", "fail-closed: сеть могла восстановиться — авто-повтор запуска (полный перебор каналов, probe обязателен)")
 	launch()
 }
 
-// wakeFailClosedRetry — сигнал наблюдателя сети (V2-054): сеть сменилась,
-// ждать остаток backoff на старой сети бессмысленно — попытка немедленно.
+// wakeFailClosedRetry — сигнал наблюдателя сети: новый source может ускорить
+// попытку в пределах общего network budget; после лимита backoff сохраняется.
 // Та же семантика, что fire: счётчик эпизода сохраняется, attempt — обычный
 // startCore с ПОЛНЫМ перебором каналов и обязательным probe (FR-001 не
 // ослаблен; дебаунс наблюдателя не даёт шторму превратить это в самоддо).
 // exactly-once: если таймер уже начал попытку — это no-op.
 func (a *App) wakeFailClosedRetry() {
-	a.mu.Lock()
-	if a.closing.Load() || !a.protectionDesired || !a.failClosedState() || a.retry.timer == nil || a.retry.attempt == 0 {
+	a.wakeFailClosedRetryFor(nil)
+}
+
+func (a *App) wakeFailClosedRetryFor(change *serviceDNSChange) {
+	if change != nil {
+		runtime_.mu.Lock()
+		if runtime_.cc != nil || runtime_.startBusy {
+			runtime_.mu.Unlock()
+			return // actor-less event cannot act on a later Start/session
+		}
+		a.mu.Lock()
+		runtime_.mu.Unlock()
+		if change.kind == "down" || !change.intentCurrentLocked(a) || !change.current() {
+			a.mu.Unlock()
+			return
+		}
+	} else {
+		a.mu.Lock()
+	}
+	if a.trustBlocked || a.closing.Load() || !a.protectionDesired || !a.failClosedState() || a.retry.timer == nil || a.retry.attempt == 0 {
 		a.mu.Unlock()
 		return
+	}
+	path := netEpoch.pathSource()
+	if change != nil {
+		path = change.path
+	}
+	if a.retry.intent != a.operationID || !a.takeNetworkRetryBurstLocked(path) {
+		a.mu.Unlock()
+		return // retain backoff after two fast attempts or a repeated source
 	}
 	if !a.beginFailClosedRetryLocked() {
 		a.mu.Unlock()
@@ -163,6 +242,9 @@ func (a *App) wakeFailClosedRetry() {
 	}
 	launch := a.beginRetryLaunchLocked()
 	a.mu.Unlock()
+	if launch == nil {
+		return
+	}
 	a.appendLog("info", "fail-closed: сеть сменилась — авто-повтор вне очереди (полный перебор каналов, probe обязателен, FR-001)")
 	launch()
 }
@@ -173,18 +255,26 @@ func (a *App) wakeFailClosedRetry() {
 // GetState после ручного действия не должен видеть протухшее расписание);
 // последующий push проекцией подтвердит то же. Требует удержания a.mu.
 func (a *App) cancelFailClosedRetryLocked() {
+	a.cancelPinActivationWakeLocked()
 	a.stopRetryTimerLocked()
 	a.retry.attempt = 0
 	a.retry.due = time.Time{}
 	a.retry.done = false
+	a.retry.intent = 0
+	a.retry.networkIntent, a.retry.networkBursts, a.retry.networkPath = 0, 0, nil
 	a.state.NextRetryAt = ""
 	a.state.RetryAttempt = 0
 }
 
-// stopRetryTimerLocked — остановить таймер (счётчик и due не трогает).
+// Stop requests timer cancellation and revokes callback serial/intent;
+// attempt/due are left to the caller. It never claims the callback has joined.
 func (a *App) stopRetryTimerLocked() {
 	if a.retry.timer != nil {
 		a.retry.timer.Stop()
 		a.retry.timer = nil
+	}
+	a.retry.intent = 0
+	if a.retry.serial != ^uint64(0) {
+		a.retry.serial++
 	}
 }

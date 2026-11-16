@@ -61,12 +61,16 @@ type SecretSlot struct {
 
 // BundlePayload — содержимое бандла.
 type BundlePayload struct {
-	Schema      int             `json:"schema"` // всегда 1
-	CreatedAt   time.Time       `json:"created_at"`
-	DeviceName  string          `json:"device_name,omitempty"`
-	TrustedKeys []TrustedKey    `json:"trusted_keys"`
-	Envelope    json.RawMessage `json:"envelope"` // подписанный channels.json как есть
-	Secrets     []SecretSlot    `json:"secrets"`
+	Schema      int              `json:"schema"` // всегда 1
+	CreatedAt   time.Time        `json:"created_at"`
+	DeviceName  string           `json:"device_name,omitempty"`
+	TrustedKeys []TrustedKey     `json:"trusted_keys"`
+	Envelope    json.RawMessage  `json:"envelope"`           // подписанный channels.json как есть
+	Recovery    json.RawMessage  `json:"recovery,omitempty"` // separately authorized, explicit recovery API only
+	Delivery    *ProfileDelivery `json:"delivery,omitempty"`
+	EpochGrant  []byte           `json:"epoch_grant,omitempty"` // original bytes; offline TUF target, explicit epoch intent
+	PinPolicy   []byte           `json:"pin_policy,omitempty"`  // public adjunct, never stored in the encrypted core
+	Secrets     []SecretSlot     `json:"secrets"`
 }
 
 // ---------- шифрованный контейнер ----------
@@ -107,12 +111,12 @@ func aadFor(version, n, r, p int, salt []byte) []byte {
 }
 
 // KeyFingerprint — отпечаток открытого ключа для показа человеку
-// (первые 16 hex-символов SHA-256).
+// (полный SHA-256; key_id остаётся прежним wire identifier).
 func KeyFingerprint(publicHex string) string {
 	raw, err := hex.DecodeString(publicHex)
 	if err != nil {
 		return "invalid"
 	}
 	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:8])
+	return hex.EncodeToString(sum[:])
 }

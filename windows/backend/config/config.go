@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -27,12 +28,13 @@ import (
 // Config — типизированное подмножество конфига sing-box, необходимое ядру.
 // Неизвестные поля запрещены на верхнем уровне (Parse проверяет имена полей).
 type Config struct {
-	Log          *LogConfig          `json:"log,omitempty"`
-	DNS          *DNSConfig          `json:"dns,omitempty"`
-	Inbounds     []Inbound           `json:"inbounds"`
-	Outbounds    []Outbound          `json:"outbounds"`
-	Route        *RouteConfig        `json:"route"`
-	Experimental *ExperimentalConfig `json:"experimental,omitempty"`
+	Log            *LogConfig               `json:"log,omitempty"`
+	DNS            *DNSConfig               `json:"dns,omitempty"`
+	Inbounds       []Inbound                `json:"inbounds"`
+	Outbounds      []Outbound               `json:"outbounds"`
+	Route          *RouteConfig             `json:"route"`
+	Experimental   *ExperimentalConfig      `json:"experimental,omitempty"`
+	BootstrapHints map[string]BootstrapHint `json:"bootstrap_hints,omitempty"` // application metadata, stripped only at the SDK boundary
 }
 
 // ExperimentalConfig — экспериментальный блок sing-box. Используем только
@@ -49,21 +51,42 @@ type ClashAPIConfig struct {
 }
 
 type LogConfig struct {
+	Disabled  bool   `json:"disabled,omitempty"`
 	Level     string `json:"level,omitempty"`
 	Output    string `json:"output,omitempty"`
 	Timestamp bool   `json:"timestamp,omitempty"`
 }
 
 type DNSConfig struct {
-	Servers  []DNSServer `json:"servers,omitempty"`
-	Rules    []DNSRule   `json:"rules,omitempty"`
-	Strategy string      `json:"strategy,omitempty"`
+	Servers          []DNSServer `json:"servers,omitempty"`
+	Rules            []DNSRule   `json:"rules,omitempty"`
+	Strategy         string      `json:"strategy,omitempty"`
+	Final            string      `json:"final,omitempty"`
+	IndependentCache bool        `json:"independent_cache,omitempty"`
+	CacheCapacity    uint32      `json:"cache_capacity,omitempty"`
 }
 
 type DNSServer struct {
-	Tag     string `json:"tag"`
-	Address string `json:"address"`
-	Detour  string `json:"detour,omitempty"`
+	Tag        string        `json:"tag"`
+	Address    string        `json:"address,omitempty"` // read legacy input only; strict DNS contract rejects it
+	Detour     string        `json:"detour,omitempty"`
+	Type       string        `json:"type,omitempty"`
+	Server     string        `json:"server,omitempty"`
+	ServerPort uint16        `json:"server_port,omitempty"`
+	TLS        *DNSTLSConfig `json:"tls,omitempty"`
+}
+
+type DNSTLSConfig struct {
+	Enabled    bool   `json:"enabled,omitempty"`
+	ServerName string `json:"server_name,omitempty"`
+}
+
+// Resolver for this outbound's service address, never a rule matching a user's
+// queried domain. The pinned engine accepts this object in DialerOptions.
+type DomainResolveOptions struct {
+	Server       string `json:"server"`
+	Strategy     string `json:"strategy,omitempty"`
+	DisableCache bool   `json:"disable_cache,omitempty"`
 }
 
 type DNSRule struct {
@@ -120,12 +143,13 @@ type MultiplexConfig struct {
 }
 
 type Outbound struct {
-	Type       string `json:"type"`
-	Tag        string `json:"tag"`
-	Server     string `json:"server,omitempty"`
-	ServerPort uint16 `json:"server_port,omitempty"`
-	UUID       string `json:"uuid,omitempty"`
-	Password   string `json:"password,omitempty"`
+	Type           string                `json:"type"`
+	Tag            string                `json:"tag"`
+	Server         string                `json:"server,omitempty"`
+	ServerPort     uint16                `json:"server_port,omitempty"`
+	DomainResolver *DomainResolveOptions `json:"domain_resolver,omitempty"`
+	UUID           string                `json:"uuid,omitempty"`
+	Password       string                `json:"password,omitempty"`
 	// V2-051 (shadowtls-цепочка): соединение через другой outbound
 	// (vless-звено → shadowtls-звено). DialerOptions.detour ядра.
 	Detour string `json:"detour,omitempty"`
@@ -163,6 +187,26 @@ type RouteConfig struct {
 	FindProcess bool        `json:"find_process,omitempty"` // V2-048/F10: нужен для process_name-правил
 }
 
+// AllowsServicePort uses the same range parser as normalized outbound validation.
+// It describes only the declared server/hop port set, never route authority.
+func (o Outbound) AllowsServicePort(port uint16) bool {
+	if port == 0 {
+		return false
+	}
+	if o.Type != "hysteria2" || len(o.ServerPorts) == 0 {
+		return port == o.ServerPort
+	}
+	matched := false
+	for _, value := range o.ServerPorts {
+		low, high, err := parsePortRange(value)
+		if err != nil || low == 0 || high == 0 || low > high {
+			return false
+		}
+		matched = matched || int(port) >= low && int(port) <= high
+	}
+	return matched
+}
+
 type RouteRule struct {
 	Protocol     string   `json:"protocol,omitempty"`
 	Action       string   `json:"action,omitempty"`
@@ -170,6 +214,7 @@ type RouteRule struct {
 	IPCidr       []string `json:"ip_cidr,omitempty"`
 	DomainSuffix []string `json:"domain_suffix,omitempty"`
 	ProcessName  []string `json:"process_name,omitempty"` // V2-048/F10: сплит по процессам (Windows)
+	Port         []uint16 `json:"port,omitempty"`
 }
 
 // Parse разбирает и валидирует конфиг. Возвращает ошибку с точной причиной.
@@ -228,7 +273,8 @@ func checkUnknownTopLevel(data []byte) error {
 	}
 	allowed := map[string]bool{
 		"log": true, "dns": true, "inbounds": true, "outbounds": true, "route": true,
-		"experimental": true, // V2-048: clash_api метрики (read-only, loopback)
+		"experimental":    true, // V2-048: clash_api метрики (read-only, loopback)
+		"bootstrap_hints": true,
 	}
 	for k := range raw {
 		if !allowed[k] {
@@ -268,8 +314,13 @@ func (c *Config) Validate() error {
 		return errors.New("route.final is empty")
 	}
 
-	// Плейсхолдеры/приватные ключи запрещены где-либо в конфиге.
-	serialized, err := json.Marshal(c)
+	// Public inline certificate PEM is permitted only in the validated TLS
+	// certificate field. Every other value retains the full placeholder/key gate.
+	forScan, err := withoutInlineCertificates(c)
+	if err != nil {
+		return err
+	}
+	serialized, err := json.Marshal(forScan)
 	if err != nil {
 		return fmt.Errorf("serialize for validation: %w", err)
 	}
@@ -280,6 +331,9 @@ func (c *Config) Validate() error {
 	// Inbounds: теги уникальны и непусты.
 	inTags := make(map[string]struct{}, len(c.Inbounds))
 	for _, in := range c.Inbounds {
+		if in.Type != "mixed" && in.Type != "tun" {
+			return errors.New("inbound family has no protected forwarding adapter")
+		}
 		if strings.TrimSpace(in.Tag) == "" {
 			return errors.New("inbound tag is empty")
 		}
@@ -308,57 +362,17 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	// route.final существует и не direct (защищённый egress обязателен).
-	if _, ok := tags[c.Route.Final]; !ok {
-		return fmt.Errorf("route.final references unknown outbound: %s", c.Route.Final)
-	}
-	if c.Route.Final == "direct" {
-		return errors.New("route.final must not be direct (protected egress required)")
-	}
-
-	// Правила маршрутизации ссылаются на существующие outbound'ы.
-	for _, rule := range c.Route.Rules {
-		if rule.Action != "" {
-			continue // действия (hijack-dns и т.п.) не ссылаются на outbound
-		}
-		if strings.TrimSpace(rule.Outbound) == "" {
-			return errors.New("route rule without outbound or action")
-		}
-		if _, ok := tags[rule.Outbound]; !ok {
-			return fmt.Errorf("route rule references unknown outbound: %s", rule.Outbound)
-		}
+	// Route authority must use the same selector whose complete candidate set
+	// passed the protected-protocol gates above. Tag existence alone admits
+	// direct aliases, unvalidated orphan services and selector-bypassing rules.
+	if err := c.validateRuntimeGraph(tags); err != nil {
+		return err
 	}
 
-	// DNS: ссылки существуют, адреса без плейсхолдеров.
-	if c.DNS != nil {
-		dnsTags := make(map[string]bool, len(c.DNS.Servers))
-		for _, srv := range c.DNS.Servers {
-			if strings.TrimSpace(srv.Tag) == "" {
-				return errors.New("dns server tag is empty")
-			}
-			if strings.TrimSpace(srv.Address) == "" {
-				return errors.New("dns server address is empty")
-			}
-			if ContainsPlaceholder(srv.Address) || ContainsPlaceholder(srv.Detour) {
-				return errors.New("placeholder in dns server address or detour")
-			}
-			if dnsTags[srv.Tag] {
-				return fmt.Errorf("duplicate dns server tag: %s", srv.Tag)
-			}
-			dnsTags[srv.Tag] = true
-			if srv.Detour != "" {
-				if _, ok := tags[srv.Detour]; !ok {
-					return fmt.Errorf("dns server detour references unknown outbound: %s", srv.Detour)
-				}
-			}
-		}
-		for _, rule := range c.DNS.Rules {
-			if rule.Server != "" && !dnsTags[rule.Server] {
-				return fmt.Errorf("dns rule references unknown server: %s", rule.Server)
-			}
-		}
+	if err := c.validateDNS(); err != nil {
+		return err
 	}
-	return nil
+	return c.validateBootstrapHints()
 }
 
 func validateProtectedSelector(c *Config, tags map[string]Outbound) error {
@@ -377,6 +391,14 @@ func validateProtectedSelector(c *Config, tags map[string]Outbound) error {
 	}
 	if !containsString(sel.Outbounds, sel.Default) {
 		return errors.New(`protected selector default is not a candidate`)
+	}
+	// Reject the unsupported node anywhere in the runtime graph, including
+	// unselected aliases/detours. A TLS-looking donor handshake or an added TLS
+	// flag is not an approved inner-encrypted composition/profile migration.
+	for _, outbound := range tags {
+		if err := validateShadowTLSLink(outbound); err != nil {
+			return err
+		}
 	}
 	seen := make(map[string]bool, len(sel.Outbounds))
 	for _, cand := range sel.Outbounds {
@@ -400,10 +422,8 @@ func validateProtectedSelector(c *Config, tags map[string]Outbound) error {
 		if prot.UUID == "" && prot.Password == "" {
 			return fmt.Errorf("protected outbound %q lacks credentials", cand)
 		}
-		// V2-051: shadowtls-цепочка (vless-звено c detour). Сам vless-звено
-		// идёт на loopback (Server=127.0.0.1) — это не «незащищённый прямой»:
-		// транспорт уже зашифрован shadowtls-звеном. Проверяем, что detour
-		// указывает на существующий shadowtls-outbound.
+		// Legacy graph-reference validation grants no payload-confidentiality
+		// exemption. Current ShadowTLS nodes are rejected above for the whole graph.
 		if prot.Detour != "" {
 			up, ok := tags[prot.Detour]
 			if !ok {
@@ -418,13 +438,8 @@ func validateProtectedSelector(c *Config, tags map[string]Outbound) error {
 		if prot.Flow != "" {
 			return fmt.Errorf("protected outbound %q: xtls flow %q is not supported by the pinned core", cand, prot.Flow)
 		}
-		// V2-051: vless-звено внутри shadowtls-цепочки НЕ имеет своего TLS
-		// (шифрование обеспечивает shadowtls-звено; внутри — расшифрованный
-		// поток). Требование «TLS обязателен» к нему неприменимо.
-		if prot.Detour == "" {
-			if err := validateProtectedTLS(prot); err != nil {
-				return fmt.Errorf("protected outbound %q: %w", cand, err)
-			}
+		if err := validateProtectedTLS(prot); err != nil {
+			return fmt.Errorf("protected outbound %q: %w", cand, err)
 		}
 		if err := validateRealityTLS(prot); err != nil {
 			return fmt.Errorf("protected outbound %q: %w", cand, err)
@@ -437,13 +452,6 @@ func validateProtectedSelector(c *Config, tags map[string]Outbound) error {
 		}
 		if err := validateDialFields(prot); err != nil {
 			return fmt.Errorf("protected outbound %q: %w", cand, err)
-		}
-	}
-	// V2-051: shadowtls-звена валидируются вместе с цепочкой (не в селекторе,
-	// но обязаны быть корректны до старта движка).
-	for _, prot := range tags {
-		if err := validateShadowTLSLink(prot); err != nil {
-			return err
 		}
 	}
 	return nil
@@ -572,29 +580,19 @@ func validateRealityTLS(o Outbound) error {
 }
 
 // isProtectedOutboundType — типы outbound'ов, разрешённые в защищённом
-// селекторе. shadowtls сам по себе НЕ защищает (это транспорт-туннель),
-// защищает пара shadowtls+vless — в селектор попадает vless-звено.
+// селекторе. ShadowTLS camouflage is not payload encryption; the current
+// VLESS-over-ShadowTLS composition is not admitted as a protected runtime graph.
 func isProtectedOutboundType(t string) bool {
 	return t == "vless" || t == "hysteria2"
 }
 
-// validateShadowTLSLink — правила shadowtls-звена цепочки (V2-051):
-// v3, пароль задан, маскировочный TLS к донору обязателен. Звено не входит
-// в селектор (детурится vless-звеном), но валидируется здесь же.
+// ShadowTLS has no supported inner-encrypted composition in the current product
+// graph. A future version requires explicit profile/server/cipher migration.
 func validateShadowTLSLink(o Outbound) error {
 	if o.Type != "shadowtls" {
 		return nil
 	}
-	if o.Version != 3 {
-		return fmt.Errorf("shadowtls %q: only version 3 is allowed (got %d)", o.Tag, o.Version)
-	}
-	if o.Password == "" {
-		return fmt.Errorf("shadowtls %q: password is required", o.Tag)
-	}
-	if o.Server == "" || o.ServerPort == 0 {
-		return fmt.Errorf("shadowtls %q: server/port required", o.Tag)
-	}
-	return validateProtectedTLS(o)
+	return fmt.Errorf("shadowtls %q: unsupported protected payload confidentiality; an approved inner-encrypted composition is required", o.Tag)
 }
 
 func validateProtectedTLS(o Outbound) error {
@@ -607,6 +605,9 @@ func validateProtectedTLS(o Outbound) error {
 	if tlsBool(o.TLS, "insecure") {
 		return errors.New("tls.insecure is forbidden: certificate verification cannot be disabled")
 	}
+	if _, present := o.TLS["certificate_public_key_sha256"]; present {
+		return errors.New("SPKI-only verification bypasses standard hostname/validity checks and is not supported")
+	}
 	if tlsString(o.TLS, "server_name") == "" {
 		return errors.New("tls.server_name is required")
 	}
@@ -617,24 +618,90 @@ func validateProtectedTLS(o Outbound) error {
 }
 
 func validatePinnedCertificate(path string) error {
+	_, err := readPinnedCertificates(path)
+	return err
+}
+
+// Bounded legacy public bundle read. This is intentionally not used by the
+// in-memory runtime identity digest; the native TLS verifier still checks peers.
+func readPinnedCertificates(path string) ([]*x509.Certificate, error) {
 	if ContainsPlaceholder(path) {
-		return errors.New("certificate path still contains a placeholder")
+		return nil, errors.New("certificate path still contains a placeholder")
 	}
-	info, err := os.Stat(path)
+	const limit = 1 << 20
+	info, err := os.Lstat(path)
 	if err != nil {
-		return fmt.Errorf("pinned certificate: %w", err)
+		return nil, fmt.Errorf("pinned certificate: %w", err)
 	}
-	if info.IsDir() {
-		return errors.New("pinned certificate path is a directory")
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, errors.New("pinned certificate file must be bounded and regular")
 	}
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("pinned certificate: %w", err)
+		return nil, errors.New("pinned certificate file cannot be opened")
 	}
-	if !pemPool(data) {
-		return errors.New("pinned certificate is not valid PEM")
+	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		return nil, errors.New("pinned certificate file changed while opening")
 	}
-	return nil
+	data, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil || len(data) > limit {
+		return nil, errors.New("pinned certificate read exceeds bound")
+	}
+	beginCount := bytes.Count(data, []byte("-----BEGIN "))
+	var certs []*x509.Certificate
+	for data = bytes.TrimSpace(data); len(data) > 0; data = bytes.TrimSpace(data) {
+		if len(certs) >= 64 || !bytes.HasPrefix(data, []byte("-----BEGIN CERTIFICATE-----")) {
+			return nil, errors.New("pinned certificate bundle has unexpected data")
+		}
+		block, rest := pem.Decode(data)
+		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			return nil, errors.New("pinned certificate bundle is invalid")
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil || !cert.NotAfter.After(cert.NotBefore) {
+			return nil, errors.New("pinned certificate has invalid DER or dates")
+		}
+		certs = append(certs, cert)
+		data = rest
+	}
+	if len(certs) == 0 || beginCount != len(certs) {
+		return nil, errors.New("pinned certificate bundle contains skipped blocks")
+	}
+	return certs, nil
+}
+
+var ErrNoCurrentPinnedCertificate = errors.New("pinned certificate bundle has no current validity")
+
+// PinnedCertificateSnapshot owns the exact public bytes sent to the worker.
+// Expired entries are excluded; a future rotation entry cannot make an otherwise
+// inactive bundle usable. A CA bundle does not reveal the peer leaf's NotAfter.
+func PinnedCertificateSnapshot(path string, now time.Time) ([]string, time.Time, error) {
+	certs, err := readPinnedCertificates(path)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	var deadline time.Time
+	var bundle []string
+	for _, cert := range certs {
+		if !now.Before(cert.NotAfter) {
+			continue
+		}
+		bundle = append(bundle, string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})))
+		if !now.Before(cert.NotBefore) && now.Before(cert.NotAfter) && (deadline.IsZero() || cert.NotAfter.Before(deadline)) {
+			deadline = cert.NotAfter
+		}
+	}
+	if deadline.IsZero() {
+		return nil, time.Time{}, ErrNoCurrentPinnedCertificate
+	}
+	return bundle, deadline, nil
+}
+
+func PinnedCertificateDeadline(path string, now time.Time) (time.Time, error) {
+	_, deadline, err := PinnedCertificateSnapshot(path, now)
+	return deadline, err
 }
 
 func pemPool(data []byte) bool {

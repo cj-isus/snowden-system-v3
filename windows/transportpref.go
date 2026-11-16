@@ -30,6 +30,7 @@ package main
 //             остальное — CF-путь на фиксированных сетях дешевле UDP.
 
 import (
+	"context"
 	"sort"
 
 	"github.com/snowden-system/windows/backend/render"
@@ -103,11 +104,10 @@ func preferredChannelForNetworkChange(descriptors []render.ChannelDescriptor, cu
 }
 
 // currentNetClass — класс сети сейчас (факт ОС; «» = неизвестно). Класс
-// берётся из мгновенного факта MIB (netFingerprintOS → adapterNetClassByIndex):
-// вызов живёт на пути startCore — PowerShell-спавн здесь добавлял бы секунды
-// к каждому запуску. Отказ сбора fingerprint = нет класса (прежнее поведение).
-func currentNetClass() string {
-	fp := netFingerprintOS()
+// берётся из того же native route/source/LUID snapshot. Caller context и общий
+// sample budget не теряются; PowerShell/дополнительного MIB read здесь нет.
+func currentNetClass(ctx context.Context) string {
+	fp := netFingerprintOS(ctx)
 	if !fp.present() {
 		return ""
 	}

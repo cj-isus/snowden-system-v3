@@ -65,7 +65,7 @@ func (st *healthState) verdict(now time.Time) string {
 	switch {
 	case st.FAIL > 0 && (st.LastOutcome == "fail" || st.OK == 0 || st.LastFailAt.After(st.LastOKAt)):
 		return "failing"
-	case !st.LastOKAt.IsZero() && now.Sub(st.LastOKAt) <= evidenceFreshMax:
+	case !st.LastOKAt.IsZero() && !now.Before(st.LastOKAt) && now.Sub(st.LastOKAt) <= evidenceFreshMax:
 		return "healthy"
 	default:
 		return "no_data"
@@ -119,8 +119,11 @@ var chanHealth = &channelHealth{items: map[string]*healthState{}}
 //
 // Мерцания (восстановившаяся fastReprobe-серия) не кормят FAIL — они
 // поглощаются до «подтверждённого отказа» (семантика V2-037).
-func (h *channelHealth) observeResult(epochNum int, channelID string, ok bool, failClass string, now time.Time) {
-	h.observeSrc(epochNum, channelID, ok, failClass, now, srcProbe)
+func (h *channelHealth) observeResult(epochNum int, channelID string, ok bool, failClass string, now time.Time) bool {
+	if !ok && measurementOnlyFailure(failClass) {
+		return false // measurement uncertainty cannot quarantine every healthy channel
+	}
+	return h.observeSrc(epochNum, channelID, ok, failClass, now, srcProbe)
 }
 
 // observeBg — фоновый факт неактивного канала (D1, bgprobe.go): ТОЛЬКО
@@ -136,20 +139,39 @@ func (h *channelHealth) observeBg(epochNum int, channelID, failClass string, now
 // srcBackground); вердикт у всех источников общий (единая точка UI/scoring).
 // Отказ от защищённого probe дополнительно увеличивает сильный счётчик
 // ProbeFails (D2: сильные факты vs слабые фоновые — quarantine.go).
-func (h *channelHealth) observeSrc(epochNum int, channelID string, ok bool, failClass string, now time.Time, src string) {
+func (h *channelHealth) observeSrc(epochNum int, channelID string, ok bool, failClass string, now time.Time, src string) bool {
 	if channelID == "" {
-		return
+		return false
 	}
-	_, _, netClass := netEpoch.current()
-	factsCache.mu.Lock()
-	isp := factsCache.facts.ISP
-	factsCache.mu.Unlock()
+	isp := cachedFactsISP(epochNum)
+	recorded := false
+	if !netEpoch.whileCurrent(epochNum, func(netClass string) {
+		recorded = h.observeInEpoch(epochNum, netClass, isp, channelID, ok, failClass, now, src)
+	}) {
+		return false
+	}
+	return recorded
+}
+
+// Caller holds netEpoch.mu. This entry joins health to an App publication
+// without recursively locking the epoch. No cache, App lock or I/O inside.
+func (h *channelHealth) observeInEpoch(epochNum int, netClass, isp, channelID string, ok bool, failClass string, now time.Time, src string) bool {
+	if epochNum <= 0 || epochNum != netEpoch.num || channelID == "" || src == srcProbe && !ok && measurementOnlyFailure(failClass) {
+		return false
+	}
+	if src == srcBackground && now.IsZero() {
+		return false
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.epoch != epochNum {
-		h.resetLocked(epochNum) // первая запись новой эпохи открывает чистый реестр
+		h.resetLocked(epochNum)
 	}
 	st := h.items[channelID]
+	if src == srcBackground && st != nil &&
+		(!st.LastOKAt.IsZero() && !now.After(st.LastOKAt) || !st.LastFailAt.IsZero() && !now.After(st.LastFailAt)) {
+		return false // late/ambiguous weak sample cannot replace a newer channel outcome
+	}
 	if st == nil {
 		st = &healthState{}
 		h.items[channelID] = st
@@ -164,14 +186,15 @@ func (h *channelHealth) observeSrc(epochNum int, channelID string, ok bool, fail
 		st.LastOutcome = "fail"
 		st.LastClass = failClass
 		if src == srcProbe {
-			st.ProbeFails++ // сильный счётчик D2: только защищённый probe
+			st.ProbeFails++
 		}
 		h.events = append(h.events, failEvent{ID: channelID, At: now, Class: failClass, Src: src, NetClass: netClass, ISP: isp})
-		if len(h.events) > incidentRingCap { // кольцо: новейшие остаются
+		if len(h.events) > incidentRingCap {
 			h.events = h.events[len(h.events)-incidentRingCap:]
 		}
 	}
 	st.LastSrc = src
+	return true
 }
 
 // failureEvents — КОПИЯ кольца подтверждённых отказов эпохи (для D3-
@@ -212,20 +235,20 @@ func (h *channelHealth) resetLocked(epochNum int) {
 
 // snapshot — текущий агрегат для UI/гейта (вердикты — healthState.verdict).
 func (h *channelHealth) snapshot(now time.Time) ChannelHealth {
+	// Same order as observeSrc: a snapshot must never label old items with a
+	// newer epoch, or acquire epoch.mu while already holding health.mu.
+	netEpoch.mu.Lock()
+	defer netEpoch.mu.Unlock()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	out := ChannelHealth{Epoch: h.epoch, Chans: []ChannelHealthEntry{}}
-	if en, started, cls := netEpoch.current(); en > 0 {
-		// Реестр мог не открыться событием эпохи (эпоха есть, наблюдений нет).
-		if h.epoch != en {
-			out.Epoch = en
-		}
-		if !started.IsZero() {
-			out.Started = started.Format(time.RFC3339)
-		}
-		out.NetCls = cls
+	out := ChannelHealth{Epoch: netEpoch.num, NetCls: netEpoch.netCls, Chans: []ChannelHealthEntry{}}
+	if !netEpoch.started.IsZero() {
+		out.Started = netEpoch.started.Format(time.RFC3339)
 	}
 	out.Now = now.Format(time.RFC3339)
+	if netEpoch.num <= 0 || h.epoch != netEpoch.num {
+		return out // no observations for this physical-network epoch
+	}
 	for id, st := range h.items {
 		e := ChannelHealthEntry{
 			ID: id, OK: st.OK, FAIL: st.FAIL,
@@ -243,32 +266,39 @@ func (h *channelHealth) snapshot(now time.Time) ChannelHealth {
 	return out
 }
 
-// currentChannelEpoch — номер эпохи для observeResult (0 = эпоха не открыта:
-// записи всё равно лягут в реестр 0 и умрут при первом bump — приемлемо).
+// currentChannelEpoch — usable epoch for observations. Zero means no observed
+// epoch or an explicit down event; the retained historical number is not erased.
 func currentChannelEpoch() int {
-	n, _, _ := netEpoch.current()
-	return n
+	netEpoch.mu.Lock()
+	defer netEpoch.mu.Unlock()
+	if netEpoch.knownDown || netEpoch.powerBlocked.Load() {
+		return 0
+	}
+	return netEpoch.num
 }
 
 // recordProbeOutcome — мост из lifecycle: исход probe активного канала.
 // classForFail вычисляется лениво (failclass.go) только на отказ.
 func (a *App) recordProbeOutcome(ok bool, report *core.ProbeReport) {
-	if ok || report == nil {
-		if ok {
-			chanHealth.observeResult(currentChannelEpoch(), a.activeChannelIDForHealth(), true, "", time.Now())
-		}
+	if report == nil {
 		return
 	}
-	// Порт канала — основной признак классификатора (V2-068, аудит D1);
-	// порт probe-цели — только фолбэк. currentRuntimeConfig() может быть nil
-	// (ядро уже остановлено при разборе отчёта) — раньше это был бы nil-deref.
 	cc := currentRuntimeConfig()
-	channelPort, probePort := 0, 0
-	if cc != nil {
-		channelPort, probePort = cc.TunnelPort, probeTunnelPort(cc.ProbeTargets)
+	if cc == nil || ok != report.AllPassed {
+		return
 	}
-	fc := ClassifyFailure(report, channelPort, probePort)
-	chanHealth.observeResult(currentChannelEpoch(), a.activeChannelIDForHealth(), false, fc.Code, time.Now())
+	fc := ClassifyFailure(report, 0, 0)
+	a.recordSessionProbe(cc, report, fc.Code)
+}
+
+// Observers acquire operationMu; lifecycle owners use the explicit Locked
+// entry. Both publish through the same intent/session/epoch transaction.
+func (a *App) recordSessionProbe(cc *render.ClientConfig, report *core.ProbeReport, failureClass string) bool {
+	return a.publishObservation(cc, report, observationHealth, failureClass)
+}
+
+func (a *App) recordSessionProbeLocked(cc *render.ClientConfig, report *core.ProbeReport, failureClass string) bool {
+	return a.publishObservationLocked(cc, report, observationHealth, failureClass)
 }
 
 // activeChannelIDForHealth — id активного канала ("" = нет данных).
@@ -336,19 +366,31 @@ type ChannelIndependenceInfo struct {
 // выход — детерминированная policy-модель, не физика. UI-контракт по PLAN §4.1.5
 // (contract.ts) будет добавлен отдельным шагом C2; биндинг уже честен.
 func (a *App) GetChannelIndependence() []ChannelIndependenceInfo {
-	chans, err := render.LoadDescriptors()
+	snapshot, err := render.LoadDescriptorSnapshot()
 	if err != nil {
-		return nil
+		return []ChannelIndependenceInfo{}
 	}
-	var out []ChannelIndependenceInfo
+	graph, err := render.BuildDependencyGraph(snapshot.Channels, snapshot.Profile)
+	if err != nil {
+		return []ChannelIndependenceInfo{}
+	}
+	chans := snapshot.Channels
+	out := []ChannelIndependenceInfo{}
 	for i := 0; i < len(chans); i++ {
+		if !chans[i].Enabled {
+			continue
+		}
 		for j := i + 1; j < len(chans); j++ {
-			score := render.Independence(chans[i], chans[j])
+			if !chans[j].Enabled {
+				continue
+			}
+			comparison := graph.Compare(chans[i].ID, chans[j].ID)
+			score := comparison.RankHint
 			out = append(out, ChannelIndependenceInfo{
 				A:          chans[i].ID,
 				B:          chans[j].ID,
 				Score:      score,
-				SharedFDs:  render.IndependenceSummary(chans[i], chans[j]),
+				SharedFDs:  comparison.Summary(),
 				BelowLimit: score < render.IndependenceThreshold,
 			})
 		}

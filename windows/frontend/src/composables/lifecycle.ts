@@ -1,8 +1,9 @@
 /**
  * Обёртка lifecycle-действий для UI (старт/стоп/probe/логи/диагностика).
- * Ошибки backend показываются как есть (без секретов), состояние — только факты.
+ * Отказ команды показывает локальный текст действия, без raw backend ошибки.
  */
 import { api } from '@/api/backend'
+import { uiFailure } from '../api/failureMessages'
 import { toast } from './toast'
 import { startVpn, stopVpn } from './backendState'
 
@@ -17,16 +18,16 @@ async function stop(): Promise<void> {
 async function runProbe(): Promise<void> {
   try {
     await api.runProbe()
-  } catch (e) {
-    toast('error', e instanceof Error ? e.message : String(e))
+  } catch {
+    toast('error', uiFailure.probe)
   }
 }
 
 async function openLogs(): Promise<void> {
   try {
     await api.openLogsDir()
-  } catch (e) {
-    toast('error', e instanceof Error ? e.message : String(e))
+  } catch {
+    toast('error', uiFailure.openLogs)
   }
 }
 

@@ -5,21 +5,19 @@ package main
 // probe-отчёт структурен; операции асинхронны и не блокируют UI.
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/snowden-system/windows/backend/config"
 	"github.com/snowden-system/windows/backend/core"
+	"github.com/snowden-system/windows/backend/metadata"
 	"github.com/snowden-system/windows/backend/render"
 	"github.com/snowden-system/windows/backend/secretvault"
 )
@@ -60,8 +58,10 @@ type coreRuntime struct {
 	manager   *core.Manager
 	engine    *core.Engine
 	cc        *render.ClientConfig
+	dns       *serviceDNSHandoff // original observer lease for this actual runtime actor
 	startBusy bool
-	watchOn   bool // сторожевой тикер запущен
+	watchdog  *appWatchdogTask // one original App-lifetime task, retained through retirement
+	watchOn   bool             // deprecated reservation mirror for existing fixture source; never a liveness/permission gate
 
 	metrics *metricsState // read-only метрики clash_api (V2-048), nil = выключены
 }
@@ -71,48 +71,58 @@ type coreRuntime struct {
 // «заметить отказ быстрее пользователя, не устраивая самоддо».
 const watchdogInterval = 30 * time.Second
 
-// ensureWatchdog — ровно один сторож на процесс. Раньше стартовали его из
-// ДВУХ мест (startup и успешный startCore) с независимыми guard'ами: при
-// --auto-connect оба успевали до первого флага → два тикера → два probe каждые
-// 30с (самоддо SOCKS-инбаунда и двойные failover-решения). Единая точка входа.
-func (a *App) ensureWatchdog() {
-	runtime_.mu.Lock()
-	firstWatch := !runtime_.watchOn
-	runtime_.watchOn = true
-	runtime_.mu.Unlock()
-	if firstWatch {
-		go a.watchCore(context.Background())
-	}
-}
-
 var runtime_ = &coreRuntime{}
+
+var engineSessionSequence atomic.Uint64
 
 // renderAndPrepare — сборка конфига из дескрипторов + секретов и подготовка
 // ядра к старту. Вызывается перед Start (или из Reload); channelID —
 // желаемый default селектора ("" = первый live-verified).
 //
-// V2-037: перед рендером выполняется preflight-резолв хостнеймов vless+ws
-// каналов (мультистратегийный, с кэшем) — рендер получает IP-диал
-// (server=IP, SNI/Host=домен), и старт канала перестаёт зависеть от
-// bootstrap-DNS sing-box.
+// Preflight supplies expiring per-channel address hints. The renderer retains
+// the original service hostname and TLS/WS identity; the original worker owns
+// one-use diagnostic seeding and fresh resolution for later physical dials.
 func (a *App) renderAndPrepare(channelID string) (*render.ClientConfig, error) {
 	return a.renderAndPrepareContext(context.Background(), channelID, nil)
 }
 
 func (a *App) renderAndPrepareContext(ctx context.Context, channelID string, metrics *metricsState) (*render.ClientConfig, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	ctx = netEpoch.scopeContext(ctx)
+	if !lifecyclePublicationCurrent(ctx) {
+		return nil, core.ErrPreflightScope
 	}
 	src := &vaultSecrets{vault: a.vault}
-	channels, err := render.LoadDescriptors()
+	snapshot, err := render.LoadDescriptorSnapshot()
 	if err != nil {
 		return nil, err
 	}
-	// Пины HY2: по каналу из generic-каталога (FR-002), legacy-файл — только
-	// для исторического channel-a-hy2 (V2-037: раньше хардкод ID ломал
-	// envelope-доставку новых HY2-каналов).
+	channels := snapshot.Channels
+	// Capability admission precedes pins, preflight, metrics and all secret reads.
+	// A requested unsupported/disabled channel cannot fall back to another default.
+	if channelID != "" {
+		admitted := false
+		for _, channel := range channels {
+			if channel.ID != channelID {
+				continue
+			}
+			if err := metadata.Channel(channel).CheckProtectedPayload(); err != nil {
+				return nil, fmt.Errorf("канал %s: %w", channelID, err)
+			}
+			admitted = len(render.Selectable([]render.ChannelDescriptor{channel})) == 1
+			break
+		}
+		if !admitted {
+			return nil, fmt.Errorf("канал %q не найден, выключен или не разрешён для выбора", channelID)
+		}
+	}
+	if snapshot.Profile.PinPolicySHA256 != "" && len(render.Selectable(channels)) == 0 {
+		return nil, metadata.ErrPinPolicyRestricted
+	}
+	// Signed inline HY2 pins never consult the filesystem. Profiles without
+	// this capability retain manual legacy pins; historical fallback is scoped
+	// to channel-a-hy2 and every lookup requires a portable ChannelID.
 	for _, ch := range channels {
-		if ch.Protocol != "hysteria2" {
+		if !ch.Enabled || ch.Protocol != "hysteria2" || ch.HY2Pins != nil {
 			continue
 		}
 		if pin := pinForChannel(ch.ID); pin != "" {
@@ -120,50 +130,15 @@ func (a *App) renderAndPrepareContext(ctx context.Context, channelID string, met
 		}
 	}
 
-	// Preflight-резолв: только vless+ws (их адрес — домен за CDN); HY2 и
-	// REALITY диалят origin по IP из дескриптора.
-	overrides := map[string]string{}
-	resolver := &core.PreflightResolver{
-		CachePath: filepath.Join(appDataDir(), "resolve-cache.json"),
-		Logf: func(format string, args ...any) {
-			a.appendLog("info", fmt.Sprintf(format, args...))
-		},
+	bootstrapHints, err := a.prepareBootstrap(ctx, snapshot)
+	if err != nil {
+		return nil, err
 	}
-	resolveCtx, resolveCancel := context.WithTimeout(ctx, 6*time.Second)
-	for _, ch := range channels {
-		if !ch.Enabled || ch.Protocol != "vless" || ch.Transport != "ws" {
-			continue
-		}
-		if net.ParseIP(ch.Hostname) != nil {
-			continue
-		}
-		ip, _, rerr := resolver.Resolve(resolveCtx, ch.Hostname)
-		if rerr != nil {
-			a.appendLog("warn", "preflight: "+ch.Hostname+" не резолвится ("+rerr.Error()+") — dial по имени (bootstrap-DNS)")
-			continue
-		}
-		overrides[ch.Hostname] = ip
-	}
-	resolveCancel()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
 	withTUN := tunRequested()
-	// Валидация запроса ДО рендера: несуществующий/не включённый канал —
-	// ошибка, а не тихий откат к первому (fail-closed, не угадывание).
-	if channelID != "" {
-		known := false
-		for _, ch := range channels {
-			if ch.ID == channelID && ch.Enabled {
-				known = true
-				break
-			}
-		}
-		if !known {
-			return nil, fmt.Errorf("канал %q не найден или выключен", channelID)
-		}
-	}
 	var opts []render.RenderOption
 	if channelID != "" {
 		opts = append(opts, render.WithDefaultChannel(channelID))
@@ -171,29 +146,44 @@ func (a *App) renderAndPrepareContext(ctx context.Context, channelID string, met
 	if withTUN {
 		opts = append(opts, render.WithTUN())
 	}
-	if len(overrides) > 0 {
-		opts = append(opts, render.WithDialOverrides(overrides))
+	if len(bootstrapHints) > 0 {
+		hints := make(map[string]config.BootstrapHint, len(bootstrapHints))
+		for id, hint := range bootstrapHints {
+			hints[id] = config.BootstrapHint{Host: hint.Host, Address: hint.Address, ObservedAt: hint.ObservedAt, Until: hint.Until}
+		}
+		opts = append(opts, render.WithBootstrapHints(hints))
 	}
-	// Preparing a candidate must not truncate the running engine's log.
-	enginePath := engineFileLogPath()
-	_ = os.MkdirAll(logsDir(), 0o700)
-	opts = append(opts, render.WithEngineLogPath(enginePath))
+	// No raw SDK log file is requested. Candidate preparation does not create
+	// a log directory or touch a previous engine.log; App events are separate.
 	// One controller endpoint/secret per engine. A selector-only switch keeps
 	// that session; a new engine publishes its metrics only after probe pass.
 	if metrics == nil {
 		metrics = newMetricsSession()
 	}
 	opts = append(opts, metrics.renderOption()...)
+	now, err := a.trustClock().Now(snapshot.Profile.ClockFloor)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, render.WithValidityTime(now))
+	opts = append(opts, render.WithSplitDirect(snapshot.SplitDirect), render.WithProfileProvenance(snapshot.Profile))
 	cc, err := render.RenderFrom(channels, src, opts...)
 	if err != nil {
 		return nil, err
 	}
+	if !lifecyclePublicationCurrent(ctx) {
+		return nil, core.ErrPreflightScope // never hand off a candidate from a revoked path
+	}
+	cc.SessionID = engineSessionSequence.Add(1)
 	return cc, nil
 }
 
 // pinForChannel — путь к pin-PEM канала: generic-каталог pins/<id>.pem в
 // AppData рядом с хранилищем; для channel-a-hy2 — исторические расположения.
 func pinForChannel(channelID string) string {
+	if !metadata.ValidChannelID(channelID) {
+		return ""
+	}
 	if p := filepath.Join(vaultDir(), "pins", channelID+".pem"); fileExists(p) {
 		return p
 	}
@@ -227,13 +217,37 @@ func (a *App) startCore() {
 }
 
 func (a *App) startCoreGeneration(id uint64) {
-	a.operationMu.Lock()
-	defer a.operationMu.Unlock()
-	ctx, cancel, ok := a.beginOperation(id)
+	outcome := a.newLifecycleOutcome(id, "запуск")
+	defer outcome.finish(nil)
+	a.startCoreGenerationBody(id, outcome)
+	outcome.returned = true
+}
+
+func (a *App) startCoreGenerationBody(id uint64, outcome *appLifecycleOutcome) {
+	observerJoinErr := a.joinTerminalNetworkObserversBeforeStart(id)
+	if !outcome.acquire() {
+		return
+	}
+	if !outcome.originalCurrent() {
+		return
+	}
+	if err := a.ensureWatchdog(); err != nil {
+		a.failCoreForIntent(id, "контроль туннеля не подтверждён", err)
+		return
+	}
+	if observerJoinErr == nil {
+		if err := a.recoverPowerContinuityBeforeOperation(id); err != nil {
+			a.failCoreForIntent(id, "наблюдатели после сна не восстановлены", err)
+			return
+		}
+	}
+	ctx, cancel, ok := a.beginOperation(id, outcome.registration.source)
 	if !ok {
 		return
 	}
 	defer a.endOperation(cancel)
+	cancellationCause := observerJoinErr
+	defer func() { a.finishStartCancellation(ctx, id, cancellationCause) }()
 	runtime_.mu.Lock()
 	if runtime_.startBusy {
 		runtime_.mu.Unlock()
@@ -255,15 +269,19 @@ func (a *App) startCoreGeneration(id uint64) {
 	a.state.State = "starting"
 	a.state.Error = ""
 	a.state.BlockedReason = "" // прошлый BLOCKED (например, исчерпан failover) не висит над новым запуском
-	a.pushStateLocked()
 	a.mu.Unlock()
+	a.pushState()
 	// Protect even render/preflight failures on the first Connect, before
 	// there is a Manager to tear down. No automatic error releases this policy.
 	if tunRequested() {
 		if err := a.protectionPolicy().Arm(); err != nil {
-			a.failCore("WFP: барьер не подтверждён до подготовки конфига", err)
+			a.failCoreForIntent(id, "WFP: барьер не подтверждён до подготовки конфига", err)
 			return
 		}
+	}
+	if observerJoinErr != nil {
+		a.failCoreForIntent(id, "сетевой наблюдатель или DNS-обработчик не завершён", observerJoinErr)
+		return
 	}
 	// Авто-выбор первого канала по классу сети (V2-054): mobile → HY2/QUIC
 	// первым (CGNAT-валоны бьют по CDN-пути, V2-026), wifi/ethernet → vless+ws
@@ -272,7 +290,7 @@ func (a *App) startCoreGeneration(id uint64) {
 	// нет класса/нет совпадения/дескрипторы нечитаемы — прежний pickDefault
 	// (рендер с "" = первый live-verified из дескрипторов).
 	defaultCh := ""
-	if netClass := currentNetClass(); netClass != "" {
+	if netClass := currentNetClass(ctx); netClass != "" {
 		if descs, derr := render.LoadDescriptors(); derr == nil {
 			if want := pickDefaultChannel(descs, netClass); want != "" {
 				defaultCh = want
@@ -282,15 +300,25 @@ func (a *App) startCoreGeneration(id uint64) {
 	}
 	cc, err := a.renderAndPrepareContext(ctx, defaultCh, nil)
 	if err != nil {
+		cancellationCause = err
 		if ctx.Err() == nil {
-			a.failCore("рендер конфига", err)
+			a.failCoreForIntent(id, "рендер конфига", err)
 		}
 		return
 	}
 
-	if !a.startWithProbeContext(ctx, cc) {
+	if startErr := a.startWithProbeResult(ctx, cc); startErr != nil {
+		cancellationCause = startErr
 		if ctx.Err() != nil {
 			return
+		}
+		if trustFailureCode(startErr) != "" {
+			a.failTrustCoreIntentLocked(id, startErr)
+			return
+		}
+		if channelRetryBlocked(startErr) {
+			a.failCoreForIntent(id, "владение или очистка процессов не подтверждены", startErr)
+			return // local custody failure is not a reason to cycle through channels
 		}
 		a.appendLog("warn", "запуск: protected probe на "+cc.SelectorDefault+" не прошёл")
 		// Failover-on-start (V2-040): провал probe на первом канале не является
@@ -301,12 +329,16 @@ func (a *App) startCoreGeneration(id uint64) {
 		// честный error (fail-closed, FR-001: никогда direct).
 		channels, lerr := render.LoadDescriptors()
 		if lerr != nil {
-			a.failCore("запуск", fmt.Errorf("protected probe failed и дескрипторы нечитаемы: %w", lerr))
+			cancellationCause = lerr
+			if ctx.Err() != nil {
+				return
+			}
+			a.failCoreForIntent(id, "запуск", fmt.Errorf("protected probe failed и дескрипторы нечитаемы: %w", lerr))
 			return
 		}
 		others := failoverCandidates(channels, map[string]bool{}, cc.SelectorDefault)
 		if len(others) == 0 {
-			a.failCore("запуск", fmt.Errorf("protected probe failed на канале %s; других validated каналов нет (fail-closed)", cc.SelectorDefault))
+			a.failCoreForIntent(id, "запуск", fmt.Errorf("protected probe failed на канале %s; других validated каналов нет (fail-closed)", cc.SelectorDefault))
 			return
 		}
 		a.appendLog("warn", "запуск: probe канала "+cc.SelectorDefault+" не прошёл — перебираю альтернативные каналы (failover-on-start)")
@@ -315,10 +347,23 @@ func (a *App) startCoreGeneration(id uint64) {
 			if ctx.Err() != nil {
 				return
 			}
-			candCC, ok := a.startChannelWithProbeContext(ctx, cand)
-			if !ok {
+			candCC, candidateErr := a.startChannelWithProbeResult(ctx, cand)
+			if candidateErr != nil {
+				cancellationCause = candidateErr
+				if ctx.Err() != nil {
+					return
+				}
+				if trustFailureCode(candidateErr) != "" {
+					a.failTrustCoreIntentLocked(id, candidateErr)
+					return
+				}
+				if channelRetryBlocked(candidateErr) {
+					a.failCoreForIntent(id, "владение или очистка процессов не подтверждены", candidateErr)
+					return
+				}
 				continue
 			}
+			cancellationCause = nil
 			cc = candCC
 			started = true
 			break
@@ -339,10 +384,23 @@ func (a *App) startCoreGeneration(id uint64) {
 				if ctx.Err() != nil {
 					return
 				}
-				candCC, ok := a.startChannelWithProbeContext(ctx, cand)
-				if !ok {
+				candCC, candidateErr := a.startChannelWithProbeResult(ctx, cand)
+				if candidateErr != nil {
+					cancellationCause = candidateErr
+					if ctx.Err() != nil {
+						return
+					}
+					if trustFailureCode(candidateErr) != "" {
+						a.failTrustCoreIntentLocked(id, candidateErr)
+						return
+					}
+					if channelRetryBlocked(candidateErr) {
+						a.failCoreForIntent(id, "владение или очистка процессов не подтверждены", candidateErr)
+						return
+					}
 					continue
 				}
+				cancellationCause = nil
 				cc = candCC
 				started = true
 				break
@@ -352,7 +410,7 @@ func (a *App) startCoreGeneration(id uint64) {
 			return
 		}
 		if !started {
-			a.failCore("запуск", fmt.Errorf("все каналы не прошли probe (%s и %v), включая повторную серию — fail-closed (FR-001)", cc.SelectorDefault, others))
+			a.failCoreForIntent(id, "запуск", fmt.Errorf("все каналы не прошли probe (%s и %v), включая повторную серию — fail-closed (FR-001)", cc.SelectorDefault, others))
 			return
 		}
 		a.appendLog("info", "запуск: канал "+cc.SelectorDefault+" прошёл probe (автоперебор)")
@@ -361,35 +419,23 @@ func (a *App) startCoreGeneration(id uint64) {
 	// не должен плодить тикеры. Явный Start также сбрасывает состояние
 	// failover: прошлый инцидент не должен копиться в новом запуске.
 	if ctx.Err() != nil || !a.operationCurrent(id) {
-		return // Stop owns cleanup; an obsolete generation cannot publish running.
+		return // explicit Stop or the cancellation finalizer owns cleanup
 	}
-	a.ensureWatchdog()
-	a.fpol.hardReset()
-	a.sm.markStarted(time.Now()) // C1 (V2-060): туннель поднят (в т.ч. после авто-ретрая) → HEALTHY
-
-	a.mu.Lock()
-	if a.operationID != id || !a.protectionDesired {
-		a.mu.Unlock()
+	runtime_.mu.Lock()
+	manager := runtime_.manager
+	runtime_.mu.Unlock()
+	if manager == nil || !a.publishObservationContextLocked(ctx, cc, manager.LastProbeReport(), observationStarted, "") {
+		if ctx.Err() != nil {
+			cancellationCause = errSessionSuperseded
+			return
+		}
+		if a.operationCurrent(id) {
+			a.failCoreForIntent(id, "запуск: результат уже не принадлежит текущей сессии/сети", errSessionSuperseded)
+		}
 		return
 	}
-	a.cancelFailClosedRetryLocked() // successful gate ends the recovery episode
-	a.state.State = "running"
-	if tunRequested() {
-		a.state.ProxyMode = "tun"
-	} else {
-		a.state.ProxyMode = "socks"
-	}
-	a.state.ActiveID = cc.SelectorDefault
-	a.state.CoreReady = true
-	a.state.CoreBlockMsg = ""
-	a.state.Active = channelViewOf(cc, cc.SelectorDefault)
-	a.mu.Unlock()
-
 	a.appendLog("info", "запуск: protected probe пройден — канал "+cc.SelectorDefault)
-	// V2-057 (A0): успешный старт-гейт = первый health-факт канала в эпохе.
-	// channelID — фактический активный (default мог быть скорректирован перебором).
-	chanHealth.observeResult(currentChannelEpoch(), cc.SelectorDefault, true, "", time.Now())
-	a.appendLog("info", "VPN запущен: селектор "+fmt.Sprint(cc.SelectorTags)+", ожидаемый egress "+cc.ExpectedEgress)
+	a.appendLog("info", "VPN запущен.")
 	a.pushState()
 }
 
@@ -400,29 +446,83 @@ func (a *App) startWithProbe(cc *render.ClientConfig) bool {
 }
 
 func (a *App) startWithProbeContext(ctx context.Context, cc *render.ClientConfig) bool {
+	return a.startWithProbeResult(ctx, cc) == nil
+}
+
+func (a *App) startWithProbeResult(ctx context.Context, cc *render.ClientConfig) error {
+	if ctx == nil {
+		return errSessionSuperseded
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	intent, original := a.operationIntent(ctx)
+	if !original || !a.operationCurrent(intent) {
+		return errSessionSuperseded // reject unscoped callers before retiring a predecessor
+	}
+	a.mu.Lock()
+	changedImage, proxyConflict := a.installedImageChanged, a.proxyConflict
+	a.mu.Unlock()
+	if changedImage {
+		return errInstalledImageChanged
+	}
+	if proxyConflict {
+		return core.ErrProxyOwnershipConflict
+	}
+	if cc == nil {
+		return errors.New("missing start configuration")
+	}
+	tunMode := cc.TUNName != ""
+	if tunMode != tunRequested() {
+		return errors.New("rendered TUN mode differs from the requested mode")
+	}
+	if cc.SessionID == 0 {
+		cc.SessionID = engineSessionSequence.Add(1)
+	}
 	if ctx.Err() != nil {
-		return false
+		return ctx.Err()
+	}
+	if err := a.retainSessionClock(cc); err != nil {
+		return err
 	}
 	runtime_.mu.Lock()
 	previous := runtime_.manager
+	previousEngine := runtime_.engine
+	orphanedEngine := previous == nil && runtime_.engine != nil
 	runtime_.mu.Unlock()
+	if orphanedEngine {
+		return errRuntimeOwnerUnavailable // never overwrite the only remaining engine/Job owner
+	}
 	if previous != nil {
+		previousProxyOutcome := previous.ProxyRestoreOutcome()
 		if err := previous.Stop(context.Background()); err != nil {
-			a.appendLog("error", "cleanup предыдущего manager не завершён; новый engine не запускается: "+err.Error())
-			return false
+			a.appendLog("error", "Остановка предыдущего ядра не завершена; новое ядро не запускается.")
+			return err
+		}
+		if previous.ProxyRestoreOutcome() == "foreign_preserved" && previousProxyOutcome != "foreign_preserved" {
+			return core.ErrProxyOwnershipConflict // fresh Manager must not overwrite a conflict discovered by this Stop
 		}
 	}
-	tunMode := tunRequested()
+	// A stopped engine does not retire the separate protected/optional helper
+	// owners. Reconcile them before publishing another engine into runtime_.
+	if err := a.retireCaptureHelpers(); err != nil {
+		return err
+	}
+	observer, err := a.reconcileServiceDNSAfterRetirement(ctx, previous, previousEngine)
+	if err != nil {
+		return err
+	}
 	if tunMode {
 		if err := a.protectionPolicy().Arm(); err != nil {
-			a.appendLog("error", "WFP: TUN заблокирован до безопасного применения policy: "+err.Error())
-			return false
+			a.appendLog("error", "WFP: применение системной защиты не подтверждено; запуск TUN отклонён.")
+			return err
 		}
 	}
-	engine := core.NewEngine(cc.Raw)
+	engine := core.NewIsolatedEngine(cc.Raw)
 	manager := core.NewManager()
 	manager.SetEngine(engine)
-	manager.SetProbe(a.protectedProbe(cc))
+	manager.SetProbe(a.protectedOperationProbe(ctx, cc, manager))
+	manager.SetLifetimeFaultSignal(a.lifetimeWake)
 	// TUN-режим: маршрутизацию делает адаптер snowden0 на IP-уровне, системный
 	// прокси-реестр не трогаем (он же не действует на весь трафик — зачем).
 	if tunMode {
@@ -430,36 +530,42 @@ func (a *App) startWithProbeContext(ctx context.Context, cc *render.ClientConfig
 	}
 
 	runtime_.mu.Lock()
+	releaseDNS, live := observer.guardRunning(a)
+	if !live {
+		runtime_.mu.Unlock()
+		return errServiceDNSObserverUnavailable
+	}
 	runtime_.manager = manager
 	runtime_.engine = engine
+	runtime_.dns = observer
+	releaseDNS()
 	runtime_.mu.Unlock()
 
 	if err := manager.Start(ctx); err != nil {
-		_ = manager.Stop(context.Background())
-		return false
-	}
-	if tunMode {
-		if err := permitWFPTUN(wfpTunName, 8*time.Second); err != nil {
-			_ = manager.Stop(context.Background()) // policy remains active while routes disappear
-			a.appendLog("error", "WFP: интерфейс TUN не разрешён/не проверен: "+err.Error())
-			return false
-		}
-		if err := externalTUNProbe(cc.ExpectedEgress, 15*time.Second); err != nil {
-			_ = manager.Stop(context.Background())
-			a.appendLog("error", "WFP: внешний процесс не подтвердил protected TUN: "+err.Error())
-			return false
-		}
-		a.appendLog("info", "WFP: policy и внешний protected TUN probe подтверждены")
+		return errors.Join(err, manager.Stop(context.Background()))
 	}
 	if ctx.Err() != nil {
-		_ = manager.Stop(context.Background())
-		return false
+		return errors.Join(ctx.Err(), manager.Stop(context.Background()))
 	}
+	if manager.State() != core.StateRunning {
+		return errors.Join(core.ErrEngineWorkerUnavailable, manager.LifetimeError(), manager.Stop(context.Background()))
+	}
+	cc.OwnerID, cc.OwnerGeneration = manager.Owner()
+	metrics := metricsForConfig(cc.Raw)
 	runtime_.mu.Lock()
+	releaseDNS, live = observer.guardRunning(a)
+	if !live || runtime_.manager != manager || runtime_.engine != engine || runtime_.dns != observer {
+		if live {
+			releaseDNS()
+		}
+		runtime_.mu.Unlock()
+		return errors.Join(errServiceDNSObserverUnavailable, manager.Stop(context.Background()))
+	}
 	runtime_.cc = cc
-	runtime_.metrics = metricsForConfig(cc.Raw)
+	runtime_.metrics = metrics
+	releaseDNS()
 	runtime_.mu.Unlock()
-	return true
+	return nil
 }
 
 // startChannelWithProbe — полный путь «рендер под канал → Start с probe».
@@ -470,12 +576,17 @@ func (a *App) startChannelWithProbe(channelID string) (*render.ClientConfig, boo
 }
 
 func (a *App) startChannelWithProbeContext(ctx context.Context, channelID string) (*render.ClientConfig, bool) {
+	cc, err := a.startChannelWithProbeResult(ctx, channelID)
+	return cc, err == nil
+}
+
+func (a *App) startChannelWithProbeResult(ctx context.Context, channelID string) (*render.ClientConfig, error) {
 	cc, err := a.renderAndPrepareContext(ctx, channelID, nil)
 	if err != nil {
-		a.appendLog("warn", "старт канала "+channelID+": рендер не собран: "+err.Error())
-		return nil, false
+		a.appendLog("warn", lifecycleFailureText("рендер конфига", err, localRetirementFailure(err)))
+		return nil, err
 	}
-	return cc, a.startWithProbeContext(ctx, cc)
+	return cc, a.startWithProbeResult(ctx, cc)
 }
 
 // failCore — честный перевод в error с человеческой причиной.
@@ -484,54 +595,95 @@ func (a *App) startChannelWithProbeContext(ctx context.Context, channelID string
 // Start упал бы на занятом порту, а системный прокси остался бы на полу-мертвый
 // инбаунд). Учитель — фиксированный rollback в Engine.Reload.
 func (a *App) failCore(stage string, err error) {
-	runtime_.mu.Lock()
-	m := runtime_.manager
-	runtime_.mu.Unlock()
-	if m != nil {
-		if serr := a.stopCoreLocked(stopFailure); serr != nil {
-			a.appendLog("warn", "cleanup после ошибки: "+serr.Error())
-			err = errors.Join(err, serr)
-		}
-	}
-	// V2-056: если в момент failCore есть свежий probe-отчёт — классифицируем
-	// его причину (журнал; поведение не меняется). runtime_.cc читаем под
-	// runtime_.mu (правило конкурентного слоя V2-028).
-	runtime_.mu.Lock()
-	cc := runtime_.cc
-	runtime_.mu.Unlock()
 	a.mu.Lock()
-	if last := a.state.Probe; last != nil && !last.OK {
-		lreport := &core.ProbeReport{AllPassed: false}
-		for _, st := range last.Steps {
-			lreport.Results = append(lreport.Results, core.ProbeResult{
-				Name: st.Name, Passed: st.Status == "pass", Detail: st.Detail,
-			})
-		}
-		channelPort, probePort := 0, 0
-		if cc != nil {
-			channelPort, probePort = cc.TunnelPort, probeTunnelPort(cc.ProbeTargets)
-		}
-		a.appendLogLocked("error", stage+": "+classifyFailureLogLine(lreport, channelPort, probePort))
+	intent := a.operationID
+	a.mu.Unlock()
+	a.failCoreForIntent(intent, stage, err)
+}
+
+// Caller owns operationMu. A canceled Start supplies its registered intent;
+// neither trust handling nor Stop may silently adopt a newer user request.
+func (a *App) failCoreForIntent(intent uint64, stage string, err error) (retirement lifecycleRetirementReceipt) {
+	proxyConflict := errors.Is(err, core.ErrProxyOwnershipConflict)
+	a.mu.Lock()
+	current := a.operationID == intent && a.protectionDesired && !a.profileTransition && !a.closing.Load()
+	if current && proxyConflict {
+		a.proxyConflict = true
+		a.cancelFailClosedRetryLocked()
 	}
 	a.mu.Unlock()
+	if !current {
+		return
+	}
+	retirement.intent = intent
+	if trustFailureCode(err) != "" {
+		a.failTrustCoreIntentLocked(intent, err)
+		return
+	}
+	runtime_.mu.Lock()
+	m := runtime_.manager
+	applied := runtime_.cc
+	runtime_.mu.Unlock()
+	if m != nil {
+		if lifetimeErr := m.LifetimeError(); lifetimeErr != nil {
+			a.failTrustCoreIntentLocked(intent, errors.Join(err, lifetimeErr))
+			return
+		}
+	}
+	if m != nil && applied != nil {
+		if owner, _ := m.Owner(); applied.OwnerID == owner {
+			if _, trustErr := a.sessionLifetime(applied); trustErr != nil {
+				a.failTrustCoreIntentLocked(intent, errors.Join(err, trustErr))
+				return
+			}
+		}
+	}
+	if m != nil || localRetirementFailure(err) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		if serr := a.stopCoreGenerationLocked(stopFailure, intent); serr != nil {
+			a.appendLog("warn", "Очистка после ошибки не подтверждена; результат очистки требует проверки.")
+			err = errors.Join(err, core.ErrEngineCleanupFailed, serr)
+		} else {
+			retirement.retired = true
+		}
+	}
+	cleanupUnconfirmed := localRetirementFailure(err)
+	message := lifecycleFailureText(stage, err, cleanupUnconfirmed)
+	proxyMessage := lifecycleFailureText(stage, core.ErrProxyOwnershipConflict, false)
+	// UI text is a projection, not a fresh typed observation. Do not rebuild
+	// a causal report from its steps or relabel it with another active session.
 	a.mu.Lock()
-	if !a.protectionDesired {
-		a.mu.Unlock()
+	defer a.mu.Unlock()
+	if !a.protectionDesired || a.profileTransition || a.closing.Load() || a.operationID != intent {
+		retirement = lifecycleRetirementReceipt{}
 		return
 	}
 	a.state.State = "error"
-	a.state.Error = stage + ": " + err.Error()
+	a.state.Error = message
 	a.state.ProxyMode = ""
 	a.state.Active = nil
 	a.state.ActiveID = ""
+	a.state.CoreReady, a.state.ProbeRunning = false, false
 	// V2-053: авто-ретрай с растущим backoff — волна деградации может
 	// кончиться, когда никто не смотрит в окно. Планируем только здесь:
 	// живой туннель после отката переключения сюда не попадает.
-	a.scheduleFailClosedRetryLocked(time.Now())
-	a.sm.markRecovering(time.Now()) // C1 (V2-060): fail-closed с авто-ретраем → RECOVERING
+	if a.installedImageChanged {
+		a.blockChangedImageLocked()
+	} else if cleanupUnconfirmed {
+		a.state.BlockedReason = "cleanup_unconfirmed"
+		a.cancelFailClosedRetryLocked() // explicit reconciliation, no channel churn on local custody
+		a.sm.markBlocked(time.Now())
+	} else if a.proxyConflict {
+		a.state.Error = proxyMessage
+		a.state.BlockedReason = "proxy_conflict"
+		a.cancelFailClosedRetryLocked()
+		a.sm.markBlocked(time.Now())
+	} else {
+		a.scheduleFailClosedRetryLocked(time.Now())
+		a.sm.markRecovering(time.Now())
+	}
 	a.appendLogLocked("error", a.state.Error)
-	a.mu.Unlock()
-	a.pushState()
+	a.pushStateLocked()
+	return retirement
 }
 
 // fastReprobe* — параметры подтверждения деградации (V2-037): первый провал
@@ -566,11 +718,17 @@ func (a *App) fastReprobeAfter(ctx context.Context, cc *render.ClientConfig, gap
 		probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		r := a.protectedProbe(cc).Run(probeCtx)
 		cancel()
+		if a.sessionCurrent(cc) && restrictiveObservation(r) {
+			return false, r // preserve actual local facts even if the parent/path retired
+		}
 		if ctx.Err() != nil || !a.sessionCurrent(cc) {
 			return false, nil
 		}
-		if r.LeakConfirmed {
-			return false, r // confirmed leak must never wait for another probe
+		if !a.currentProbeReport(cc, r) {
+			return false, r
+		}
+		if unsafeObservation(r) {
+			return false, r // safety facts/uncertainty must not wait for another probe
 		}
 		if r.AllPassed {
 			return true, r
@@ -580,16 +738,41 @@ func (a *App) fastReprobeAfter(ctx context.Context, cc *render.ClientConfig, gap
 	return false, report
 }
 
-// blockUnsafePath is reserved for positive evidence of an unsafe route.
-// No debounce or live selector switch is allowed once such evidence exists.
+// One route for initial ticks and reprobing. A mismatch is handled before the
+// suspected-publication gate, which correctly refuses unsafe evidence. Local
+// protection/cleanup uncertainty also stops, without declaring a network fault.
+func (a *App) blockUnsafeObservation(cc *render.ClientConfig, report *core.ProbeReport, source string) bool {
+	if !unsafeObservation(report) {
+		return false
+	}
+	failureClass := ClassifyFailure(report, 0, 0).Code
+	reason := "локальная защита или возврат ресурсов не подтверждены"
+	switch {
+	case report.LeakConfirmed || failureClass == fcLeakConfirmed:
+		reason = "обнаружена утечка защищённого пути"
+	case report.ProtectionUnavailable:
+		reason = "защита TUN/WFP не подтверждена"
+	case report.CleanupUnconfirmed:
+		reason = "возврат ресурсов не подтверждён"
+	case observedEgressDivergence(report):
+		reason = "полученные egress-адреса не соответствуют сравнению; причина не установлена"
+	}
+	a.blockUnsafePath(cc, source+": "+reason, report, failureClass)
+	return true
+}
+
+// Safety evidence or uncertainty requires immediate restrictive teardown.
+// No debounce or live selector switch is allowed before that teardown.
 func (a *App) blockUnsafePath(cc *render.ClientConfig, reason string, report *core.ProbeReport, failureClass string) {
-	if !a.failSession(cc, report, reason, false) {
+	if !a.currentProbeSubject(cc, report, false) {
 		return
 	}
-	now := time.Now()
-	a.sm.markTick(false, report.Summary(), now)
-	a.sm.markClassified(failureClass, report.Summary(), now)
-	chanHealth.observeResult(currentChannelEpoch(), a.activeChannelIDForHealth(), false, failureClass, now)
+	if failureClass == fcLeakConfirmed || failureClass == fcEgressDivergence {
+		a.recordSessionProbe(cc, report, failureClass)
+	}
+	if !a.failUnsafeSession(cc, report, reason) {
+		return
+	}
 	a.appendLog("error", reason+" — немедленная остановка")
 }
 
@@ -605,14 +788,9 @@ func (a *App) blockUnsafePath(cc *render.ClientConfig, reason string, report *co
 // Инцидент 2026-09-09 (сеть отвалилась под живым процессом) и V2-026
 // (нестабильный return-путь CGNAT) — классы отказов, которые закрывает
 // связка «fast-репробы + бесшовный failover».
-func (a *App) watchCore(ctx context.Context) {
-	ticker := time.NewTicker(watchdogInterval)
-	defer ticker.Stop()
-	a.watchCoreTicks(ctx, ticker.C)
-}
-
 func (a *App) watchCoreTicks(ctx context.Context, ticks <-chan time.Time) {
 	for {
+		lifetimeOnly := false
 		select {
 		case <-ctx.Done():
 			return
@@ -620,6 +798,15 @@ func (a *App) watchCoreTicks(ctx context.Context, ticks <-chan time.Time) {
 			if !open {
 				return
 			}
+		case <-a.lifetimeWake:
+			lifetimeOnly = true // no report/permission payload; read the current retained Manager below
+		}
+		if ctx.Err() != nil || a.closing.Load() {
+			return
+		}
+		if netEpoch.powerBlocked.Load() && !lifetimeOnly {
+			a.recoverDisconnectedPowerObservers(ctx)
+			continue // no ordinary health probe on revoked continuity
 		}
 		runtime_.mu.Lock()
 		running := runtime_.manager != nil && runtime_.cc != nil
@@ -638,29 +825,50 @@ func (a *App) watchCoreTicks(ctx context.Context, ticks <-chan time.Time) {
 		if !running || !a.sessionCurrent(cc) {
 			continue
 		}
-		probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		report := a.protectedProbe(cc).Run(probeCtx)
-		cancel()
+		if m.State() == core.StateError {
+			// Process loss is an engine/lifecycle fact, not a failed remote
+			// transport measurement. No synthetic report/quarantine counters.
+			a.failSession(cc, nil, "ядро остановлено или потеряло подтверждённое владение процессом", false)
+			continue
+		}
+		if lifetimeOnly {
+			continue // this wake only reconciles a local failure; never dispatch remote health work
+		}
+		if m.State() != core.StateRunning {
+			continue // another lifecycle operation owns the engine
+		}
+		if !a.checkpointSessionClock(cc) {
+			continue
+		}
+		report := func() *core.ProbeReport {
+			probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			return a.protectedProbe(cc).Run(probeCtx)
+		}()
+		if a.sessionCurrent(cc) && a.blockUnsafeObservation(cc, report, "сторож") {
+			continue // exact original actor is checked independently of network freshness
+		}
 		if ctx.Err() != nil {
 			return
 		}
 		// Состояние могло измениться, пока probe шёл (Stop/Reload): выходим,
 		// если туннель уже не наш.
 		stillOurs := a.sessionCurrent(cc)
-		if !stillOurs {
-			continue
-		}
-		if report.LeakConfirmed {
-			a.blockUnsafePath(cc, "сторож: обнаружена утечка защищённого пути", report, fcLeakConfirmed)
+		if !stillOurs || !a.currentProbeReport(cc, report) {
 			continue
 		}
 		if !report.AllPassed {
 			// V2-056: детерминированный классификатор (THEORY §2.10 п.16) —
 			// диагноз в журнал, решения не меняет (PLAN §5, честная граница v1).
-			a.appendLog("warn", "сторож: шаг probe не прошёл — подтверждаю серией быстрых репроб: "+report.Summary())
+			a.appendLog("warn", "сторож: шаг probe не прошёл — подтверждаю серией быстрых репроб")
 			a.appendLog("warn", "сторож: "+classifyFailureLogLine(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets)))
-			a.sm.markTick(false, report.Summary(), time.Now()) // C1 (V2-060): одиночный провал = SUSPECTED (§23)
+			if !a.publishObservation(cc, report, observationSuspected, "") {
+				continue
+			}
 			recovered, lastReport := a.fastReprobe(ctx, cc)
+			if lastReport != nil && a.sessionCurrent(cc) && a.blockUnsafeObservation(cc, lastReport, "сторож") {
+				continue
+			}
 			if ctx.Err() != nil {
 				return
 			}
@@ -670,64 +878,42 @@ func (a *App) watchCoreTicks(ctx context.Context, ticks <-chan time.Time) {
 			if lastReport != nil {
 				report = lastReport
 			}
-			if report.LeakConfirmed {
-				a.blockUnsafePath(cc, "сторож: обнаружена утечка защищённого пути", report, fcLeakConfirmed)
+			if !a.currentProbeReport(cc, report) {
+				continue
+			}
+			if a.blockUnsafeObservation(cc, report, "сторож") {
 				continue
 			}
 			if recovered {
 				a.appendLog("info", "сторож: путь восстановился (краткое мерцание) — туннель не тронут")
-				a.fpol.hardReset()
-				a.sm.markRecovered(time.Now()) // C1: серия прервалась успехом → HEALTHY
-				if err := a.renewKillSwitchIfTUN(); err != nil {
-					a.blockUnsafePath(cc, "WFP: policy не подтверждена", report, fcUnknown)
+				if err := a.verifySessionProtection(cc, report); err != nil {
+					a.blockProtectionFailure(cc, err, "WFP: policy не подтверждена")
 					continue
 				}
-				// V2-057 (A0): мерцание = успех пути (последний исход серии),
-				// но FAIL не пишем — серия поглощена (семантика V2-037).
-				a.recordProbeOutcome(true, report)
-				a.mu.Lock()
-				a.state.Probe = toView(report)
-				a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
-				a.pushStateLocked()
-				a.mu.Unlock()
+				a.publishObservation(cc, report, observationRecovered, "")
 				continue
 			}
 			if report.AllPassed {
 				continue // серия завершилась успехом на последнем шаге
 			}
-			// Подтверждённый отказ защищённого пути.
-			a.appendLog("error", "сторож: подтверждённый отказ защищённого пути — "+report.Summary())
+			// Repeated measurements did not confirm this path. Recovery attempts
+			// remain bounded work, not proof that the transport/censor failed.
+			a.appendLog("error", "сторож: серия проверок не подтвердила защищённый путь")
 			fc := ClassifyFailure(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets))
 			// C1 (V2-060): подтверждённая серия → классификация (§22 CLASSIFYING;
 			// unknown-класс честен — выдумывать диагноз не будем).
-			a.sm.markClassified(fc.Code, report.Summary(), time.Now())
-			// V2-057 (A0): подтверждённая серия = FAIL записи канала (мерцания — нет).
+			// Only typed channel facts may write FAIL; measurement-only codes abstain.
 			a.appendLog("error", "сторож: "+classifyFailureLogLine(report, cc.TunnelPort, probeTunnelPort(cc.ProbeTargets))+" — "+fc.Hint)
-			inSelector := map[string]bool{}
-			for _, tag := range cc.SelectorTags {
-				inSelector[tag] = true
-			}
-			channels, cerr := render.LoadDescriptors()
-			if cerr != nil {
-				channels = nil
-			}
-			a.sm.markDegraded(time.Now()) // C1: класс есть → решение «деградировал» (§24)
-			if fc.Code == fcEgressDivergence {
-				a.blockUnsafePath(cc, "сторож: egress защищённого пути не совпадает с ожидаемым", report, fc.Code)
+			if !a.publishObservation(cc, report, observationDegraded, fc.Code) {
 				continue
 			}
-			if fc.Code == fcWhitelistMode {
-				a.blockUnsafePath(cc, "сторож: признаки allowlist-ограничения; диагноз требует дополнительной проверки", report, fc.Code)
-				continue
-			}
-			chanHealth.observeResult(currentChannelEpoch(), a.activeChannelIDForHealth(), false, fc.Code, time.Now())
-			switched, blocked := a.tryFailoverForClass(channels, inSelector, cc.SelectorDefault, fc.Code, cc)
+			switched, blocked := a.tryObservedFailover(cc, report, fc.Code)
 			if switched {
 				continue // попытка удалась: следующий тик проверит новый канал
 			}
 			if blocked {
 				a.appendLog("error", "failover: все каналы исчерпаны — остановка (fail-closed, BLOCKED)")
-				a.failSession(cc, report, "failover: защищённый путь недоступен на всех validated каналах (BLOCKED)", true)
+				a.failSession(cc, report, "failover: защищённый путь не подтверждён; доступные попытки восстановления исчерпаны (BLOCKED)", true)
 				continue
 			}
 			// Попытка не удалась, лимит не исчерпан. Два сценария:
@@ -743,20 +929,11 @@ func (a *App) watchCoreTicks(ctx context.Context, ticks <-chan time.Time) {
 			a.failSession(cc, report, "защищённый путь недоступен (сторож): "+report.Summary(), false)
 			continue
 		}
-		// Успешный тик: обновляем evidence и сбрасываем риск-серию.
-		a.recordProbeOutcome(true, report) // V2-057 (A0): health текущей эпохи
-		a.mu.Lock()
-		a.state.Probe = toView(report)
-		a.state.ProbeLastAt = time.Now().Format(time.RFC3339)
-		a.pushStateLocked()
-		a.mu.Unlock()
-		a.fpol.hardReset()
-		a.sm.markTick(true, "", time.Now()) // C1: успешный тик → HEALTHY (восстановление всегда выигрывает)
-		if err := a.renewKillSwitchIfTUN(); err != nil {
-			a.blockUnsafePath(cc, "WFP: policy не подтверждена", report, fcUnknown)
+		if err := a.verifySessionProtection(cc, report); err != nil {
+			a.blockProtectionFailure(cc, err, "WFP: policy не подтверждена")
 			continue
 		}
-		a.pushState()
+		a.publishObservation(cc, report, observationHealthy, "")
 	}
 }
 
@@ -768,6 +945,56 @@ func (a *App) renewKillSwitchIfTUN() error {
 	return verifyWFPPolicy(true) // strict persistent protection has no expiry
 }
 
+// OS policy verification is serialized with lifecycle changes, but never runs
+// under App/runtime/epoch publication locks. Recheck after this external work.
+func (a *App) verifySessionProtection(cc *render.ClientConfig, report *core.ProbeReport) (resultErr error) {
+	a.operationMu.Lock()
+	defer a.operationMu.Unlock()
+	observing := false
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			cause := fmt.Errorf("session protection observation panic (%T)", recovered)
+			resultErr = cause
+			if observing {
+				resultErr = protectionFault(report, errors.Join(core.ErrEngineCleanupFailed, cause))
+			}
+		}
+	}()
+	if !a.sessionCurrent(cc) || !a.currentProbeReport(cc, report) {
+		return errSessionSuperseded
+	}
+	if cc.TUNName != "" {
+		ctx, cancel, ok := a.beginOperation(report.IntentGeneration)
+		if !ok {
+			return errSessionSuperseded
+		}
+		defer a.endOperation(cancel)
+		ctx = core.WithOperationSources(ctx, core.OperationSources{Intent: report.OperationSource(), Path: report.ObservationPath(), Closing: &a.closing, Blocked: &a.watchdogBlocked})
+		if !lifecyclePublicationCurrent(ctx) {
+			return errSessionSuperseded // a replacement path cannot be adopted by this old report
+		}
+		observing = true
+		boundary := a.sessionTunnelBoundary()
+		if boundary == nil {
+			return protectionFault(report, errors.New("TUN protection boundary unavailable"))
+		}
+		bounded, stop := context.WithTimeout(ctx, 8*time.Second)
+		defer stop()
+		err := boundary.Observe(bounded, cc)
+		stop()
+		if err != nil {
+			if errors.Is(err, context.Canceled) && !channelRetryBlocked(err) && !errors.Is(err, core.ErrHelperBusy) && !a.currentProbeReport(cc, report) {
+				return errSessionSuperseded // pure source cancellation is not a policy failure
+			}
+			return protectionFault(report, err) // independent local error survives path/actor loss
+		}
+	}
+	if !a.sessionCurrent(cc) || !a.currentProbeReport(cc, report) {
+		return errSessionSuperseded
+	}
+	return nil
+}
+
 // stopCore — фактическая остановка.
 func (a *App) stopCore() error {
 	return a.stopCoreFor(stopDisconnect)
@@ -775,38 +1002,107 @@ func (a *App) stopCore() error {
 
 // Caller holds operationMu. Automatic teardown retains strict WFP protection.
 func (a *App) stopCoreLocked(reason StopReason) error {
+	if reason.releasesProtection() {
+		return context.Canceled // explicit Disconnect requires its original captured registration
+	}
+	a.mu.Lock()
+	registration := a.intentRegistrationLocked()
+	a.mu.Unlock()
+	return a.stopCoreRegisteredLocked(reason, registration)
+}
+
+// Scalar compatibility is restricted to internal negative teardown. Public
+// Disconnect/Restart instead supply their original full registration below.
+func (a *App) stopCoreGenerationLocked(reason StopReason, intent uint64) error {
+	a.mu.Lock()
+	registration := a.intentRegistrationLocked()
+	a.mu.Unlock()
+	if registration.intent != intent || reason.releasesProtection() {
+		return context.Canceled // scalar internal teardown never authorizes direct Release
+	}
+	return a.stopCoreRegisteredLocked(reason, registration)
+}
+
+// Original registration survives the operationMu wait and every publication/
+// Release gate. Its source need not be positive for actual negative teardown.
+func (a *App) stopCoreRegisteredLocked(reason StopReason, registration intentRegistration) (err error) {
+	returned := false
+	cleanup := &appCleanupSequence{}
+	defer a.finishStopOutcome(registration, &returned, cleanup, &err)
+	err = a.stopCoreRegisteredBody(reason, registration, cleanup)
+	returned = true
+	return err
+}
+
+func (a *App) stopCoreRegisteredBody(reason StopReason, registration intentRegistration, cleanup *appCleanupSequence) error {
+	var releaseCommit *protectionReleaseCommit
+	defer func() {
+		if releaseCommit != nil {
+			releaseCommit.finish() // still under caller-owned operationMu, after terminal Stop publication
+		}
+	}()
 	runtime_.mu.Lock()
 	m := runtime_.manager
+	engine := runtime_.engine
+	orphanedEngine := m == nil && engine != nil
 	runtime_.mu.Unlock()
 	a.mu.Lock()
+	if !registration.sameLocked(a) {
+		a.mu.Unlock()
+		return context.Canceled
+	}
 	a.state.State = "stopping"
-	a.pushStateLocked()
+	a.state.CoreReady, a.state.ProbeRunning = false, false
+	a.nativeObservation = nil
 	a.mu.Unlock()
 
-	var err error
-	policyRequired := tunRequested() || strictProtectionRetained()
-	if policyRequired && !reason.releasesProtection() {
-		err = a.protectionPolicy().BlockDirect()
+	var policyRequired bool
+	a.retainStopAttempt(registration, cleanup, m, engine)
+	err := a.stopResourceCleanup(cleanup, reason, m, orphanedEngine, &policyRequired)
+	if !cleanup.drained {
+		err = errors.Join(core.ErrEngineCleanupFailed, err)
 	}
-	if m != nil {
-		err = errors.Join(err, m.Stop(context.Background()))
+	if m != nil && m.ProxyRestoreOutcome() == "foreign_preserved" {
+		a.mu.Lock()
+		if registration.sameLocked(a) {
+			a.proxyConflict = true
+			a.cancelFailClosedRetryLocked()
+			a.appendLogLocked("warn", "Собственный ключ прокси закрыт; внешние настройки не переписывались. Автоподключение остановлено до явного запуска.")
+		}
+		a.mu.Unlock()
 	}
 	// Keep WFP active until TUN routes are gone. Only then remove the provider;
 	// a process-stop window can therefore be offline, never direct.
 	if policyRequired && reason.releasesProtection() && err == nil {
-		if kerr := a.protectionPolicy().Release(); kerr != nil {
-			err = fmt.Errorf("WFP: снятие защиты не завершено: %w", kerr)
+		releaseCommit, err = a.beginProtectionRelease(registration)
+		if err == nil {
+			if kerr := releaseCommit.call(); kerr != nil {
+				err = fmt.Errorf("WFP: снятие защиты не завершено: %w", kerr)
+			}
 		}
 	}
 	if err != nil {
 		// Keep the ownership handle for a later cleanup attempt.
+		cleanupUnconfirmed := localRetirementFailure(err)
+		message := lifecycleFailureText("остановка", err, cleanupUnconfirmed)
 		a.mu.Lock()
+		if !registration.sameLocked(a) {
+			a.mu.Unlock()
+			return err
+		}
 		a.state.State = "error"
-		a.state.Error = "остановка: " + err.Error()
+		a.state.Error = message
 		a.state.CoreReady = false
 		a.state.ProbeRunning = false
-		a.pushStateLocked()
+		if cleanupUnconfirmed {
+			a.state.BlockedReason = "cleanup_unconfirmed"
+			a.cancelFailClosedRetryLocked()
+			a.sm.markBlocked(time.Now())
+		} else if policyRequired && reason.releasesProtection() && errors.Is(err, context.Canceled) {
+			a.state.BlockedReason = "protection_retained" // revoked positive permission is not a Release receipt
+		}
 		a.mu.Unlock()
+		a.pushState()
 		return err
 	}
 
@@ -814,28 +1110,28 @@ func (a *App) stopCoreLocked(reason StopReason) error {
 	runtime_.manager = nil
 	runtime_.engine = nil
 	runtime_.cc = nil
+	runtime_.dns = nil
 	runtime_.metrics = nil // сессия метрик умирает вместе с ядром (новый порт+секрет на старте)
 	runtime_.mu.Unlock()
 
 	a.mu.Lock()
-	if err != nil {
-		a.state.State = "error"
-		a.state.Error = "остановка: " + err.Error()
-	} else {
-		a.state.State = "stopped"
-		a.state.Error = ""
-		a.state.ProxyMode = ""
-		a.state.Active = nil
-		a.state.ActiveID = ""
-		a.state.CoreReady = false
-		a.state.ProbeRunning = false
-		a.state.BlockedReason = ""
-		if policyRequired && !reason.releasesProtection() {
-			a.state.BlockedReason = "protection_retained"
-		}
+	if !registration.sameLocked(a) {
+		a.mu.Unlock()
+		return context.Canceled // successor owns its state; caller must not restart/update
 	}
+	a.state.State = "stopped"
+	a.state.Error = ""
+	a.state.ProxyMode = ""
+	a.state.Active = nil
+	a.state.ActiveID = ""
+	a.state.CoreReady = false
+	a.state.ProbeRunning = false
+	a.state.BlockedReason = ""
+	if policyRequired && !reason.releasesProtection() {
+		a.state.BlockedReason = "protection_retained"
+	}
+	a.sm.markStopped(time.Now())
 	a.mu.Unlock()
-	a.sm.markStopped(time.Now()) // C1 (V2-060): туннель остановлен вручную/при закрытии — цикл погас ("" = не наблюдаем)
 	if policyRequired && !reason.releasesProtection() {
 		a.appendLog("info", "Ядро остановлено; автоматическое снятие WFP запрещено, состояние защиты требует проверки")
 	} else {
@@ -853,7 +1149,14 @@ func (a *App) stopCoreLocked(reason StopReason) error {
 // автоматическое переключение сторожа (A4) — расхождений UX-кнопки и
 // автопереключения нет по построению.
 func (a *App) SelectChannel(channelID string) error {
-	return a.switchChannelCore(channelID)
+	a.mu.Lock()
+	if a.uiLifecycle != nil {
+		a.mu.Unlock()
+		return errUILifecycleRequest
+	}
+	registration := a.intentRegistrationLocked()
+	a.mu.Unlock()
+	return a.switchChannelCoreRegistered(registration, channelID)
 }
 
 // channelViewOf — карточка канала из дескрипторов (FR-002: данные, не хардкод).
@@ -870,6 +1173,9 @@ func channelViewOf(cc *render.ClientConfig, channelID string) *ChannelView {
 		if ch.ID != chID {
 			continue
 		}
+		if !ch.Enabled || metadata.Channel(ch).CheckProtectedPayload() != nil {
+			return nil // an old configured tag cannot present unsupported traffic as enabled
+		}
 		return &ChannelView{
 			ID: ch.ID, Transport: ch.Protocol + "+" + ch.Transport,
 			Server: ch.Hostname, Port: int(ch.Port),
@@ -879,148 +1185,7 @@ func channelViewOf(cc *render.ClientConfig, channelID string) *ChannelView {
 	return nil
 }
 
-// engineFileLogPath — файл engine-логов sing-box (V2-046): рендер пишет
-// log.output = engine.log, sing-box пишет туда же с тегами компонентов
-// (inbound/outbound/…), tailer доставляет строки в общий журнал.
-const engineFileLogName = "engine.log"
-
-func engineFileLogPath() string {
-	return filepath.Join(logsDir(), engineFileLogName)
-}
-
-// engineLogMsg — строка engine-лога для доставки в appendLog.
-type engineLogMsg struct {
-	level string
-	text  string
-}
-
-// classifyEngineLine — уровень строки engine-лога по префиксу ядра
-// (форматтер sing-box: "LEVEL[...]"). debug/trace → 0 (не логируем).
-func classifyEngineLine(line string) string {
-	switch {
-	case strings.HasPrefix(line, "ERROR"), strings.HasPrefix(line, "FATAL"), strings.HasPrefix(line, "PANIC"):
-		return "error"
-	case strings.HasPrefix(line, "WARN"):
-		return "warn"
-	case strings.HasPrefix(line, "DEBUG"), strings.HasPrefix(line, "TRACE"):
-		return ""
-	default:
-		return "info"
-	}
-}
-
-// stopEngineLogTailer — сигнал остановки tailer'у (drain перед exit/restart).
-func (a *App) stopEngineLogTailer() {
-	if a.engineLogDone != nil {
-		select {
-		case <-a.engineLogDone:
-			// уже закрыт
-		default:
-			close(a.engineLogDone)
-		}
-	}
-}
-
-// engineLogPathAt — путь engine-лога для tailer'а. Пакетная переменная:
-// тесты подменяют на временную директорию (герметичность от AppData).
-var engineLogPathAt = engineFileLogPath
-
-// tailerState — межоткрытное состояние tailer'а: на какую позицию файла
-// дочитали и какую строку последней доставили (гварды повторов).
-type tailerState struct {
-	offset int64
-	last   string
-}
-
-// readNewEngineLines — прочитать строки с позиции st.offset, продвинуть
-// оффсет. Частичная строка (ядро ещё пишет) НЕ доставляется и оффсет НЕ
-// двигает — дописанный хвост дочитается целиком следующим циклом.
-// Файл стал КОРОЧЕ прочитанного (ротация/усечение на рестарте движка,
-// V2-046 per-session) = НОВЫЙ файл: оффсет и last-гвард сбрасываются —
-// строки новой сессии обязаны дойти, даже если текст совпадает со старой
-// (усечение «спрятало бы» перезапуск движка — недопустимо). Честное
-// ограничение: перезапись файла той же или большей длины без усечения
-// детектом не покрывается (не реальный сценарий записи лога).
-// Подряд идущие дубликаты уже доставленного гасятся last-гвардом (штатный
-// повтор строки самим ядром при деградации — одна строка, а не шторм).
-func readNewEngineLines(path string, st *tailerState) []engineLogMsg {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil // лог ещё не создан/недоступен — честное «новых нет»
-	}
-	defer f.Close()
-	if fi, err := f.Stat(); err == nil && fi.Size() < st.offset {
-		st.offset = 0
-		st.last = ""
-	}
-	if _, err := f.Seek(st.offset, io.SeekStart); err != nil {
-		return nil
-	}
-	var out []engineLogMsg
-	deliver := func(line string) {
-		trimmed := strings.TrimRight(line, "\r\n")
-		if trimmed == "" || trimmed == st.last {
-			return
-		}
-		if lv := classifyEngineLine(trimmed); lv != "" {
-			out = append(out, engineLogMsg{level: lv, text: "движок " + trimmed})
-		}
-		st.last = trimmed
-	}
-	r := bufio.NewReaderSize(f, 64*1024)
-	for {
-		line, rerr := r.ReadString('\n')
-		if rerr != nil {
-			// ReadString: err != nil ⟺ строка не кончается '\n' — это
-			// частичная запись ядра; держим оффсет на её начале.
-			break
-		}
-		st.offset += int64(len(line))
-		deliver(line)
-	}
-	return out
-}
-
-// startEngineLogTailer — хвостовой читатель engine.log (V2-046): sing-box
-// пишет в файл (log.output), tailer доставляет новые строки в appendLog.
-// Файл переживает рестарты движка — на старте доезжаем до конца (только
-// новые строки), при ротации (усечение) начинаем с начала.
-//
-// V2-054b (P0, найден на живой машине 2026-09-15): прежний tailer ОТКРЫВАЛ
-// файл ЗАНОВО каждые 500мс и читал его с нуля — каждое открытие повторно
-// клало в журнал ВСЮ историю (за час на busy-машине 57МБ app.log + 67МБ
-// app.log.1; одна ошибка — 240+ дублей в UI, владелец видел стену
-// «http2: client connection force closed»). Исправление: оффсет между
-// открытиями (readNewEngineLines), newReader-семантика для усечения/ротации,
-// last-гвард поглощает подряд идущие дубликаты.
-func (a *App) startEngineLogTailer() {
-	go func() {
-		st := &tailerState{}
-		for {
-			select {
-			case <-a.engineLogDone:
-				return
-			default:
-			}
-			for _, msg := range readNewEngineLines(engineLogPathAt(), st) {
-				a.appendLog(msg.level, msg.text)
-			}
-			if !a.sleepTill(500 * time.Millisecond) {
-				return
-			}
-		}
-	}()
-}
-
-// sleepTill — спать d с пробуждением на shutdown (true = проспал, false = закрываемся).
-func (a *App) sleepTill(d time.Duration) bool {
-	select {
-	case <-a.engineLogDone:
-		return false
-	case <-time.After(d):
-		return true
-	}
-}
+var errAppProducerPending = errors.New("original background task retirement unconfirmed")
 
 // noopProxy — заглушка системного прокси для TUN-режима (см. startCore).
 type noopProxy struct{}
@@ -1059,7 +1224,7 @@ func (a *App) ListChannels() ([]ChannelView, error) {
 			Server:     ch.Hostname,
 			Port:       int(ch.Port),
 			Validation: ch.ValidationStatus,
-			Enabled:    selected[ch.ID],
+			Enabled:    selected[ch.ID] && ch.Enabled && metadata.Channel(ch).CheckProtectedPayload() == nil,
 		})
 	}
 	return out, nil

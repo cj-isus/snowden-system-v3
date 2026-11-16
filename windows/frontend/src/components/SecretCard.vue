@@ -1,571 +1,188 @@
 <script setup lang="ts">
-/**
- * Карточка секрета. Значение не показывается; вместо него — fingerprint
- * (SHA256-префикс), статус проверки и число раскрытий (аудит).
- */
-import { computed, onUnmounted, ref } from 'vue'
-import type { SecretMeta, SecretTestReport, ProbeStep } from '@/api/contract'
-import {
-  secretKindLabels,
-  secretBackendLabels,
-  fmtDateTime,
-} from '../api/labels'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import type { SecretMeta, SecretTestReport } from '../api/contract'
+import { secretKindLabels, secretBackendLabels, fmtDateTime, probeStepStatus, probeStepStatusLabels, probeStepName, probeStepDetail } from '../api/labels'
 import { useSecretsStore } from '../composables/secretsStore'
-import { toast } from '../composables/toast'
-import Icon from './Icon.vue'
+import { useClipboardAction } from '../composables/clipboard'
 
 const props = defineProps<{ secret: SecretMeta }>()
-
+const emit = defineEmits<{ deleting: [] }>()
 const store = useSecretsStore()
-const confirmingDelete = ref(false)
+const clipboard = useClipboardAction()
+const setting = ref(false)
+const draft = ref('')
+const repeated = ref('')
+const visible = ref(false)
+const saving = ref(false)
 const revealing = ref(false)
 const verifying = ref(false)
-let deleteTimer: ReturnType<typeof setTimeout> | undefined
-onUnmounted(() => clearTimeout(deleteTimer))
-
-// «Задать значение» для пустого слота (предзаполнен сеялкой без значения)
-const settingValue = ref(false)
-const newValue = ref('')
-const newConfirm = ref('')
-const showNew = ref(false)
-const saving = ref(false)
-
-const valueMismatch = computed(() => newConfirm.value.length > 0 && newValue.value !== newConfirm.value)
-const canSubmitValue = computed(() => newValue.value.trim().length > 0 && newValue.value === newConfirm.value && !saving.value)
-
-async function onSubmitValue(): Promise<void> {
-  if (!canSubmitValue.value) return
-  saving.value = true
-  const ok = await store.setValue(props.secret.id, newValue.value)
-  saving.value = false
-  if (ok) {
-    newValue.value = ''
-    newConfirm.value = ''
-    showNew.value = false
-    settingValue.value = false
-  }
-}
-
-const kindLabel = computed(() => secretKindLabels[props.secret.kind] ?? props.secret.kind)
-const backendLabel = computed(() => secretBackendLabels[props.secret.backend] ?? props.secret.backend)
-
-async function onReveal(): Promise<void> {
-  if (revealing.value) return
-  revealing.value = true
-  try {
-    const value = await store.reveal(props.secret.id)
-    if (value !== null) {
-      await navigator.clipboard.writeText(value)
-      toast('info', 'Значение скопировано в буфер обмена (не отображается на экране)')
-    }
-  } catch {
-    toast('error', 'Не удалось скопировать значение. Проверьте доступ к буферу обмена.')
-  } finally {
-    revealing.value = false
-  }
-}
-
-async function onVerify(): Promise<void> {
-  if (verifying.value) return
-  verifying.value = true
-  try {
-    const res = await store.verify(props.secret.id)
-    if (res) {
-      if (res.status === 'ok') toast('ok', 'Проверка: формат значения корректен')
-      else if (res.status === 'failed') toast('error', `Проверка не пройдена: ${res.error}`)
-      else toast('info', 'Проверка выполнена')
-    }
-  } finally {
-    verifying.value = false
-  }
-}
-
-// ---------- живой тест значения ----------
-
 const testing = ref(false)
-const testReport = ref<SecretTestReport | null>(null)
-const testError = ref('')
-const showTestReport = ref(true)
-
-const testTitle = computed(() => {
+const deleting = ref(false)
+const confirmDelete = ref(false)
+const outcome = ref('')
+const report = ref<SecretTestReport | null>(null)
+let owner = true
+let generation = 0
+function clearDraft(): void { draft.value = ''; repeated.value = ''; visible.value = false }
+function retire(): void { generation++; clearDraft(); setting.value = false; confirmDelete.value = false; report.value = null; outcome.value = '' }
+onBeforeUnmount(() => { owner = false; retire() })
+watch(() => [props.secret.id, props.secret.updatedAt, props.secret.fingerprint] as const, retire, { flush: 'sync' })
+const busy = computed(() => store.actionBusy.value || saving.value || revealing.value || verifying.value || testing.value || deleting.value)
+const kindLabel = computed(() => typeof secretKindLabels[props.secret.kind] === 'string' ? secretKindLabels[props.secret.kind] : 'Тип не описан интерфейсом')
+const backendLabel = computed(() => props.secret.backend ? secretBackendLabels[props.secret.backend] : 'Хранилище не сообщено')
+const hasValue = computed(() => props.secret.storedValue !== null && props.secret.storedValue !== 'unknown')
+const canSave = computed(() => !busy.value && !!draft.value && draft.value === repeated.value)
+const formatHelp = computed(() => {
   switch (props.secret.kind) {
-    case 'vless-uuid':
-    case 'hy2-password':
-    case 'hy2-obfs-password':
-      return 'Сверка с сервером: сервер сам посчитает хеши своего конфига, сравним с локальным значением. Значение не передаётся — только хеши'
-    case 'vps-ssh-key':
-      return 'Реальный вход на сервер ключом из хранилища (значение не показывается)'
-    case 'cf-api-token':
-      return 'Живая проверка токена в API Cloudflare (/user/tokens/verify)'
-    default:
-      return 'Живой тест для этого типа не определён — будет честный «пропущено»'
+    case 'vless-uuid': return 'UUID: 36 символов hex, группы 8-4-4-4-12.'
+    case 'hy2-password': case 'hy2-obfs-password': return 'Локальное правило: не менее 8 символов. Совпадение с сервером проверяется отдельно.'
+    case 'vps-ssh-key': return 'Ожидается приватный ключ PEM. Проверка формата не подтверждает вход или доверие серверу.'
+    case 'cf-api-token': return 'Локальное правило: не менее 30 символов. Действительность и права токена проверяются отдельно.'
+    case 'custom': return 'Локальное правило: не менее 4 символов.'
+    default: return 'Правила этого типа текущему интерфейсу не переданы.'
   }
 })
-
-async function onTest(): Promise<void> {
-  if (testing.value) return
-  testing.value = true
-  testReport.value = null
-  testError.value = ''
-  showTestReport.value = true
+const networkScope = computed(() => props.secret.kind === 'cf-api-token' ? 'Запрос к API Cloudflare использует токен по назначению в Authorization.' : props.secret.kind === 'vps-ssh-key' ? 'Проверка выполняет SSH-вход ключом. Успешный вход не является проверкой VPN-пути.' : 'Проверка может обращаться к VPS по SSH для сверки данных. Результат относится только к шагам отчёта; для custom запрос может быть пропущен.')
+const reportLabel = computed(() => {
+  const value = report.value
+  if (!value || !value.steps.length) return 'Измеренные шаги не переданы'
+  if (value.steps.every(step => probeStepStatus(step) === 'skipped')) return 'Все шаги пропущены'
+  return value.ok && value.steps.every(step => probeStepStatus(step) === 'pass' || probeStepStatus(step) === 'skipped') ? 'Переданные шаги пройдены' : 'Положительный результат не подтверждён'
+})
+async function saveValue(): Promise<void> {
+  if (!canSave.value) return
+  const current = ++generation
+  const id = props.secret.id
+  saving.value = true
+  outcome.value = ''
+  const request = store.setValue(id, draft.value)
+  clearDraft()
   try {
-    testReport.value = await store.runTest(props.secret.id)
-  } catch (e) {
-    testError.value = e instanceof Error ? e.message : String(e)
-    toast('error', `Тест не выполнен: ${testError.value}`)
-  } finally {
-    testing.value = false
-  }
+    const result = await request
+    if (!owner || current !== generation) return
+    if (result.ok) { setting.value = false; outcome.value = 'Приложение подтвердило запись. Это не подтверждение работы канала.' }
+    else outcome.value = result.message
+  } finally { if (owner) saving.value = false }
 }
-
-function stepWord(s: ProbeStep['status']): string {
-  switch (s) {
-    case 'pass':
-      return 'пройдено'
-    case 'fail':
-      return 'не пройдено'
-    case 'skipped':
-      return 'пропущено'
-    case 'running':
-      return 'выполняется'
-    default:
-      return 'ожидает'
-  }
+async function copyValue(): Promise<void> {
+  if (busy.value || !hasValue.value || !clipboard.canStart.value) return
+  const current = ++generation
+  const id = props.secret.id
+  const interested = () => owner && current === generation && props.secret.id === id
+  revealing.value = true
+  outcome.value = ''
+  try {
+    const result = await clipboard.run('secret', interested, async lease => {
+      if (!lease.current()) return
+      const revealed = await store.reveal(id)
+      if (!revealed.ok) { if (lease.current()) outcome.value = revealed.message; return }
+      let value = revealed.value.value
+      revealed.value.value = null // also clear a response that belongs to a retired view
+      if (!lease.current()) { value = null; return }
+      if (typeof value !== 'string' || !value.length) { value = null; outcome.value = 'Непустое значение не получено; копирование не выполнялось.'; return }
+      const writing = lease.writeText(value) // original interest checked again without await
+      value = null // release this reference; JavaScript strings cannot be zeroised
+      const copied = await writing
+      if (!lease.current()) return
+      outcome.value = copied === 'confirmed'
+        ? 'Служба буфера подтвердила запись. Буфер обмена и его история контролируются системой.'
+        : 'Копирование не подтверждено. Выдача значения могла быть учтена в аудите.'
+    })
+    if (clipboard.current() && interested() && result !== 'finished' && result !== 'retired') outcome.value = 'Копирование не подтверждено. Выдача значения могла быть учтена в аудите.'
+  } catch {
+    if (owner && current === generation) outcome.value = 'Копирование не подтверждено. Выдача значения могла быть учтена в аудите.'
+  } finally { if (owner) revealing.value = false }
 }
-
-function stepIcon(s: ProbeStep['status']): 'check' | 'cross' | 'refresh' | 'info' {
-  switch (s) {
-    case 'pass':
-      return 'check'
-    case 'fail':
-      return 'cross'
-    case 'running':
-      return 'refresh'
-    default:
-      return 'info'
-  }
+async function verify(): Promise<void> {
+  if (busy.value || !hasValue.value) return
+  const current = ++generation
+  verifying.value = true
+  outcome.value = ''
+  try {
+    const result = await store.verify(props.secret.id)
+    if (owner && current === generation) outcome.value = !result.ok ? result.message : result.value.status === 'ok' ? 'Приложение подтвердило локальный формат. Сервер не проверялся.' : 'Локальный формат не подтверждён; сверьте требования к типу.'
+  } finally { if (owner) verifying.value = false }
 }
-
-async function onDelete(): Promise<void> {
-  if (!confirmingDelete.value) {
-    confirmingDelete.value = true
-    deleteTimer = setTimeout(() => (confirmingDelete.value = false), 4000)
-    return
-  }
-  await store.remove(props.secret.id, props.secret.title)
-  confirmingDelete.value = false
+async function networkCheck(): Promise<void> {
+  if (busy.value || !hasValue.value) return
+  const current = ++generation
+  testing.value = true
+  report.value = null
+  outcome.value = ''
+  try {
+    const result = await store.runTest(props.secret.id)
+    if (owner && current === generation) {
+      if (result.ok) report.value = result.value
+      else outcome.value = result.message
+    }
+  } finally { if (owner) testing.value = false }
+}
+async function remove(): Promise<void> {
+  if (busy.value || !confirmDelete.value) return
+  const current = ++generation
+  deleting.value = true
+  confirmDelete.value = false
+  emit('deleting')
+  try {
+    const result = await store.remove(props.secret.id)
+    if (owner && current === generation && !result.ok) outcome.value = result.message
+  } finally { if (owner) deleting.value = false }
 }
 </script>
 
 <template>
   <section class="secret">
-    <div class="row1">
-      <div class="title">
-        <Icon name="lock" :size="14" />
-        <strong>{{ props.secret.title }}</strong>
-      </div>
-      <span class="kind">{{ kindLabel }}</span>
-      <span class="backend" :title="`Хранение: ${backendLabel}`">{{ backendLabel }}</span>
-    </div>
-
-    <div class="row2">
-      <span class="fp mono" :title="'SHA256-префикс значения (само значение не хранится в UI)'">
-        fingerprint: {{ props.secret.fingerprint }}
-      </span>
-      <span class="audit">раскрытий: {{ props.secret.reveals }}</span>
-      <span class="audit">обновлён: {{ fmtDateTime(props.secret.updatedAt) }}</span>
-    </div>
-
-    <div class="row3">
-      <span class="vstat" :class="props.secret.verifyStatus">
-        {{ props.secret.verifyStatus === 'ok' ? 'проверен' : props.secret.verifyStatus === 'failed' ? 'проверка провалена' : 'не проверялся' }}
-      </span>
-      <span v-if="props.secret.verifyError" class="vverr mono">{{ props.secret.verifyError }}</span>
-    </div>
-
-    <p v-if="props.secret.hint" class="hint-text">{{ props.secret.hint }}</p>
-
-    <div v-if="settingValue" class="set-value">
-      <label class="sv-field">
-        <span class="sv-lbl">Значение</span>
-        <div class="sv-row">
-          <input
-            v-model="newValue"
-            :type="showNew ? 'text' : 'password'"
-            placeholder="Вставьте значение — оно шифруется DPAPI и не покидает этот компьютер"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button class="eye" type="button" :title="showNew ? 'Скрыть' : 'Показать (осторожно: скриншот)'" @click="showNew = !showNew">
-            <Icon name="eye" :size="15" />
-          </button>
-        </div>
-      </label>
-      <label class="sv-field">
-        <span class="sv-lbl">Повторите значение</span>
-        <input
-          v-model="newConfirm"
-          :type="showNew ? 'text' : 'password'"
-          placeholder="Ещё раз — исключаем опечатку"
-          autocomplete="off"
-          spellcheck="false"
-        />
-      </label>
-      <p v-if="valueMismatch" class="sv-mismatch">Значения не совпадают.</p>
-      <p v-if="props.secret.verifyError" class="sv-mismatch">Предыдущая ошибка: {{ props.secret.verifyError }}</p>
-      <div class="sv-actions">
-        <button class="btn primary" :disabled="!canSubmitValue" @click="onSubmitValue">
-          <Icon name="lock" :size="13" />
-          Сохранить
-        </button>
-        <button class="btn" @click="settingValue = false">Отмена</button>
-      </div>
-    </div>
-
+    <div class="secret-heading"><h2>{{ secret.title || 'Слот без названия' }}</h2><span>{{ kindLabel }}</span></div>
+    <dl class="facts"><div><dt>Хранение</dt><dd>{{ backendLabel }}</dd></div><div><dt>Значение</dt><dd>{{ secret.storedValue === null ? 'Не задано по метаданным' : secret.storedValue === 'unknown' ? 'Наличие не установлено' : 'Сообщено сохранённым' }}</dd></div><div><dt>Отпечаток</dt><dd class="mono">{{ secret.fingerprint || 'Не передан' }}</dd></div><div><dt>Выдач значения</dt><dd>{{ secret.reveals ?? 'Не сообщено' }}</dd></div></dl>
+    <p class="note">Изменено: {{ fmtDateTime(secret.updatedAt) }} · Локальная проверка: {{ secret.verifyStatus === 'ok' ? 'формат подтверждён' : secret.verifyStatus === 'failed' ? 'формат не подтверждён' : 'положительного результата нет' }} · {{ fmtDateTime(secret.lastVerifiedAt) }}.</p>
+    <p class="note">{{ formatHelp }}</p>
+    <p v-if="secret.verifyError" class="note">{{ secret.verifyError }}</p>
     <div class="actions">
-      <button
-        v-if="props.secret.storedValue === null"
-        class="btn primary"
-        @click="settingValue = !settingValue"
-        title="Слот создан заранее — вставьте значение"
-      >
-        <Icon name="key" :size="13" />
-        Задать значение
-      </button>
-      <button
-        class="btn"
-        :disabled="testing"
-        :title="testTitle"
-        @click="onTest"
-      >
-        <Icon name="flask" :size="13" />
-        {{ testing ? 'Идёт тест…' : 'Тест' }}
-      </button>
-      <button class="btn" :disabled="revealing" @click="onReveal" title="Скопировать значение в буфер обмена">
-        <Icon name="copy" :size="13" />
-        Копировать
-      </button>
-      <button class="btn" :disabled="verifying" @click="onVerify" title="Проверить формат значения (без сети)">
-        <Icon name="check" :size="13" />
-        Проверить
-      </button>
-      <button class="btn danger" :class="{ confirm: confirmingDelete }" @click="onDelete" title="Удалить значение из локального хранилища">
-        <Icon name="trash" :size="13" />
-        {{ confirmingDelete ? 'Точно удалить?' : 'Удалить' }}
-      </button>
+      <button class="btn" :disabled="busy || secret.storedValue === 'unknown'" @click="retire(); setting = true">{{ secret.storedValue === null ? 'Задать значение' : 'Заменить значение' }}</button>
+      <button class="btn" :disabled="busy || !hasValue || !clipboard.canStart.value" :aria-busy="clipboard.ownsPending.value && clipboard.pending.value || undefined" @click="copyValue">{{ revealing ? 'Выдача / копирование…' : 'Скопировать значение' }}</button>
+      <button class="btn" :disabled="busy || !hasValue" @click="verify">{{ verifying ? 'Проверка формата…' : 'Проверить формат' }}</button>
     </div>
-
-    <div v-if="testReport || testError" class="test-report">
-      <div class="tr-head" @click="showTestReport = !showTestReport">
-        <span class="tr-title">
-          <Icon :name="testReport?.ok ? 'check' : 'error'" :size="14" />
-          Живой тест: {{ testReport ? (testReport.ok ? 'пройден' : 'не пройден') : 'ошибка' }}
-        </span>
-        <Icon :name="showTestReport ? 'chevron' : 'chevron'" :size="13" class="tr-chev" :class="{ open: showTestReport }" />
-      </div>
-      <div v-if="showTestReport" class="tr-steps">
-        <div v-if="testError" class="tr-step">
-          <Icon name="error" :size="13" class="st-ic fail" />
-          <span class="st-txt">{{ testError }}</span>
-        </div>
-        <div v-for="(st, i) in testReport?.steps ?? []" :key="i" class="tr-step">
-          <Icon :name="stepIcon(st.status)" :size="13" class="st-ic" :class="st.status" />
-          <span class="st-name">{{ st.name }}</span>
-          <span class="st-status" :class="st.status">{{ stepWord(st.status) }}</span>
-          <span class="st-txt">{{ st.detail }}</span>
-        </div>
-      </div>
-      <p class="tr-note">Значение секрета не передаётся и не отображается — только хеши и статусы шагов.</p>
+    <p v-if="clipboard.busy.value" class="note">{{ clipboard.pendingLabel.value }}</p>
+    <p v-else-if="!clipboard.available.value" class="note">Служба копирования недоступна. Значение не запрашивается для недоступного копирования.</p>
+    <div v-if="setting" class="edit-value">
+      <label>Новое значение<input v-model="draft" :disabled="saving" :type="visible ? 'text' : 'password'" autocomplete="new-password" autocapitalize="off" spellcheck="false" /></label>
+      <label>Повторите значение<input v-model="repeated" :disabled="saving" :type="visible ? 'text' : 'password'" autocomplete="new-password" autocapitalize="off" spellcheck="false" /></label>
+      <label class="show-value"><input v-model="visible" type="checkbox" :disabled="saving" /> Показать ввод на экране</label>
+      <p v-if="repeated && draft !== repeated" class="note">Значения не совпадают.</p>
+      <div class="actions"><button class="btn primary" :disabled="!canSave" @click="saveValue">{{ saving ? 'Ожидается запись…' : 'Записать в слот' }}</button><button class="btn" @click="retire">Закрыть и очистить поля</button></div>
     </div>
+    <details class="advanced">
+      <summary>Сетевая проверка и удаление</summary>
+      <p class="note">{{ networkScope }} Эти действия не выполняются автоматически.</p>
+      <button class="btn" :disabled="busy || !hasValue" @click="networkCheck">{{ testing ? 'Ожидается отчёт…' : 'Выполнить сетевую проверку' }}</button>
+      <button class="btn" :disabled="busy" @click="confirmDelete = true">Удалить слот…</button>
+      <div v-if="confirmDelete" class="delete-confirm"><p>Удалить этот слот из локального хранилища? Привязки профиля могут потребовать его повторного добавления.</p><div class="actions"><button class="btn danger" :disabled="busy" @click="remove">Удалить этот слот</button><button class="btn" @click="confirmDelete = false">Отмена</button></div></div>
+    </details>
+    <p v-if="outcome" class="outcome" role="status">{{ outcome }}</p>
+    <details v-if="report" class="report" open><summary>Отчёт: {{ reportLabel }}</summary><ol><li v-for="(step, index) in report.steps" :key="index"><strong>{{ probeStepName(step) }} · {{ probeStepStatusLabels[probeStepStatus(step)] }}</strong><p>{{ probeStepDetail(step) }}</p></li></ol><p class="note">Отчёт относится к этой проверке. Применение профиля, текущее подключение и общий охват трафика он не подтверждает.</p></details>
+    <p class="note">Счётчик выдач не доказывает успешное копирование или вставку. Закрытие страницы не отменяет начатую выдачу значения или запись в буфер.</p>
   </section>
 </template>
 
 <style scoped>
-.secret {
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-panel);
-}
-
-.row1 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex: 1;
-  color: var(--accent);
-}
-.title strong {
-  color: var(--text);
-  font-size: 13.5px;
-}
-
-.kind,
-.backend {
-  font-size: 11.5px;
-  color: var(--text-faint);
-  background: var(--bg-hover);
-  border-radius: 999px;
-  padding: 2px 9px;
-}
-
-.row2,
-.row3 {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 8px;
-  font-size: 11.5px;
-  color: var(--text-faint);
-  flex-wrap: wrap;
-}
-
-.fp {
-  color: var(--text-dim);
-}
-.audit {
-  color: var(--text-faint);
-}
-
-.vstat {
-  font-size: 11.5px;
-  padding: 2px 9px;
-  border-radius: 999px;
-}
-.vstat.ok {
-  color: var(--ok);
-  background: var(--ok-soft);
-}
-.vstat.failed {
-  color: var(--danger);
-  background: var(--danger-soft);
-}
-.vstat.unverified {
-  color: var(--text-faint);
-  background: var(--bg-hover);
-}
-.vverr {
-  color: var(--danger);
-  font-size: 11.5px;
-}
-
-.hint-text {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.5;
-}
-
-.set-value {
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.sv-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.sv-lbl {
-  font-size: 11.5px;
-  color: var(--text-faint);
-}
-.sv-row {
-  display: flex;
-  gap: 8px;
-}
-.sv-row input,
-.sv-field input {
-  flex: 1;
-  padding: 8px 11px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-  color: var(--text);
-  font-size: 12.5px;
-  outline: none;
-}
-.sv-row input:focus,
-.sv-field input:focus {
-  border-color: var(--accent);
-}
-.eye {
-  width: 36px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-  color: var(--text-faint);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.eye:hover {
-  color: var(--text);
-}
-.sv-mismatch {
-  margin: 0;
-  font-size: 11.5px;
-  color: var(--danger);
-}
-.sv-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-.btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0b1020;
-  font-weight: 600;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 11px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.btn.danger {
-  color: var(--danger);
-  border-color: #ff636333;
-}
-.btn.danger:hover {
-  background: var(--danger-soft);
-}
-.btn.danger.confirm {
-  background: var(--danger-soft);
-  border-color: #ff636366;
-}
-
-.test-report {
-  margin-top: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  overflow: hidden;
-}
-.tr-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 12px;
-  cursor: pointer;
-  user-select: none;
-}
-.tr-head:hover {
-  background: var(--bg-hover);
-}
-.tr-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-  color: var(--text);
-}
-.tr-chev {
-  color: var(--text-faint);
-  transition: transform 0.15s;
-}
-.tr-chev.open {
-  transform: rotate(90deg);
-}
-.tr-steps {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--border);
-}
-.tr-step {
-  display: grid;
-  grid-template-columns: 18px auto auto 1fr;
-  align-items: baseline;
-  gap: 8px;
-  padding: 7px 12px;
-  font-size: 12px;
-}
-.tr-step + .tr-step {
-  border-top: 1px dashed var(--border-soft);
-}
-.st-ic {
-  align-self: center;
-}
-.st-ic.pass {
-  color: var(--ok);
-}
-.st-ic.fail {
-  color: var(--danger);
-}
-.st-ic.running {
-  color: var(--accent);
-}
-.st-ic.skipped,
-.st-ic.info {
-  color: var(--text-faint);
-}
-.st-name {
-  color: var(--text);
-}
-.st-status {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.st-status.pass {
-  color: var(--ok);
-  background: var(--ok-soft);
-}
-.st-status.fail {
-  color: var(--danger);
-  background: var(--danger-soft);
-}
-.st-status.skipped {
-  color: var(--text-faint);
-  background: var(--bg-hover);
-}
-.st-status.running {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.st-txt {
-  color: var(--text-dim);
-  line-height: 1.45;
-}
-.tr-note {
-  margin: 0;
-  padding: 7px 12px;
-  font-size: 11px;
-  color: var(--text-faint);
-  border-top: 1px dashed var(--border-soft);
-}
+.secret { min-width: 0; padding: 20px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.secret-heading { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; align-items: baseline; }
+h2 { margin: 0; font-size: 16px; }
+.secret-heading span, .note { color: var(--muted); font-size: 12.5px; line-height: 1.65; }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 20px; margin: 16px 0; }
+dt { color: var(--muted); font-size: 11.5px; }
+dd { margin: 5px 0 0; color: var(--text-soft); font-size: 12.5px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.btn { min-height: 40px; white-space: normal; }
+.edit-value { max-width: 700px; margin-top: 18px; padding-left: 16px; border-left: 2px solid var(--accent); }
+label { display: flex; flex-direction: column; gap: 7px; margin: 12px 0; font-size: 13px; color: var(--text-soft); }
+input:not([type='checkbox']) { width: 100%; min-width: 0; min-height: 40px; padding: 9px 12px; color: var(--text); background: var(--panel); border: 1px solid var(--border-light); border-radius: var(--radius); font: inherit; }
+.show-value { flex-direction: row; align-items: center; gap: 8px; }
+summary { padding: 10px 0; color: var(--text-soft); cursor: pointer; font-size: 13px; }
+.advanced > .btn { margin: 0 10px 10px 0; }
+.delete-confirm { border-left: 2px solid var(--yellow); padding-left: 12px; color: var(--text-soft); font-size: 13px; }
+.outcome { color: var(--text-soft); line-height: 1.6; font-size: 13px; }
+ol { padding-left: 22px; color: var(--text-soft); font-size: 12.5px; line-height: 1.6; }
+@media (max-width: 1180px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .facts { grid-template-columns: minmax(0, 1fr); } }
 </style>

@@ -1,28 +1,8 @@
 package main
 
-// failclass.go — детерминированный классификатор причин срыва защищённого
-// пути v1 (THEORY §2.10 п.16; PLAN §5; plan_gpt §17/§19/§63).
-//
-// Правило (AGENTS §3.3): категория описывает НАБЛЮДАЕМЫЙ факт, а не гипотезу
-// «это точно DPI». Вход — структурный *core.ProbeReport (секретов не несёт),
-// выход — FailureClass {Code, Confidence, Hint}: код из словаря THEORY,
-// confidence — калиброванная константа (E2, V2-070): поднята там, где
-// сигнатура — положительный артефакт провода (активный RST/refused от
-// конкретного источника), снижена там, где класс выводится из отсутствия
-// улик или широкого паттерна; база — LAB-датасет (windows/lab_test.go,
-// V2-069: 18 сценариев, 0 внутри-словарных путаниц).
-//
-// Честные границы v1 (не «серебряная пуля», план §8):
-//   - probe качает ≤256 байт на цель: 16КБ-заморозка ТСПУ и volume-policing
-//     невидимы для этого слоя (нужен diagnostic probe — PLAN Phase A2);
-//   - base-классификация различает только форму отказа цели (reset/timeout/
-//     обрыв середины/HTTP-статус), не фазу TLS — RST-vs-TLS-полиция
-//     разделяется портом (443-эвристика THEORY §2.4a), а не разбором ClientHello;
-//   - classifier влияет только на безопасную policy: leak/allowlist закрывают
-//     путь, transport/port-классы меняют порядок validated кандидатов;
-//     применение всё равно идёт через failoverPolicy и Manager-only путь.
-//
-// Все функции чистые — тестируются таблицами без сети (failclass_test.go).
+// Failure classification describes bounded observations, never a censor or
+// an inferred network policy. Legacy names/weights remain for old history;
+// the live path consumes typed ProbeObservation and abstains without facts.
 
 import (
 	"net/url"
@@ -36,39 +16,53 @@ import (
 // FailureClass — машинный диагноз поверх probe-отчёта.
 type FailureClass struct {
 	Code       string  // словарь THEORY §2.10 п.16 (failclassCodes)
-	Confidence float64 // 0..1, экспертная константа v1
+	Confidence float64 // legacy heuristic weight, not calibrated probability
 	Hint       string  // рекомендуемая реакция (наблюдаемая, не гипотеза)
 }
 
 // Коды словаря (THEORY §2.10 п.16). Изменение списка = правка THEORY + PLAN §5.
 const (
-	fcResetInjected    = "reset_injected"
-	fcPortBlackholed   = "port_blackholed"
-	fcSilentFreeze     = "silent_freeze"
-	fcTlsPolicing443   = "tls_policing_443"
-	fcWhitelistMode    = "whitelist_mode"
-	fcChannelUnavail   = "protected_channel_unavailable"
-	fcDNSPathFailure   = "dns_path_failure"
-	fcEgressDivergence = "egress_divergence"
-	fcLeakConfirmed    = "direct_leak_confirmed"
-	fcServerUnreach    = "server_unreachable" // AGENTS §3.3: активный отказ цели, не сеть
-	fcDegraded         = "degraded"
-	fcUnknown          = "unknown"
+	fcResetInjected          = "reset_injected"
+	fcPortBlackholed         = "port_blackholed"
+	fcSilentFreeze           = "silent_freeze"
+	fcTlsPolicing443         = "tls_policing_443"
+	fcWhitelistMode          = "whitelist_mode"
+	fcChannelUnavail         = "protected_channel_unavailable"
+	fcDNSPathFailure         = "dns_path_failure"
+	fcEgressDivergence       = "egress_divergence"
+	fcLeakConfirmed          = "direct_leak_confirmed"
+	fcServerUnreach          = "server_unreachable" // AGENTS §3.3: активный отказ цели, не сеть
+	fcDegraded               = "degraded"
+	fcUnknown                = "unknown"
+	fcObservationUnavailable = "observation_unavailable"
+	fcEndpointFailure        = "measurement_endpoint_failure"
+	fcTLSVerification        = "tls_verification_failed"
+	fcTLSHandshake           = "tls_handshake_failed"
+	fcConnectionFailed       = "connection_failed"
+	fcRequestTimeout         = "request_timeout"
+	fcResponseIncomplete     = "response_incomplete"
 )
 
 var failclassHints = map[string]string{
-	fcResetInjected:    "реакция: другой SNI/транспорт/канал (THEORY §2.10 п.16 ResetInjected)",
-	fcPortBlackholed:   "реакция: 443-вариант канала (порт-эвристика THEORY §2.4a)",
-	fcSilentFreeze:     "реакция: объёмная freeze-сигнатура — попробовать короткоживущий транспорт/UDP; если EOF на живом TLS/mux, проверить mux-контракт обоих концов (server multiplex+padding и per-channel descriptor), затем diagnostic probe",
-	fcTlsPolicing443:   "реакция: mux-профиль/другой порт/канал (THEORY §2.10 п.16 TlsPolicing443)",
-	fcWhitelistMode:    "реакция: честный BLOCKED — программного обхода allowlist нет (THEORY §2.10 F)",
-	fcChannelUnavail:   "реакция: перебор validated каналов (failover)",
-	fcDNSPathFailure:   "реакция: bootstrap-стратегии уже применяются рендером (V2-037); канал обычно жив",
-	fcEgressDivergence: "реакция: egress-измерение независимо от транспорта (V2-041) — канал жив, путь подменён",
-	fcLeakConfirmed:    "реакция: немедленный fail-closed без debounce; путь доказанно небезопасен",
-	fcServerUnreach:    "реакция: цель активно отвергла соединение — сначала проверять сервер/порт, не сеть (AGENTS §3.3 ServerUnreachable)",
-	fcDegraded:         "реакция: серия быстрых репроб (fastReprobe)",
-	fcUnknown:          "причина не определена — честно неизвестна; классификация без evidence = шум (AGENTS §3.3)",
+	fcObservationUnavailable: "Измерение не завершено/устарело/не допущено бюджетом; это не отрицательный факт о канале",
+	fcEndpointFailure:        "Измеритель ответил HTTP или некорректным payload; общий отказ транспорта не установлен",
+	fcTLSVerification:        "Проверка сертификата HTTPS-цели не прошла; часы, PKI, endpoint и путь требуют разделения, DPI не установлен",
+	fcTLSHandshake:           "TLS handshake HTTPS-цели не завершён; номер порта не определяет причину",
+	fcConnectionFailed:       "HTTP-клиент наблюдал ошибку соединения; конкретный отказавший hop и причина неизвестны",
+	fcRequestTimeout:         "Истёк deadline запроса; блокировка порта/allowlist не установлены",
+	fcResponseIncomplete:     "Получена часть ответа, затем чтение прервалось; freeze/источник разрыва не установлены",
+	fcResetInjected:          "реакция: другой SNI/транспорт/канал (THEORY §2.10 п.16 ResetInjected)",
+	fcPortBlackholed:         "реакция: 443-вариант канала (порт-эвристика THEORY §2.4a)",
+	fcSilentFreeze:           "реакция: объёмная freeze-сигнатура — попробовать короткоживущий транспорт/UDP; если EOF на живом TLS/mux, проверить mux-контракт обоих концов (server multiplex+padding и per-channel descriptor), затем diagnostic probe",
+	fcTlsPolicing443:         "реакция: mux-профиль/другой порт/канал (THEORY §2.10 п.16 TlsPolicing443)",
+	fcWhitelistMode:          "реакция: честный BLOCKED — программного обхода allowlist нет (THEORY §2.10 F)",
+	fcChannelUnavail:         "реакция: перебор validated каналов (failover)",
+	fcDNSPathFailure:         "DoH-измеритель не подтвердил A-ответ; это не измерение native DNS/UDP и не доказательство отказа всего канала",
+	fcEgressDivergence:       "Egress не соответствует контракту; защищённый путь не подтверждён, причина расхождения не установлена",
+	fcLeakConfirmed:          "реакция: немедленный fail-closed без debounce; путь доказанно небезопасен",
+	fcServerUnreach:          "реакция: цель активно отвергла соединение — сначала проверять сервер/порт, не сеть (AGENTS §3.3 ServerUnreachable)",
+	fcDegraded:               "Разные цели дали разные результаты; частичный отказ измерителя не опровергает весь канал",
+	fcUnknown:                "причина не определена — честно неизвестна; классификация без evidence = шум (AGENTS §3.3)",
 }
 
 // Уверенности — калибровка E2 по LAB-датасету (V2-070; до того — экспертные
@@ -181,6 +175,10 @@ func splitSteps(r *core.ProbeReport) probeStepsSplit {
 		return s
 	}
 	for _, res := range r.Results {
+		res = res.NormalizeDiagnostic()
+		if res.Informational() {
+			continue
+		}
 		switch {
 		case strings.HasPrefix(res.Name, "HTTPS "):
 			if res.Passed {
@@ -219,142 +217,11 @@ func allTunnelForms(s probeStepsSplit) string {
 	return s.tunnelFail[0]
 }
 
-// ClassifyFailure — детерминированный v1-классификатор поверх отчёта probe.
-// ВХОД: только структурный отчёт (секретов нет). ВЫХОД: класс с честным
-// unknown, если паттерн не согласован. Никогда не паникует на nil.
-//
-// Порты (V2-068, аудит D1): channelPort — порт, который клиент РЕАЛЬНО
-// набирает у канала (render.ClientConfig.TunnelPort: 8443 reality, 8444 hy2,
-// 8445 shadowtls, 443 CDN-ветка); probePort — порт первой probe-цели.
-// Приоритет у channelPort: порт-эвристика THEORY §2.4a описывает блокировку
-// ORIGIN-порта, а не порта стороннего эхо-сервиса (у всех встроенных
-// дескрипторов это https/443 — из-за чего диагноз port_blackholed был
-// недостижим в проде до этой правки). probePort участвует только как фолбэк
-// (канал без дескриптора / порт не задан) — честная деградация вместо выдумки.
+// ClassifyFailure keeps the caller API while ignoring causal port heuristics.
 func ClassifyFailure(r *core.ProbeReport, channelPort, probePort int) FailureClass {
-	tunnelPort := channelPort
-	if tunnelPort == 0 {
-		tunnelPort = probePort
-	}
-	s := splitSteps(r)
-	hintOf := func(code string) FailureClass {
-		return FailureClass{Code: code, Hint: failclassHints[code]}
-	}
-
-	if r == nil || s.configFail {
-		c := hintOf(fcUnknown)
-		c.Confidence = confUnknown
-		return c
-	}
-	if s.directLeak || r.LeakConfirmed {
-		return FailureClass{Code: fcLeakConfirmed, Confidence: 1.0, Hint: failclassHints[fcLeakConfirmed]}
-	}
-	// Успешный отчёт — классифицировать нечего (вызов без сбоя — ошибка вызова).
-	if r.AllPassed && !s.egressFail && !s.consistFail {
-		return FailureClass{Code: fcUnknown, Confidence: confUnknown, Hint: "отчёт успешен — срыва нет"}
-	}
-
-	// 1) Подмена пути: egress отвечает, но чужим IP (V2-041: измерение egress
-	//    независимо от транспорта).
-	if s.egressFail && len(s.tunnelFail) == 0 {
-		c := hintOf(fcEgressDivergence)
-		c.Confidence = confEgressDivergence
-		return c
-	}
-
-	// 2) Только DNS при живых HTTPS — путь жив, отказа канала нет.
-	if s.dnsFail && len(s.tunnelFail) == 0 && !s.egressFail {
-		c := hintOf(fcDNSPathFailure)
-		c.Confidence = confDNSPathFailure
-		return c
-	}
-
-	// 3) Часть целей жива — частичная деградация (в т.ч. consistency).
-	if s.tunnelPass > 0 && len(s.tunnelFail) > 0 || s.consistFail && s.tunnelPass > 0 {
-		c := hintOf(fcDegraded)
-		c.Confidence = confDegraded
-		return c
-	}
-
-	// 4) Все tunnel-цели мертвы — форма отказа разделяет классы.
-	form := allTunnelForms(s)
-	// directAlive — по ФОРМЕ detail, не по флагу Passed: directLeakResult
-	// помечает недоступный direct как Passed=true с оговоркой (V2-037),
-	// и живой direct всегда даёт «other» (egress-IP в тексте), а недоступный —
-	// транспортную форму (timeout/refused/tls/…).
-	directAlive := s.directPass && s.directForm == "other"
-	if len(s.tunnelFail) > 0 {
-		switch form {
-		case "reset":
-			c := hintOf(fcResetInjected)
-			c.Confidence = confResetInjected
-			return c
-		case "refused":
-			// Активное отвержение цели. Через туннель при живом direct это
-			// сервер/порт (sing-box не слушает, порт закрыт), не middlebox:
-			// порт-блэкхол ТСПУ молчит (timeout), а не отвечает RST (V2-051).
-			if directAlive {
-				c := hintOf(fcServerUnreach)
-				c.Confidence = confServerUnreach
-				return c
-			}
-			// direct тоже мёртв — атрибутировать отказ некому: честный unknown.
-		case "timeout":
-			// На 443 таймаут без других улик = unknown (честно; RST-эвристика
-			// ТСПУ маскируется). На не-443 origin-порту с живым direct —
-			// чёрная дыра порта (V2-051 — доказано live).
-			if tunnelPort != 0 && tunnelPort != 443 && directAlive {
-				c := hintOf(fcPortBlackholed)
-				c.Confidence = confPortBlackholed
-				return c
-			}
-			if s.dnsFail {
-				c := hintOf(fcChannelUnavail)
-				c.Confidence = confChannelUnavail
-				return c
-			}
-		case "notls":
-			// На TLS-порте пришло не-TLS — активная подмена контента.
-			c := hintOf(fcTlsPolicing443)
-			c.Confidence = confTlsPolicing443
-			return c
-		case "tls":
-			if tunnelPort == 443 || tunnelPort == 0 {
-				c := hintOf(fcTlsPolicing443)
-				c.Confidence = confTlsPolicing443
-				return c
-			}
-			// TLS-ошибка на не-443 origin-порту при живом direct —
-			// allowlist-режим (L6, THEORY §2.10 F): обхода программой нет.
-			if directAlive {
-				c := hintOf(fcWhitelistMode)
-				c.Confidence = confWhitelistMode
-				return c
-			}
-		case "eof":
-			// Обрыв без RST — молчаливое отсечение потока (ближайший v1-маркер
-			// 16КБ-механики; точную границу даст diagnostic probe, PLAN A2).
-			c := hintOf(fcSilentFreeze)
-			c.Confidence = confSilentFreeze
-			return c
-		case "proxy":
-			// SOCKS-инбаунд ядра недоступен — канал не срывался, движок мёртв.
-			c := hintOf(fcChannelUnavail)
-			c.Confidence = confChannelUnavail
-			return c
-		}
-	}
-
-	// 5) DNS тоже мёртв целиком — защищённый путь недоступен целиком.
-	if s.dnsFail && len(s.tunnelFail) > 0 {
-		c := hintOf(fcChannelUnavail)
-		c.Confidence = confChannelUnavail
-		return c
-	}
-
-	c := hintOf(fcUnknown)
-	c.Confidence = confUnknown
-	return c
+	// Ports remain in the signature for existing callers. They do not identify
+	// TLS policing, an allowlist, endpoint independence or a censorship cause.
+	return classifyObservedFailure(r)
 }
 
 // classifyFailureLogLine — однострочный redacted-текст для журнала сторожа.
@@ -362,14 +229,10 @@ func ClassifyFailure(r *core.ProbeReport, channelPort, probePort int) FailureCla
 func classifyFailureLogLine(r *core.ProbeReport, channelPort, probePort int) string {
 	fc := ClassifyFailure(r, channelPort, probePort)
 	return "класс отказа: " + fc.Code +
-		" (уверенность v1: " + strconv.FormatFloat(fc.Confidence, 'f', 2, 64) + ")"
+		" (эвристический вес, не вероятность: " + strconv.FormatFloat(fc.Confidence, 'f', 2, 64) + ")"
 }
 
-// probeTunnelPort — ФОЛБЭК-порт из первой probe-цели (V2-037). Основной
-// источник порта для классификатора — render.ClientConfig.TunnelPort (реальный
-// порт канала, V2-068); эта функция применяется только когда порт канала
-// неизвестен. Ошибка разбора или пустой список = 0 (тогда 443-эвристика не
-// применяется — честный unknown).
+// probeTunnelPort is descriptive endpoint metadata, never a diagnosis.
 func probeTunnelPort(targets []string) int {
 	if len(targets) == 0 {
 		return 0

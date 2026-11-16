@@ -1,29 +1,11 @@
 package main
 
-// diagprobe.go — диагностический probe заморозки ТСПУ (PLAN §4 Phase A2;
-// plan_gpt §15/§40–42; THEORY §2.10 п.17 — методика Cheburcheck «тест объёма»).
-//
-// Проблема (честная граница V2-056): protected probe качает ≤256 байт на цель
-// и НЕ ВИДИТ 16КБ-заморозку — механику «успех до ~N КБ, затем тишина без
-// RST» (§2.9/§2.4a). Диагностика:
-//
-//  1. скачивает контролируемые диапазоны (8КБ → 64КБ) через ЖИВОЙ туннель
-//     (SOCKS 127.0.0.1:1080 — mixed-инбаунд есть и в TUN-режиме, V2-037);
-//  2. тот же объём НАПРЯМУЮ (direct) — контрольная группа: direct-обрыв
-//     при живом туннеле = механика на пути к origin; оба живы = заморозки
-//     нет СЕЙЧАС (это не гарантия на будущее);
-//  3. результат — факты по каждому объёму: получено байт / ждалось /
-//     форма исхода (complete | freeze | reset | timeout), классификация
-//     изометрична failclass.go.
-//
-// Границы (честно, THEORY §2.10 п.11): серверная разбивка контента —
-// гипотеза; здесь измеряется ТОЛЬКО факт прохождения объёма, а не «лечение».
-// Заморозка детектируется по таймауту чтения ПОСЛЕ частичных данных
-// (заголовки пришли, тело оборвалось) — точную границу N даёт ступенчатый
-// прогон 8/16/32/64КБ.
-//
-// Секретов не несёт; значения не логируются. Все функции чистые, кроме
-// самой загрузки (HTTP по переданному клиенту) — тестируются httptest'ом.
+// Production controlled-volume observations (PLAN PC-03). Each fixed range
+// reports received bytes, time and observed error shape. Incomplete bodies or
+// timeout do not establish DPI, a volume threshold or the cause of failure.
+// The configured mixed listener and OS-route requests can share another VPN;
+// physical independence is unknown. Our TUN omits the comparison requests.
+// The GUI binds the original subject/context and retains optional admission.
 
 import (
 	"context"
@@ -32,13 +14,16 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/snowden-system/windows/backend/core"
+	"github.com/snowden-system/windows/backend/render"
 )
 
-// diagSteps — ступени объёма (байт). 8КБ = база (всегда жив), 16КБ = порог
-// заморозки §2.4a, 32/64КБ = надпороговые (confirmation). Суммарно ≤120КБ —
-// диагностика не должна сама плодить «объёмный профиль».
+// Fixed application body sizes, not a proven failure threshold or baseline.
+// One owned copy is validated and reserved before any request.
 var diagSteps = []int{8 << 10, 16 << 10, 32 << 10, 64 << 10}
 
 // diagReadTimeout — таймаут на чтение каждой ступени. Заморозка = тишина
@@ -73,10 +58,12 @@ type diagOutcome struct {
 
 // diagReport — итог диагностики.
 type diagReport struct {
-	OK            bool          `json:"ok"`            // true = заморозка НЕ обнаружена (все tunnel-ступени прошли)
-	DirectControl bool          `json:"directControl"` // direct действительно независим (false в TUN)
-	Steps         []diagOutcome `json:"steps"`
-	Summary       string        `json:"summary"` // однострочный факт для журнала
+	OK                  bool          `json:"ok"`            // all planned tunnel bodies completed; no causal diagnosis
+	DirectControl       bool          `json:"directControl"` // OS-route requests attempted outside our TUN, independence unknown
+	Steps               []diagOutcome `json:"steps"`
+	Summary             string        `json:"summary"` // однострочный факт для журнала
+	expectedTunnelSteps int           // exact captured workload, private; no empty success
+	observedTunnelSteps int
 }
 
 // runFreezeDiagnostic — прогон ступеней через туннель и, если это возможно,
@@ -86,34 +73,86 @@ type diagReport struct {
 // socksAddr — mixed-инбаунд ядра; diagURL — controlled-volume эндпоинт
 // канала (дескриптор diagnostic_url). budget ограничивает общее время.
 func runFreezeDiagnostic(ctx context.Context, socksAddr, diagURL string, budget time.Duration, tunMode bool) diagReport {
+	return runFreezeDiagnosticOwned(ctx, socksAddr, diagURL, budget, tunMode, nil)
+}
+
+// GUI ownership retains the same optional reservation until the original call,
+// transport defers and cancellation watcher finish. Generic callers keep their
+// existing lexical release. Neither is a native/library task retirement proof.
+func runFreezeDiagnosticOwned(ctx context.Context, socksAddr, diagURL string, budget time.Duration, tunMode bool, owner *manualDiagnosticTask) diagReport {
 	rep := diagReport{OK: true, DirectControl: !tunMode}
 	if diagURL == "" {
 		rep.OK = false
 		rep.Summary = "диагностика недоступна: у канала нет diagnostic_url (дескриптор)"
 		return rep
 	}
+	sizes := append([]int(nil), diagSteps...)
+	if len(sizes) == 0 || len(sizes) > 8 {
+		rep.OK, rep.Summary = false, "диагностика недоступна: нет допустимого ограниченного плана объёмов"
+		return rep
+	}
+	rep.expectedTunnelSteps = len(sizes)
+	requests, bodyBytes := len(sizes), int64(0)
+	for _, size := range sizes {
+		if size <= 0 || size > 64<<10 {
+			rep.OK, rep.Summary = false, "диагностика недоступна: неверный размер ступени"
+			return rep
+		}
+		bodyBytes += int64(size)
+	}
+	if !tunMode {
+		requests, bodyBytes = requests*2, bodyBytes*2
+	}
+	ctx, release, err := core.AdmitDiagnostic(ctx, core.DiagnosticVolume, requests, bodyBytes, budget)
+	if err != nil {
+		rep.OK, rep.Summary = false, "диагностика не выполнена: общий бюджет занят/исчерпан; это не факт отказа сети"
+		return rep
+	}
+	if owner == nil {
+		defer release()
+	} else if owner.release != nil {
+		release() // unused second reservation; never replace the original owner
+		rep.OK, rep.Summary = false, "диагностика недоступна: исходный бюджет уже занят"
+		return rep
+	} else {
+		owner.release = release // synchronous call/finisher only, not the watcher
+	}
 	tunnel := &http.Client{
 		Timeout: diagReadTimeout,
 		Transport: &http.Transport{
-			Proxy:       socksProxyURL(socksAddr),
-			DialContext: dialerFor(diagReadTimeout).DialContext,
+			DisableCompression:     true,
+			DisableKeepAlives:      true,
+			MaxResponseHeaderBytes: 16 << 10,
+			Proxy:                  socksProxyURL(socksAddr),
+			DialContext:            dialerFor(diagReadTimeout).DialContext,
 		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	direct := &http.Client{Timeout: diagReadTimeout, Transport: &http.Transport{}}
-	deadline := time.Now().Add(budget)
-	for _, want := range diagSteps {
-		if time.Now().After(deadline) {
+	direct := &http.Client{Timeout: diagReadTimeout, Transport: &http.Transport{DisableCompression: true, DisableKeepAlives: true, MaxResponseHeaderBytes: 16 << 10}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if owner != nil {
+		tunnelTransport := tunnel.Transport.(*http.Transport)
+		tunnelTransport.DialContext = owner.ownedDialer(tunnelTransport.DialContext)
+		directTransport := direct.Transport.(*http.Transport)
+		var directDialer net.Dialer // same zero-dialer behavior as Transport's nil DialContext fallback
+		directTransport.DialContext = owner.ownedDialer(directDialer.DialContext)
+		directTransport.ForceAttemptHTTP2 = true // preserve default HTTP/2 eligibility after installing a custom dial hook
+	}
+	defer tunnel.CloseIdleConnections()
+	defer direct.CloseIdleConnections()
+	for _, want := range sizes {
+		if !lifecyclePublicationCurrent(ctx) || owner != nil && owner.currentError() != nil {
 			rep.OK = false
 			rep.Summary += " — бюджет исчерпан, ступени выше не проверены"
 			break
 		}
-		// Сначала туннель (это и есть защищённый путь); direct — контроль.
+		// First the configured mixed listener; then an OS-route comparison.
 		oT := fetchRange(ctx, tunnel, diagURL, want, "туннель")
+		rep.observedTunnelSteps++
 		rep.Steps = append(rep.Steps, oT)
 		if tunMode {
 			rep.Steps = append(rep.Steps, diagOutcome{
 				Name:   fmt.Sprintf("direct %d КБ", want>>10),
-				OK:     true,
+				OK:     false,
 				Status: "not_independent",
 				Detail: "в TUN-режиме direct-путь автоматически попадает в тот же туннель — независимый контроль не выполнялся",
 				Want:   want,
@@ -123,6 +162,10 @@ func runFreezeDiagnostic(ctx context.Context, socksAddr, diagURL string, budget 
 			}
 			continue
 		}
+		if !lifecyclePublicationCurrent(ctx) || owner != nil && owner.currentError() != nil {
+			rep.OK = false
+			break
+		}
 		oD := fetchRange(ctx, direct, diagURL, want, "direct")
 		rep.Steps = append(rep.Steps, oD)
 		if !oT.OK {
@@ -130,6 +173,10 @@ func runFreezeDiagnostic(ctx context.Context, socksAddr, diagURL string, budget 
 		}
 	}
 	rep.Summary = summarizeDiag(rep)
+	if !lifecyclePublicationCurrent(ctx) || rep.observedTunnelSteps != rep.expectedTunnelSteps || owner != nil && owner.currentError() != nil {
+		rep.OK = false
+		rep.Summary += "; общий deadline истёк/операция отменена, оставшиеся объёмы не измерены"
+	}
 	return rep
 }
 
@@ -142,7 +189,7 @@ func fetchRange(ctx context.Context, client *http.Client, url string, want int, 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		out.Status = "error"
-		out.Detail = "запрос не собран: " + err.Error()
+		out.Detail = "запрос не создан; причина по этому наблюдению не установлена"
 		return out
 	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=0-%d", want-1))
@@ -208,11 +255,9 @@ func diagDurText(us int) string {
 	return fmt.Sprintf("%dмкс", us)
 }
 
-// freezeForm — ФОРМА заморозки по ошибке чтения и длительности (V2-079).
-// Чистая функция: таймаут = тишина (клиент выждал до своего лимита);
-// EOF/RST до границы таймаута = резкий обрыв; обрыв практически на границе
-// таймаута тоже считается тишиной (поток молчал, закрытие пришло в конце).
-func freezeForm(err error, elapsed, timeout time.Duration) string {
+// Observed read-error shape only. Timing proximity cannot turn EOF/reset into
+// silence. Keep the existing call signature; no inferred DPI or wire RST proof.
+func freezeForm(err error, _, _ time.Duration) string {
 	if err == nil {
 		return ""
 	}
@@ -223,9 +268,6 @@ func freezeForm(err error, elapsed, timeout time.Duration) string {
 	case timedOut:
 		return "silence"
 	case abrupt:
-		if timeout > 0 && elapsed >= timeout*8/10 {
-			return "silence"
-		}
 		return "abrupt"
 	default:
 		return "unknown"
@@ -254,11 +296,11 @@ func classifyDiagErr(msg string) (status, detail string) {
 	m := strings.ToLower(msg)
 	switch {
 	case strings.Contains(m, "timeout") || strings.Contains(m, "context deadline"):
-		return "timeout", "таймаут без данных — путь не отвечает (не заморозка: данных не было)"
+		return "timeout", "запрос завершился таймаутом до данных; причина не установлена"
 	case strings.Contains(m, "connection reset"):
-		return "reset", "соединение сброшено (RST)"
+		return "reset", "ошибка запроса содержит connection reset; пакетная причина не установлена"
 	default:
-		return "error", msg
+		return "error", "запрос завершился ошибкой; причина по этому наблюдению не установлена"
 	}
 }
 
@@ -281,61 +323,56 @@ func shortDiagError(err error) string {
 
 // summarizeDiag — однострочный факт: что показал прогон.
 func summarizeDiag(rep diagReport) string {
-	if rep.OK {
-		if !rep.DirectControl {
-			return "заморозка не обнаружена на tunnel-ступенях; direct-контроль недоступен в TUN-режиме"
-		}
-		for _, step := range rep.Steps {
-			if strings.HasPrefix(step.Name, "direct ") && !step.OK {
-				return "заморозка не обнаружена на tunnel-ступенях; direct-контроль не прошёл: " + step.Name + ": " + step.Status
-			}
-		}
-		return "заморозка не обнаружена: все ступени прошли и через туннель, и напрямую"
-	}
-	var worst string
-	for _, s := range rep.Steps {
-		if !s.OK && (worst == "" || s.Name != "") {
-			worst = s.Name + ": " + s.Status
-			break
+	complete := 0
+	for _, step := range rep.Steps {
+		if strings.HasPrefix(step.Name, "туннель ") && step.OK {
+			complete++
 		}
 	}
-	return "обнаружен отказ объёма (" + worst + ") — см. ступени"
+	return fmt.Sprintf("Полностью получено tunnel-ступеней: %d из %d. Остальные наблюдения — в шагах; причина сбоя и физическая независимость маршрутов не установлены.", complete, rep.expectedTunnelSteps)
 }
 
 // ---------- интеграция со страницей «Проверки» (runTest) ----------
 
-// testFreezeCheck — карточка «freeze-check»: требует живого VPN (SOCKS 1080)
-// и diagnostic_url активного канала. Не проходит = честный fail с формой.
-func (a *App) testFreezeCheck() (bool, string, []ProbeStepView) {
+// GUI wrapper: original applied subject before/after, exact captured workload,
+// unavailable without that scope/plan; never start an independent Background ctx.
+func (a *App) testFreezeCheck(task *manualDiagnosticTask) (*bool, string, []ProbeStepView) {
 	runtime_.mu.Lock()
 	cc := runtime_.cc
-	running := runtime_.manager != nil
 	runtime_.mu.Unlock()
-	if !running || cc == nil {
-		return false, "VPN не запущен — диагностика заморозки требует живой защищённый путь", nil
+	subject := a.appliedProbeSubject(cc)
+	if !subject.current(a, task.ctx, cc) {
+		return diagnosticUnavailable("Нет текущего применённого scope для диагностики объёма. Запустите VPN и проверьте защищённый путь.")
 	}
 	if cc.DiagnosticURL == "" {
-		return false, "у активного канала нет diagnostic_url (дескриптор) — диагностика недоступна, это не отказ", nil
+		return diagnosticUnavailable("У текущего канала нет diagnostic_url; измерение не выполнялось.")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	rep := runFreezeDiagnostic(ctx, "127.0.0.1:1080", cc.DiagnosticURL, 80*time.Second, tunRequested())
+	target, err := url.Parse(cc.DiagnosticURL)
+	if err != nil || target.Scheme != "https" || target.Hostname() == "" || target.User != nil || target.Fragment != "" {
+		return diagnosticUnavailable("Назначение диагностики должно быть явным HTTPS URL без userinfo/fragment; запрос не отправлен.")
+	}
+	mixed := net.JoinHostPort(render.MixedListenAddress, strconv.Itoa(render.MixedListenPort))
+	rep := runFreezeDiagnosticOwned(task.ctx, mixed, cc.DiagnosticURL, 80*time.Second, tunRequested(), task)
 	steps := make([]ProbeStepView, 0, len(rep.Steps))
 	for _, s := range rep.Steps {
 		status := "fail"
-		if s.OK {
+		if s.Status == "not_independent" {
+			status = "skipped"
+		} else if s.OK {
 			status = "pass"
 		}
 		steps = append(steps, ProbeStepView{Name: s.Name, Status: status, Detail: s.Detail})
 	}
-	// direct-ступени не валят общий вердикт: контрольная группа — информация.
-	allTunnelOK := true
-	for _, s := range rep.Steps {
-		if strings.HasPrefix(s.Name, "туннель") && !s.OK {
-			allTunnelOK = false
-		}
+	if !subject.current(a, task.ctx, cc) || task.currentError() != nil {
+		return diagnosticUnavailable("Исходный runtime/owner/intent/путь изменился; наблюдение не публикуется для преемника.")
 	}
-	return allTunnelOK, rep.Summary, steps
+	if rep.expectedTunnelSteps == 0 || rep.observedTunnelSteps != rep.expectedTunnelSteps {
+		detail := rep.Summary + " Полный план не измерен; результат неизвестен."
+		steps = append(steps, ProbeStepView{Name: "полнота измерения", Status: "unavailable", Detail: detail})
+		return nil, detail, steps
+	}
+	ok := rep.OK
+	return &ok, rep.Summary, steps
 }
 
 // socksProxyURL / dialerFor — локальные хелперы (избегаем зависимости от

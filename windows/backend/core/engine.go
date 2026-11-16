@@ -12,12 +12,13 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/protocol/group"
+	"github.com/sagernet/sing/service"
 
 	"github.com/snowden-system/windows/backend/config"
 )
@@ -56,21 +57,33 @@ type boxInstance interface {
 // После успешного Start менеджер закрывает operationCtx — это НЕ должно
 // убивать туннель: соединения sing-box привязаны к контексту бокса.
 type Engine struct {
-	mu         sync.Mutex
-	box        boxInstance
-	rawJSON    []byte
-	runCtx     context.Context
-	runCancel  context.CancelFunc
-	cleanupErr error
+	mu               sync.Mutex
+	box              boxInstance
+	rawJSON          []byte
+	runCtx           context.Context
+	runCancel        context.CancelFunc
+	cleanupErr       error
+	workerCustody    *workerIngressCustody // only serveEngineWorker supplies this negative capability
+	isolated         bool
+	process          *engineProcess
+	forwardingPermit *engineForwardingPermit // private original-worker receipt, never decoded from public reports
+	nativePermit     *engineNativeTUNPermit  // separate prepared native lane; no ordinary forwarding authority
+	tunScope         *engineTUNScope         // original target process owns its duplicated actor handle
 	// Optional per-engine factory for deterministic lifecycle fault injection.
 	// Production uses newSingBox; it is not a shared/global test hook.
 	newBox func(context.Context, []byte) (boxInstance, error)
 }
 
-// NewEngine создаёт движок с нормализованным (провалидированным выше по
-// стеку) конфигом. Копия данных — вызывающий может переиспользовать слайс.
+// NewEngine embeds sing-box for the isolated worker and local harness only.
+// It has cooperative cancellation; application composition uses NewIsolatedEngine.
 func NewEngine(rawJSON []byte) *Engine {
 	return &Engine{rawJSON: append([]byte(nil), rawJSON...)}
+}
+
+// NewIsolatedEngine is the Windows application entry. Only the worker/local
+// harness uses NewEngine to embed sing-box. Isolation failure has no fallback.
+func NewIsolatedEngine(rawJSON []byte) *Engine {
+	return &Engine{rawJSON: append([]byte(nil), rawJSON...), isolated: true}
 }
 
 // Start запускает бокс. Повторный запуск без Stop — ошибка.
@@ -86,7 +99,7 @@ func (e *Engine) Start(ctx context.Context) error {
 	if e.cleanupErr != nil {
 		return e.cleanupErr
 	}
-	if e.box != nil {
+	if e.box != nil || e.process != nil {
 		return ErrEngineAlreadyRunning
 	}
 	if len(e.rawJSON) == 0 {
@@ -104,7 +117,11 @@ func (e *Engine) Stop() error {
 }
 
 // Caller holds mu. Never forget an owner whose cleanup did not succeed.
-func (e *Engine) closeBoxLocked() error {
+func (e *Engine) closeBoxLocked() (result error) {
+	e.clearForwardingPermitsLocked()
+	if e.isolated {
+		return e.stopIsolatedLocked()
+	}
 	if e.runCancel != nil {
 		e.runCancel()
 	}
@@ -115,7 +132,17 @@ func (e *Engine) closeBoxLocked() error {
 		e.runCtx, e.runCancel = nil, nil
 		return nil
 	}
-	if err := cleanupCall("engine close", e.box.Close); err != nil {
+	closeReturned := false
+	defer func() {
+		if !closeReturned {
+			_ = recover()
+			e.cleanupErr = errors.Join(ErrEngineCleanupFailed, e.cleanupErr)
+			result = e.cleanupErr // a recovered unwind must not become a nil return
+		}
+	}()
+	closeErr := cleanupCall("engine close", e.box.Close)
+	closeReturned = true
+	if err := closeErr; err != nil {
 		e.cleanupErr = errors.Join(ErrEngineCleanupFailed, err)
 		return e.cleanupErr
 	}
@@ -134,7 +161,11 @@ func (e *Engine) Reload(ctx context.Context, rawJSON []byte) error {
 	if len(rawJSON) == 0 {
 		return errors.Join(ErrReloadRejected, errors.New("reload: empty config"))
 	}
-	if err := validateOptions(ctx, rawJSON); err != nil {
+	if e.isolated && len(rawJSON) > maxWorkerConfigBytes {
+		return errors.Join(ErrReloadRejected, errors.New("reload: config exceeds worker bound"))
+	}
+	normalized, err := validatedRuntimeOptions(ctx, rawJSON)
+	if err != nil {
 		return errors.Join(ErrReloadRejected, err)
 	}
 
@@ -146,7 +177,7 @@ func (e *Engine) Reload(ctx context.Context, rawJSON []byte) error {
 	if e.cleanupErr != nil {
 		return e.cleanupErr
 	}
-	if e.box == nil {
+	if e.box == nil && e.process == nil {
 		return ErrEngineNotRunning
 	}
 
@@ -154,7 +185,7 @@ func (e *Engine) Reload(ctx context.Context, rawJSON []byte) error {
 	if err := e.closeBoxLocked(); err != nil {
 		return fmt.Errorf("reload: close old box: %w", err)
 	}
-	e.rawJSON = append([]byte(nil), rawJSON...)
+	e.rawJSON = normalized // the owned bytes that passed both validators, not a later caller slice
 	if err := e.startForOperation(ctx); err != nil {
 		if contextError(ctx) != nil || e.cleanupErr != nil {
 			return err // canceled or unretired candidate must never resurrect the old box
@@ -184,7 +215,19 @@ func (e *Engine) startForOperation(ctx context.Context) (err error) {
 	if err := contextError(ctx); err != nil {
 		return err
 	}
-	e.runCtx, e.runCancel = context.WithCancel(context.Background())
+	normalized, err := protectedRuntimeConfig(ctx, e.rawJSON)
+	if err != nil {
+		return err // before worker/factory/listeners/routes or protocol credentials
+	}
+	e.rawJSON = normalized // apply the validated graph; do not re-interpret caller aliases/defaults
+	if e.isolated {
+		return e.startIsolatedLocked(ctx)
+	}
+	lifetime := context.Background()
+	if e.workerCustody != nil {
+		lifetime = context.WithValue(lifetime, workerIngressCustodyKey{}, e.workerCustody)
+	}
+	e.runCtx, e.runCancel = context.WithCancel(lifetime)
 	stopCancellation := context.AfterFunc(ctx, e.runCancel)
 	defer func() {
 		detached := stopCancellation()
@@ -208,6 +251,12 @@ func (e *Engine) Status() string {
 	if e.cleanupErr != nil {
 		return "error"
 	}
+	if e.process != nil {
+		if e.process.unusable || e.process.exited() {
+			return "error"
+		}
+		return "running"
+	}
 	if e.box != nil {
 		return "running"
 	}
@@ -227,10 +276,51 @@ func (e *Engine) Status() string {
 // Ошибки с ErrSelectorSwitchUnavailable = seamless-путь невозможен,
 // вызывающий откатывается на Reload.
 func (e *Engine) SwitchDefault(selectorTag, tag string) (string, error) {
+	return e.SwitchDefaultContext(context.Background(), selectorTag, tag)
+}
+
+func (e *Engine) SwitchDefaultContext(ctx context.Context, selectorTag, tag string) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if err := contextError(ctx); err != nil {
+		return "", err
+	}
 	if e.cleanupErr != nil {
 		return "", e.cleanupErr
+	}
+	if e.isolated {
+		if selectorTag != "proxy" || !validWorkerTag(tag) {
+			return "", ErrSelectorSwitchUnavailable
+		}
+		e.clearForwardingPermitsLocked()
+		command := workerRequest{Action: "switch", Selector: selectorTag, Tag: tag}
+		scope, err := prepareWorkerStateReply(e.process, e.rawJSON, command)
+		if err != nil {
+			return "", e.retireIsolatedFailureLocked(err)
+		}
+		command.replyState = scope
+		reply, err := e.isolatedCommandLocked(ctx, command)
+		if err != nil {
+			return "", err
+		}
+		if len(scope.targetRaw) == 0 {
+			return "", e.retireIsolatedFailureLocked(errWorkerProtocol)
+		}
+		if err := contextError(ctx); err != nil {
+			return "", e.retireIsolatedFailureLocked(err) // worker may already have changed; never leave unknown mutation live
+		}
+		if err := e.publishSelectorConfiguration(scope.targetRaw); err != nil {
+			// Parent/worker snapshots must not diverge, even on sync failure.
+			return "", e.retireIsolatedFailureLocked(errors.New("engine selector snapshot sync failed"))
+		}
+		subject, err := configurationSubject(e.rawJSON)
+		if err != nil || reply.Subject != subject {
+			return "", e.retireIsolatedFailureLocked(errWorkerProtocol)
+		}
+		if err := contextError(ctx); err != nil || e.process != scope.process || scope.process.exited() {
+			return "", e.retireIsolatedFailureLocked(ErrEngineWorkerUnavailable, err)
+		}
+		return reply.Previous, nil
 	}
 	if e.box == nil {
 		return "", ErrEngineNotRunning
@@ -239,7 +329,7 @@ func (e *Engine) SwitchDefault(selectorTag, tag string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%w: outbound %q not found", ErrSelectorSwitchUnavailable, selectorTag)
 	}
-	sel, isSel := out.(*group.Selector)
+	sel, isSel := out.(selectorControl)
 	if !isSel {
 		return "", fmt.Errorf("%w: %q is not a selector", ErrSelectorSwitchUnavailable, selectorTag)
 	}
@@ -266,6 +356,13 @@ func (e *Engine) CurrentDefault(selectorTag string) (string, error) {
 	if e.cleanupErr != nil {
 		return "", e.cleanupErr
 	}
+	if e.isolated {
+		if selectorTag != "proxy" {
+			return "", ErrSelectorSwitchUnavailable
+		}
+		reply, err := e.isolatedCommandLocked(context.Background(), workerRequest{Action: "current", Selector: selectorTag})
+		return reply.Previous, err
+	}
 	if e.box == nil {
 		return "", ErrEngineNotRunning
 	}
@@ -273,7 +370,7 @@ func (e *Engine) CurrentDefault(selectorTag string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%w: outbound %q not found", ErrSelectorSwitchUnavailable, selectorTag)
 	}
-	sel, isSel := out.(*group.Selector)
+	sel, isSel := out.(selectorControl)
 	if !isSel {
 		return "", fmt.Errorf("%w: %q is not a selector", ErrSelectorSwitchUnavailable, selectorTag)
 	}
@@ -286,32 +383,28 @@ func (e *Engine) CurrentDefault(selectorTag string) (string, error) {
 // строгому парсеру не подчиняется (тесты/сырые конфиги), правится generic-
 // представление. Оба пути дают на выходе валидный JSON с новым default.
 func (e *Engine) rewriteSelectorDefault(selectorTag, tag string) error {
-	if cfg, err := config.Parse(e.rawJSON); err == nil {
-		found := false
-		for i := range cfg.Outbounds {
-			if cfg.Outbounds[i].Tag == selectorTag && cfg.Outbounds[i].Type == "selector" {
-				cfg.Outbounds[i].Default = tag
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("selector %q not found in raw config", selectorTag)
-		}
-		raw, err := jsonMarshalConfig(cfg)
-		if err != nil {
-			return err
-		}
-		e.rawJSON = raw
-		return nil
+	raw, err := selectorConfiguration(e.rawJSON, selectorTag, tag)
+	if err != nil {
+		return err
+	}
+	return e.publishSelectorConfiguration(raw)
+}
+
+// Rewrite the already-owned graph with value-only decoding. Initial protected
+// admission performs full validation; selector synchronization never reopens
+// certificate files while holding Engine.mu. Legacy raw local graphs keep the
+// existing generic JSON fallback, without acquiring forwarding authority.
+func selectorConfiguration(raw []byte, selectorTag, tag string) ([]byte, error) {
+	if cfg, _, err := runtimeConfiguration(raw); err == nil {
+		return marshalSelectorConfiguration(cfg, selectorTag, tag)
 	}
 	var doc map[string]any
-	if err := json.Unmarshal(e.rawJSON, &doc); err != nil {
-		return fmt.Errorf("raw config is not a JSON object: %w", err)
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("raw config is not a JSON object: %w", err)
 	}
 	outs, ok := doc["outbounds"].([]any)
 	if !ok {
-		return errors.New("raw config has no outbounds array")
+		return nil, errors.New("raw config has no outbounds array")
 	}
 	found := false
 	for _, o := range outs {
@@ -323,11 +416,43 @@ func (e *Engine) rewriteSelectorDefault(selectorTag, tag string) error {
 		found = true
 	}
 	if !found {
-		return fmt.Errorf("selector %q not found in raw config", selectorTag)
+		return nil, fmt.Errorf("selector %q not found in raw config", selectorTag)
 	}
 	raw, err := json.Marshal(doc)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	return raw, nil
+}
+
+func marshalSelectorConfiguration(cfg *config.Config, selectorTag, tag string) ([]byte, error) {
+	found := false
+	for i := range cfg.Outbounds {
+		if cfg.Outbounds[i].Tag == selectorTag && cfg.Outbounds[i].Type == "selector" {
+			cfg.Outbounds[i].Default = tag
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("selector %q not found in raw config", selectorTag)
+	}
+	raw, err := jsonMarshalConfig(cfg)
+	if err == nil && (len(raw) == 0 || len(raw) > maxWorkerConfigBytes) {
+		return nil, errors.New("selector config exceeds worker bound")
+	}
+	return raw, err
+}
+
+func (e *Engine) publishSelectorConfiguration(raw []byte) error {
+	if guarded, ok := e.box.(*admissionBox); ok && guarded.bootstrap != nil {
+		subject, err := configurationSubject(raw)
+		if err != nil {
+			return err
+		}
+		if err := guarded.bootstrap.bindSource(subject); err != nil {
+			return err
+		}
 	}
 	e.rawJSON = raw
 	return nil
@@ -351,26 +476,95 @@ func (e *Engine) startBox(ctx context.Context) error {
 }
 
 func newSingBox(ctx context.Context, rawJSON []byte) (boxInstance, error) {
-	boxCtx := include.Context(ctx)
-	var options option.Options
-	if err := options.UnmarshalJSONContext(boxCtx, rawJSON); err != nil {
+	if err := contextError(ctx); err != nil {
 		return nil, err
+	}
+	// Windows builds a fresh worker lifetime without a platform adapter.
+	// Such an adapter can activate SDK-internal parallel interface dials,
+	// whose original resources are outside the owned base-call contract.
+	if service.FromContext[adapter.PlatformInterface](ctx) != nil {
+		return nil, ErrPreflightScope
+	}
+	if len(rawJSON) > maxWorkerConfigBytes {
+		return nil, ErrPreflightScope
+	}
+	sdkJSON, cfg, err := sdkRuntimeConfiguration(rawJSON)
+	if err != nil {
+		return nil, err
+	}
+	subject, err := configurationSubject(rawJSON)
+	if err != nil {
+		return nil, err
+	}
+	// ContextWith mutates its service registry: clone before replacing the
+	// inbound adapter so another box/caller cannot inherit this admission owner.
+	boxCtx := service.ExtendContext(include.Context(ctx))
+	registry := service.FromContext[adapter.InboundRegistry](boxCtx)
+	outboundRegistry := service.FromContext[adapter.OutboundRegistry](boxCtx)
+	dnsRegistry := service.FromContext[adapter.DNSTransportRegistry](boxCtx)
+	if registry == nil || outboundRegistry == nil || dnsRegistry == nil {
+		return nil, ErrForwardingNotAdmitted
+	}
+	admission := newForwardingAdmission()
+	admission.ownedDNSPort53 = firstDNSPort53Rule(cfg)
+	admission.workerCustody, _ = ctx.Value(workerIngressCustodyKey{}).(*workerIngressCustody)
+	bootstrap := newBootstrapWorker(ctx, admission, subject, cfg)
+	if err := bootstrap.failure(); err != nil {
+		return nil, errors.Join(err, bootstrap.close())
+	}
+	boxCtx = service.ContextWith[adapter.InboundRegistry](boxCtx, &admissionInboundRegistry{InboundRegistry: registry, admission: admission})
+	boxCtx = service.ContextWith[adapter.OutboundRegistry](boxCtx, &admissionOutboundRegistry{OutboundRegistry: outboundRegistry, admission: admission, bootstrap: bootstrap})
+	boxCtx = service.ContextWith[adapter.DNSTransportRegistry](boxCtx, &bootstrapDNSRegistry{DNSTransportRegistry: dnsRegistry, worker: bootstrap})
+	var options option.Options
+	if err := options.UnmarshalJSONContext(boxCtx, sdkJSON); err != nil {
+		return nil, errors.Join(err, bootstrap.close())
 	}
 	b, err := box.New(box.Options{Context: boxCtx, Options: options})
 	if err != nil {
-		return nil, err // do not wrap a typed nil *box.Box in boxInstance
+		return nil, errors.Join(err, bootstrap.close()) // do not wrap a typed nil *box.Box in boxInstance
 	}
-	return b, nil
+	return &admissionBox{Box: b, admission: admission, bootstrap: bootstrap}, nil
 }
 
 // validateOptions — парсинг конфига средствами sing-box без старта.
 func validateOptions(ctx context.Context, rawJSON []byte) error {
-	boxCtx := include.Context(ctx)
-	var options option.Options
-	if err := options.UnmarshalJSONContext(boxCtx, rawJSON); err != nil {
-		return fmt.Errorf("invalid config for sing-box: %w", err)
+	_, err := validatedRuntimeOptions(ctx, rawJSON)
+	return err
+}
+
+func validatedRuntimeOptions(ctx context.Context, rawJSON []byte) ([]byte, error) {
+	normalized, err := protectedRuntimeConfig(ctx, rawJSON)
+	if err != nil {
+		return nil, err // rejected candidate cannot close/replace the running owner
 	}
-	return nil
+	boxCtx := include.Context(ctx)
+	sdkJSON, _, err := sdkRuntimeConfiguration(normalized)
+	if err != nil {
+		return nil, err
+	}
+	var options option.Options
+	if err := options.UnmarshalJSONContext(boxCtx, sdkJSON); err != nil {
+		return nil, fmt.Errorf("invalid config for sing-box: %w", err)
+	}
+	return normalized, contextError(ctx)
+}
+
+func protectedRuntimeConfig(ctx context.Context, rawJSON []byte) ([]byte, error) {
+	if err := contextError(ctx); err != nil {
+		return nil, err
+	}
+	if len(rawJSON) > maxWorkerConfigBytes {
+		return nil, errors.New("protected runtime config exceeds lifecycle bound")
+	}
+	validated, err := config.Parse(rawJSON)
+	if err != nil {
+		return nil, fmt.Errorf("protected runtime config rejected: %w", err)
+	}
+	normalized, err := jsonMarshalConfig(validated)
+	if err != nil || len(normalized) > maxWorkerConfigBytes {
+		return nil, errors.New("normalized protected runtime config exceeds lifecycle bound")
+	}
+	return normalized, contextError(ctx)
 }
 
 func jsonMarshalConfig(cfg *config.Config) ([]byte, error) {
@@ -389,6 +583,12 @@ func contextError(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
+		if deadline, bounded := ctx.Deadline(); bounded && !time.Now().Before(deadline) {
+			return context.DeadlineExceeded // also cover delayed timer delivery before a write
+		}
+		if !OperationSourcesCurrent(ctx) {
+			return context.Canceled // value-only; safe under Engine/Manager locks
+		}
 		return nil
 	}
 }

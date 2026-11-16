@@ -19,6 +19,12 @@
 !ifndef WINTUN_PATH
   !define WINTUN_PATH "..\bin\wintun.dll"
 !endif
+!ifndef PROBE_PATH
+  !define PROBE_PATH "..\bin\snowden-native-probe.exe"
+!endif
+!ifndef RECOVERY_PATH
+  !define RECOVERY_PATH "..\bin\snowden-recovery.exe"
+!endif
 !ifndef APP_VERSION
   !define APP_VERSION "2.0.0"
 !endif
@@ -74,7 +80,9 @@ Section "Install"
   Sleep 500
 
   File "/oname=${APP_EXE}" "${EXE_PATH}"
+  File "/oname=snowden-recovery.exe" "${RECOVERY_PATH}"
   File "/oname=wintun.dll" "${WINTUN_PATH}"
+  File "/oname=snowden-native-probe.exe" "${PROBE_PATH}"
 
   ; Ярлыки (per-user)
   CreateDirectory "$SMPROGRAMS\snowden.system"
@@ -111,7 +119,9 @@ Section "Uninstall"
   Sleep 500
 
   Delete "$INSTDIR\${APP_EXE}"
+  Delete "$INSTDIR\snowden-recovery.exe"
   Delete "$INSTDIR\wintun.dll"
+  Delete "$INSTDIR\snowden-native-probe.exe"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
 

@@ -30,6 +30,7 @@ package main
 
 import (
 	"os"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -44,6 +45,14 @@ const singleInstanceMutexName = "wails-app-snowden-system-v3sim"
 // процесс поднят вместо предыдущего, дождись его выхода».
 const modeSwitchAwaitFlag = "--await-previous"
 
+// Main startup only. Preserve the exact original probe handle if its Close is
+// uncertain; no retry/replacement/PID cleanup may erase that fact. main exits
+// terminally after false, before any App/storage/housekeeping can start.
+var modeSwitchMutexProbe struct {
+	sync.Mutex
+	handle windows.Handle
+}
+
 // modeSwitchAwaitRequested — был ли процесс запущен переключением режима.
 func modeSwitchAwaitRequested() bool {
 	for _, arg := range os.Args[1:] {
@@ -55,29 +64,44 @@ func modeSwitchAwaitRequested() bool {
 }
 
 // awaitSingleInstanceReleased — ждать, пока предыдущий экземпляр отдаст
-// мьютекс. true = освобождён (можно стартовать); false = таймаут (стартуем
-// всё равно: молчаливый выход хуже, чем повторный запуск — честный crash-лог
-// пишет вызывающий).
+// мьютекс. true требует нового mutex и подтверждённого закрытия original probe.
+// false = terminal startup failure, never permission to start anyway. This is
+// only the cooperative Wails namespace, not an authenticated parent-handle ACK.
 func awaitSingleInstanceReleased(timeout time.Duration) bool {
+	if timeout <= 0 || !modeSwitchMutexProbe.TryLock() {
+		return false
+	}
+	defer modeSwitchMutexProbe.Unlock()
+	if modeSwitchMutexProbe.handle != 0 {
+		return false // an uncertain original Close cannot be retried via replacement
+	}
 	deadline := time.Now().Add(timeout)
 	for {
+		if !time.Now().Before(deadline) {
+			return false
+		}
 		h, err := windows.CreateMutex(nil, false, windows.StringToUTF16Ptr(singleInstanceMutexName))
-		if h != 0 {
-			// Handle закрываем всегда: владельцем мьютекса должен остаться
-			// только Wails (см. шапку файла).
-			_ = windows.CloseHandle(h)
+		if h == 0 || h == windows.InvalidHandle {
+			return false
+		}
+		modeSwitchMutexProbe.handle = h
+		if windows.CloseHandle(h) != nil {
+			return false // preserve the exact handle until the terminal process exit
+		}
+		modeSwitchMutexProbe.handle = 0
+		if !time.Now().Before(deadline) {
+			return false // a stalled native call cannot publish late success
 		}
 		switch {
 		case err == nil:
-			return true // мьютекс свободен — предыдущий процесс завершился
+			return true // only a fresh cooperative mutex probe, not authenticated parent exit
 		case err == windows.ERROR_ALREADY_EXISTS:
 			if time.Now().After(deadline) {
 				return false
 			}
-			time.Sleep(150 * time.Millisecond)
+			time.Sleep(min(150*time.Millisecond, time.Until(deadline)))
 		default:
-			// Неожиданная ошибка (права/имя): не блокируем старт, но и не
-			// выдаём ожидание за успех.
+			// Native/ACL uncertainty is terminal; it cannot authorize startup.
 			return false
 		}
 	}
