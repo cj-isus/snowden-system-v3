@@ -3623,6 +3623,83 @@ LocalAddr constructor snapshot, no native getter. q87 metadata-only/s95;
 5Go2origin4docs/gofmt5. No tests/build/native/network/Git. Next PC01 W4c/helper/
 WFP source, TUN unavailable; PC06 and fullPC/native/OS/rejected/preflight OPEN.
 
+<a id="pc-v486-tun-connection-controls"></a>
+### PC-01 — V2-486: original TCP controls, source/unverified
+
+Закрыт interface escape в original diagnostic TCP: именованное Conn и полный
+net.Conn surface, общий mutex/seal для всех трёх deadline setter и handshake.
+Нештатный управляющий вызов остаётся отрицательным в original once Close и
+flow proof. Read/Write owner/counters и metadata delegation сохранены.
+Текущий SDK CopyConn явно не вызывает half-setter: runtime-дефект не воспроизводился.
+W4c private App/Manager chain уже есть в source, compiled native gate всё ещё false.
+3Go4docs/manual3diff1new/gofmt3exit0;18reviewed4cachedSDK;q87/s95 unchanged.
+Без tests/build/native/network/newGit; PC-01/PC-06/полный план не приняты.
+[Контракт](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v486-tun-connection-controls).
+
+<a id="pc-v487-tun-actor-read"></a>
+### PC-01 — V2-487: metadata read и original helper custody
+
+NativeTUNActor Descriptor получил один original read slot: IPC/native callbacks
+вне actor.mu, новое чтение после seal отклоняется, параллельное чтение возвращает
+busy. Unknown callback сохраняет faulted owner; normal query/cancel completion
+проверяется до освобождения helper/image. Ingress/filter revocations регистрируются
+вместе с проверкой этого read и выполняются прежде неё. После Executable callback
+повторены final scope/active checks. Public API остаётся прежним, допуск TUN закрыт.
+2Go4docs/manual2diff1new/gofmt2exit0;16reviewed0cachedSDK;q87/s95 unchanged.
+Source-only; tests/build/native/OS acceptance и весь PC-01/PC-06/полный план OPEN.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v487-tun-actor-read).
+
+<a id="pc-v488-wfp-operation-scope"></a>
+### PC-01 — V2-488: scope на границе diagnostic Open/Add
+
+Actual diagnostic WFP Open/Add получили исходный ctx и проверки real deadline /
+value-only operation sources до native-вызова и после сохранения его returned
+outputs. Поздний успех не даёт successful lease; original handle/filter остаётся
+у cleanup owner. Переиспользованы childbootstrap.CheckScope и OperationSourcesCurrent.
+Acquire/Validate повторяют scope; negative Close/Free/Abort сохраняют прежние guards.
+3Go4docs/manual3diff1new/gofmt3exit0;14reviewed0cachedSDK;q87/s95 unchanged.
+Source-only: private Add fixture/API, atomic cancel/native call, generic WFP paths,
+lease/native mutex blocking, compile/native/OS и полный план OPEN.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v488-wfp-operation-scope).
+
+<a id="pc-v489-wfp-batch-source"></a>
+### PC-01 — V2-489: original batch до native Commit
+
+WFP batch сохраняет original ctx; transaction и write закреплены за ним до
+native callbacks. Positive source/deadline проверяется на границах Begin,
+мутаций, Commit и final cleanup. Поздний сбой не стирает original commit и
+сохраняет прежний failedGrant/pending барьер до реального restrictive receipt.
+Restrict/Release используют independent ctx.Err-only contract; старый grant
+не продлевает и не блокирует их authority. Native Free/Abort/Close прежние.
+3Go4docs/manual3diff0new/gofmt3exit0;13reviewed0cachedSDK;q87/s95 unchanged.
+Legacy Background Arm caller lifetime, fixtures/compile/native/OS/fullPC OPEN.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v489-wfp-batch-source).
+
+<a id="pc-v490-protection-arm-scope"></a>
+### PC-01 — V2-490: App protection intent до marker/WFP
+
+Все3 App Arm callers сохраняют original intent+operation/App lifetime через private
+base-barrier scope и strict ArmContext. Bounded5s context не зависит от physical-path
+cancel; завершённый исходный запрос не получает authority преемника. Scope действует
+через marker и bound WFP batch, а Grant/diagnostic отвергают Arm-tag context.
+Поздний marker сохраняется для explicit Disconnect; independent BlockDirect и
+manual Release commit после original cleanup прежние.
+8Go4docs/manual8diff1new/gofmt8exit0;19reviewed0cachedSDK;q87/s95 unchanged.
+Legacy raw netsh/output custody — следующий source-пункт; durability/hard timeout/
+fixture/compile/native/OS/fullPC OPEN. [Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v490-protection-arm-scope).
+
+<a id="pc-v491-owned-legacy-firewall"></a>
+### PC-01 — V2-491: legacy cleanup с original Job/I/O
+
+Legacy netsh выполняет только exact7 canonical deletes через absolute system image,
+original protected lane/Job и bounded combined stdout/stderr. Typed command output
+возвращается после original full retirement; default verifier/helper API сохранён.
+Exact absence sentinel требует completed capture/exit1/whole known message;
+typed failures/unknown/overflow не снимают marker. Manual Release authorization прежняя.
+8Go4docs/manual8diff2new/gofmt5+4exit0;18reviewed1cachedSDK;q87/s95 unchanged.
+Source-only: locale/native/Job/stdio/compile и весь план OPEN. Далее bounded/durable
+marker read/write/remove и original file identity. [Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v491-owned-legacy-firewall).
+
 Абсолютный запрет владельца на тестирование/сборки/исполнение сети сохраняется.
 
 1. ПК-владельцу: закончить W4c original-helper/WFP admission, сохранив закрытый

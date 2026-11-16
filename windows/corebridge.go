@@ -274,7 +274,7 @@ func (a *App) startCoreGenerationBody(id uint64, outcome *appLifecycleOutcome) {
 	// Protect even render/preflight failures on the first Connect, before
 	// there is a Manager to tear down. No automatic error releases this policy.
 	if tunRequested() {
-		if err := a.protectionPolicy().Arm(); err != nil {
+		if err := a.armProtection(ctx); err != nil {
 			a.failCoreForIntent(id, "WFP: барьер не подтверждён до подготовки конфига", err)
 			return
 		}
@@ -513,7 +513,7 @@ func (a *App) startWithProbeResult(ctx context.Context, cc *render.ClientConfig)
 		return err
 	}
 	if tunMode {
-		if err := a.protectionPolicy().Arm(); err != nil {
+		if err := a.armProtection(ctx); err != nil {
 			a.appendLog("error", "WFP: применение системной защиты не подтверждено; запуск TUN отклонён.")
 			return err
 		}

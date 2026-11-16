@@ -4,6 +4,7 @@ package main
 // No lease, timer or marker PID authorizes cleanup. Only Disconnect does.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,16 +20,6 @@ const killSwitchPolicyName = "snowden-system-tun-killswitch"
 // KillSwitchRunner isolates legacy rule deletion from the operating system.
 type KillSwitchRunner interface {
 	Run(name string, args ...string) error
-}
-
-type osRunner struct{}
-
-func (osRunner) Run(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-	}
-	return nil
 }
 
 // HelperPID is decoded solely to reject mixed/legacy state. It is never used to
@@ -104,6 +95,13 @@ func isMissingLegacyRuleError(err error) bool {
 	if err == nil {
 		return false
 	}
+	if err == errLegacyFirewallRuleAbsent {
+		return true
+	}
+	var commandFailure *legacyFirewallCommandFailure
+	if errors.As(err, &commandFailure) {
+		return false // no partial text can turn a real process/cleanup failure into absence
+	}
 	// Failure to execute netsh is not evidence that its rules are absent.
 	var execErr *exec.Error
 	var pathErr *os.PathError
@@ -121,9 +119,23 @@ func armWFPKillSwitch(exe string) error {
 	return armStrictKillSwitch(killSwitchStatePathFn(), exe, applyWFPBase)
 }
 
+func armWFPKillSwitchContext(ctx context.Context, exe string) error {
+	if err := wfpOperationScope(ctx); err != nil {
+		return err
+	}
+	return armStrictKillSwitchContext(ctx, killSwitchStatePathFn(), exe, func(exe string) error { return applyWFPBaseContext(ctx, exe) })
+}
+
 // No migration is guessed from a PID or damaged file. Retained strict intent
 // permits rearm, but does not prove enforcement: apply must still succeed.
 func armStrictKillSwitch(path, exe string, apply func(string) error) error {
+	return armStrictKillSwitchContext(context.Background(), path, exe, apply)
+}
+
+func armStrictKillSwitchContext(ctx context.Context, path, exe string, apply func(string) error) error {
+	if err := wfpOperationScope(ctx); err != nil {
+		return err
+	}
 	data, err := os.ReadFile(path)
 	if err == nil {
 		var state killSwitchState
@@ -137,15 +149,28 @@ func armStrictKillSwitch(path, exe string, apply func(string) error) error {
 		if err != nil {
 			return err
 		}
+		if err := wfpOperationScope(ctx); err != nil {
+			return err
+		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return fmt.Errorf("WFP strict marker directory: %w", err)
+		}
+		if err := wfpOperationScope(ctx); err != nil {
+			return err
 		}
 		if err := os.WriteFile(path, data, 0o600); err != nil {
 			return fmt.Errorf("WFP strict marker: %w", err)
 		}
 	}
 	// Intent must survive apply failure/crash. Never remove it here.
-	return apply(exe)
+	if err := wfpOperationScope(ctx); err != nil {
+		return err
+	}
+	err = apply(exe)
+	if scopeErr := wfpOperationScope(ctx); scopeErr != nil {
+		return errors.Join(err, scopeErr)
+	}
+	return err
 }
 
 func disarmKillSwitch() error {

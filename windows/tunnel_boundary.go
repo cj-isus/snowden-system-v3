@@ -88,9 +88,9 @@ func (b nativeTunnelBoundary) Establish(ctx context.Context, cc *render.ClientCo
 	if err := b.Validate(ctx, cc, lease); err != nil {
 		return tunnelLease{}, err
 	}
-	// This is a prepared narrow observation only. No general LUID permission,
-	// worker token or admitted ingress is installed; the remaining W4c joint
-	// worker/Manager commit must consume original evidence, never this public report.
+	// This is a prepared narrow observation only. The private App/Manager commit
+	// consumes its original evidence before granting general LUID permission and
+	// admitted ingress. The compiled native acceptance gate remains closed.
 	return lease, nil
 }
 

@@ -45,6 +45,17 @@ func (strictWFPPolicy) Arm() error {
 	return armWFPKillSwitch(exe)
 }
 
+func (strictWFPPolicy) ArmContext(ctx context.Context) error {
+	if err := wfpOperationScope(ctx); err != nil {
+		return err
+	}
+	exe, err := osExecutable()
+	if err != nil {
+		return err
+	}
+	return armWFPKillSwitchContext(ctx, exe)
+}
+
 func (strictWFPPolicy) BlockDirect() error { return revokeWFPTUN() }
 func (strictWFPPolicy) Release() error     { return disarmKillSwitch() }
 
@@ -148,7 +159,7 @@ func (a *App) finishCanceledLifecycleCause(ctx context.Context, intent uint64, c
 		if tunRequested() {
 			// Cancellation can precede the first render-time Arm. The pending
 			// Connect still requests protection until an explicit Disconnect.
-			err = errors.Join(err, a.protectionPolicy().Arm())
+			err = errors.Join(err, a.armProtection(ctx))
 		}
 		return a.failCoreForIntent(intent, "операция жизненного цикла отменена", err)
 	}

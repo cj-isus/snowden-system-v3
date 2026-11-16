@@ -24,6 +24,7 @@ const (
 )
 
 type nativeWFPTransaction struct {
+	batch           *nativeWFPBatch // original policy batch, bound before Begin; nil for legacy/read-only callers
 	phase           wfpTransactionPhase
 	readOnly        bool
 	beginAttempted  bool
@@ -56,11 +57,26 @@ var (
 )
 
 func (owner *nativeWFPSessionOwner) beginTransaction(readOnly bool) error {
+	return owner.beginTransactionBound(readOnly, nil)
+}
+
+func (owner *nativeWFPSessionOwner) beginTransactionBound(readOnly bool, batch *nativeWFPBatch) error {
+	if batch != nil {
+		if readOnly || batch.transaction != nil {
+			return core.ErrNativeScopeUnavailable
+		}
+		if err := batch.operationScope(); err != nil {
+			return err
+		}
+	}
 	if !owner.callsReturned() || owner.handle == 0 || owner.closed || owner.closeStarted || owner.transaction != nil && owner.transaction.phase != wfpTransactionFinished {
 		return core.ErrNativeScopeUnavailable
 	}
-	transaction := &nativeWFPTransaction{phase: wfpTransactionStarting, readOnly: readOnly}
+	transaction := &nativeWFPTransaction{phase: wfpTransactionStarting, readOnly: readOnly, batch: batch}
 	owner.transaction = transaction // original receipt exists BEFORE any native call
+	if batch != nil {
+		batch.transaction = transaction // retain the exact partial Begin, never adopt an earlier transaction on error
+	}
 	for _, proc := range []*windows.LazyProc{wfpTransactionBegin, wfpTransactionCommit, wfpTransactionAbort} {
 		if err := proc.Find(); err != nil {
 			transaction.phase = wfpTransactionFinished
@@ -71,6 +87,12 @@ func (owner *nativeWFPSessionOwner) beginTransaction(readOnly bool) error {
 	if readOnly {
 		flags = 1
 	}
+	if batch != nil {
+		if err := batch.operationScope(); err != nil {
+			transaction.phase = wfpTransactionFinished // no original Begin was attempted
+			return err
+		}
+	}
 	transaction.beginAttempted = true
 	code, _, _ := wfpTransactionBegin.Call(uintptr(owner.handle), flags)
 	transaction.beginReturned = true
@@ -80,6 +102,9 @@ func (owner *nativeWFPSessionOwner) beginTransaction(readOnly bool) error {
 		return fmt.Errorf("WFP transaction begin unavailable (%d)", uint32(code))
 	}
 	transaction.phase = wfpTransactionActive
+	if batch != nil {
+		return batch.operationScope() // a late Begin is still owned and independently abortable
+	}
 	return nil
 }
 
@@ -120,6 +145,9 @@ func (owner *nativeWFPSessionOwner) commitTransaction(ctx context.Context) error
 	if ctx == nil || ctx.Err() != nil || !owner.callsReturned() || transaction == nil || transaction.phase != wfpTransactionActive || transaction.readOnly || owner.handle == 0 || owner.closed || owner.closeStarted {
 		return core.ErrNativeScopeUnavailable
 	}
+	if err := transaction.operationScope(ctx); err != nil {
+		return err // original batch source must still authorize the native commit
+	}
 	transaction.phase, transaction.commitAttempted = wfpTransactionCommitting, true
 	code, _, _ := wfpTransactionCommit.Call(uintptr(owner.handle))
 	transaction.commitReturned = true
@@ -129,7 +157,7 @@ func (owner *nativeWFPSessionOwner) commitTransaction(ctx context.Context) error
 		return fmt.Errorf("WFP transaction commit unconfirmed (%d)", uint32(code))
 	}
 	transaction.phase, transaction.commitConfirmed = wfpTransactionFinished, true
-	return ctx.Err() // a known committed operation can still have a canceled caller
+	return transaction.operationScope(ctx) // late source failure cannot erase the recorded original commit
 }
 
 type wfpPolicyAction uint8
@@ -147,6 +175,7 @@ const (
 // to success by comparing configuration or rereading the same stable keys.
 type nativeWFPBatch struct {
 	action       wfpPolicyAction
+	operation    context.Context // immutable original request; a later caller cannot refresh this batch
 	transaction  *nativeWFPTransaction
 	writes       [40]*nativeWFPWrite
 	count        int
@@ -169,13 +198,19 @@ var wfpPolicyWriter struct {
 // lifetime. Persistent objects survive client exit as before. Only explicit
 // Release closes it, AFTER actual removal; an unknown Close retains custody.
 func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation func(*nativeWFPPolicyOwner) error) (finalErr error) {
-	if ctx == nil || ctx.Err() != nil || operation == nil || action > wfpPolicyRelease {
+	if operation == nil || action > wfpPolicyRelease {
 		return core.ErrNativeScopeUnavailable
+	}
+	if err := wfpPolicyOperationScope(ctx, action); err != nil {
+		return err
 	}
 	if !wfpPolicyWriter.TryLock() {
 		return errors.Join(core.ErrHelperBusy, core.ErrHelperCleanup)
 	}
 	defer wfpPolicyWriter.Unlock()
+	if err := wfpPolicyOperationScope(ctx, action); err != nil {
+		return err
+	}
 	var owner *nativeWFPPolicyOwner
 	complete := false
 	defer func() {
@@ -198,7 +233,7 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 		owner.retainFailedGrant(finalErr) // before cleanup can panic/Goexit or lose the caller assignment
 		cleanup := cleanupWFPWriterTransaction(owner)
 		cleanupReturned = true
-		finalErr = errors.Join(finalErr, cleanup, ctx.Err())
+		finalErr = errors.Join(finalErr, cleanup, wfpPolicyOperationScope(ctx, action))
 		if cleanup != nil || owner.pendingGrant || owner.session.closeStarted && !owner.session.closed {
 			finalErr = errors.Join(finalErr, core.ErrHelperCleanup, cleanup)
 		}
@@ -216,7 +251,13 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 	if owner == nil { // an unresolved original owner is never replaced by allocation
 		owner = &nativeWFPPolicyOwner{}
 		wfpPolicyWriter.owner = owner
-		if err := owner.session.openSessionMode(false, "Snowden persistent policy owner"); err != nil {
+		var err error
+		if action == wfpPolicyArm || action == wfpPolicyGrant {
+			err = owner.session.openSessionModeContext(ctx, false, "Snowden persistent policy owner")
+		} else {
+			err = owner.session.openSessionMode(false, "Snowden persistent policy owner")
+		}
+		if err != nil {
 			return errors.Join(core.ErrHelperCleanup, err)
 		}
 	}
@@ -229,19 +270,20 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 	if owner.pendingGrant && (action == wfpPolicyArm || action == wfpPolicyGrant) {
 		return core.ErrHelperCleanup // restrictive cleanup must precede any new grant
 	}
-	owner.batch = &nativeWFPBatch{action: action}
-	if err := owner.session.beginTransaction(false); err != nil {
-		owner.batch.transaction = owner.session.transaction
+	if err := wfpPolicyOperationScope(ctx, action); err != nil {
 		return err
 	}
-	owner.batch.transaction = owner.session.transaction
+	owner.batch = &nativeWFPBatch{action: action, operation: ctx}
+	if err := owner.session.beginTransactionBound(false, owner.batch); err != nil {
+		return err
+	}
 	if err := operation(owner); err != nil {
 		return err
 	}
 	if err := verifyWFPPolicyAction(ctx, owner, action); err != nil {
 		return err
 	}
-	if err := ctx.Err(); err != nil {
+	if err := owner.batch.operationScope(); err != nil {
 		return err
 	}
 	if err := owner.session.commitTransaction(ctx); err != nil {
@@ -250,6 +292,9 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 	// Post-commit verification uses a NEW explicit read snapshot on the SAME
 	// original session. It does not excuse any previous failed Commit result.
 	if err := verifyWFPPolicyAction(ctx, owner, action); err != nil {
+		return err
+	}
+	if err := owner.batch.operationScope(); err != nil {
 		return err
 	}
 	if action == wfpPolicyRestrict || action == wfpPolicyRelease {

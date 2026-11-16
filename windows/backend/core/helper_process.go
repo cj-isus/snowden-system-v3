@@ -177,6 +177,9 @@ func captureOwnedHelper(lane *helperCaptureLane, parent context.Context, executa
 	if (options.imagePin != "" || options.keepImage) && options.guard == nil || options.keepImage && options.imagePin != "" || options.applicationEnvironment && !options.keepImage {
 		return nil, ErrNativeScopeUnavailable
 	}
+	if options.commandExit != nil && (options.imagePin != "" || options.keepImage || options.applicationEnvironment || options.guard != nil) {
+		return nil, ErrNativeScopeUnavailable // command exit data cannot weaken a signed verifier/probe contract
+	}
 	if options.imagePin != "" {
 		if _, err := nativeImagePin(options.imagePin); err != nil {
 			return nil, err
@@ -265,6 +268,7 @@ func captureOwnedHelper(lane *helperCaptureLane, parent context.Context, executa
 	}
 	read := newHelperOutputRead(maxOutput) // fixed allocation before child/reader creation
 	policy := ownedProcessLimits{processes: 1, commitBytes: helperCaptureCommitBytes, cleanSystemEnvironment: true}
+	policy.combinedOutput = options.commandExit != nil
 	if options.applicationEnvironment {
 		policy.commitBytes = updateCodeCheckCommitBytes
 		policy.userTime = updateCodeCheckUserTime
@@ -343,7 +347,10 @@ func captureOwnedHelper(lane *helperCaptureLane, parent context.Context, executa
 	if err != nil {
 		return nil, ErrHelperExit
 	}
-	if code != 0 {
+	if options.commandExit != nil {
+		options.commandExit.code, options.commandExit.returned = code, true
+	}
+	if code != 0 && options.commandExit == nil {
 		return nil, fmt.Errorf("%w: status %d", ErrHelperExit, code)
 	}
 	if options.applicationEnvironment {

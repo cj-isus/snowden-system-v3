@@ -64,13 +64,19 @@ func (nativeTUNWFPPolicy) Acquire(ctx context.Context, actor *core.NativeTUNActo
 }
 
 func (lease *nativeTUNWFPLease) Acquire(ctx context.Context) (finalErr error) {
-	if lease == nil || ctx == nil || ctx.Err() != nil {
+	if lease == nil {
 		return core.ErrNativeScopeUnavailable
+	}
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
+		return err
 	}
 	lease.mu.Lock()
 	defer lease.mu.Unlock()
 	if lease.closed || lease.acquireStarted {
 		return core.ErrNativeScopeUnavailable
+	}
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
+		return err // do not claim a global owner after waiting past the source/deadline
 	}
 	lease.acquireStarted = true
 	complete := false
@@ -109,7 +115,7 @@ func (lease *nativeTUNWFPLease) Acquire(ctx context.Context) (finalErr error) {
 		return err
 	}
 	lease.spec = diagnosticWFPRule(helperApp, descriptor.SourcePort, lease.luid)
-	if err := lease.native.openSession(); err != nil {
+	if err := lease.native.openSessionContext(ctx); err != nil {
 		return err
 	}
 	// Reject ANY general LUID permit and any diagnostic/unknown owned filter.
@@ -120,10 +126,13 @@ func (lease *nativeTUNWFPLease) Acquire(ctx context.Context) (finalErr error) {
 	if current, err := lease.actor.Descriptor(ctx); err != nil || current != descriptor {
 		return core.ErrNativeScopeUnavailable
 	}
-	if err := lease.native.open(helperApp, descriptor.SourcePort, lease.luid); err != nil {
+	if err := lease.native.open(ctx, helperApp, descriptor.SourcePort, lease.luid); err != nil {
 		return err
 	}
 	if err := lease.validateLocked(ctx, false); err != nil {
+		return err
+	}
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
 		return err
 	}
 	lease.opened, complete = true, true
@@ -140,7 +149,10 @@ func (lease *nativeTUNWFPLease) Validate(ctx context.Context) error {
 }
 
 func (lease *nativeTUNWFPLease) validateLocked(ctx context.Context, requireOpened bool) error {
-	if ctx == nil || ctx.Err() != nil || !lease.claimed || !lease.acquireStarted || requireOpened && !lease.opened || lease.closed || lease.native.closed || lease.native.closeStarted || !lease.native.openReturned || lease.native.openCode != 0 || lease.native.handle == 0 || lease.luid == 0 {
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
+		return err
+	}
+	if !lease.claimed || !lease.acquireStarted || requireOpened && !lease.opened || lease.closed || lease.native.closed || lease.native.closeStarted || !lease.native.openReturned || lease.native.openCode != 0 || lease.native.handle == 0 || lease.luid == 0 {
 		return core.ErrNativeScopeUnavailable
 	}
 	current, err := lease.actor.Descriptor(ctx)
@@ -158,7 +170,7 @@ func (lease *nativeTUNWFPLease) validateLocked(ctx context.Context, requireOpene
 	if err != nil || current != lease.descriptor {
 		return core.ErrNativeScopeUnavailable
 	}
-	return ctx.Err()
+	return wfpDiagnosticOperationScope(ctx)
 }
 
 func (lease *nativeTUNWFPLease) Close() error {

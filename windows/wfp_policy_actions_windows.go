@@ -17,7 +17,13 @@ import (
 // inspected/preserved; retries never tear it down or repair damaged policy into
 // a successful Arm. Partial pre-transaction legacy objects need Disconnect.
 func applyWFPBase(exePath string) error {
-	ctx := context.Background()
+	return applyWFPBaseContext(context.Background(), exePath)
+}
+
+func applyWFPBaseContext(ctx context.Context, exePath string) error {
+	if err := wfpOperationScope(ctx); err != nil {
+		return err
+	}
 	appID, err := readOwnedWFPAppID(ctx, exePath)
 	if err != nil {
 		return err

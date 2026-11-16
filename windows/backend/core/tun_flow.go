@@ -3,82 +3,13 @@ package core
 import (
 	"context"
 	"errors"
-	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing/common/bufio"
 	N "github.com/sagernet/sing/common/network"
 )
-
-// Deliberately no Upstream/replaceable interface: SDK copy optimizations must
-// not unwrap the original once-close receipt. In-flight I/O is retired by the
-// flow owner; a failed Close is sticky and never upgraded by a second call.
-type tunScopedConnection struct {
-	net.Conn
-	mu           sync.Mutex
-	closing      atomic.Bool
-	readBytes    atomic.Uint64
-	writtenBytes atomic.Uint64
-	closeStarted bool
-	closeErr     error
-}
-
-func (connection *tunScopedConnection) Read(buffer []byte) (int, error) {
-	if connection.closing.Load() {
-		return 0, net.ErrClosed
-	}
-	n, err := connection.Conn.Read(buffer)
-	if n > 0 {
-		connection.readBytes.Add(uint64(n))
-	}
-	return n, err
-}
-
-func (connection *tunScopedConnection) Write(buffer []byte) (int, error) {
-	if connection.closing.Load() {
-		return 0, net.ErrClosed
-	}
-	n, err := connection.Conn.Write(buffer)
-	if n > 0 {
-		connection.writtenBytes.Add(uint64(n))
-	}
-	return n, err
-}
-
-func (connection *tunScopedConnection) Close() error {
-	connection.closing.Store(true)
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
-	if connection.closeStarted {
-		return connection.closeErr
-	}
-	connection.closeStarted, connection.closeErr = true, ErrNativeScopeUnavailable
-	connection.closeErr = connection.Conn.Close()
-	return connection.closeErr
-}
-
-// Pinned gVisor deadline/handshake calls may initialize a lazy TCP endpoint.
-// Serialize that preparation with original Close; never initialize after close.
-func (connection *tunScopedConnection) SetDeadline(deadline time.Time) error {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
-	if connection.closing.Load() {
-		return net.ErrClosed
-	}
-	return connection.Conn.SetDeadline(deadline)
-}
-
-func (connection *tunScopedConnection) handshake(peer net.Conn) error {
-	connection.mu.Lock()
-	defer connection.mu.Unlock()
-	if connection.closing.Load() {
-		return net.ErrClosed
-	}
-	return N.ReportConnHandshakeSuccess(connection.Conn, peer)
-}
 
 // Exactly one native diagnostic, with both original streams and the actual
 // selected adapter captured from the live box. No Router/rules, listener, DNS,
@@ -245,5 +176,6 @@ func (flow *nativeTUNFlow) proven() bool {
 	flow.mu.Lock()
 	defer flow.mu.Unlock()
 	return flow.bound && !flow.fault && flow.ingress != nil && flow.upstream != nil &&
+		!flow.ingress.controlFault.Load() && !flow.upstream.controlFault.Load() &&
 		flow.ingress.readBytes.Load() > 0 && flow.ingress.writtenBytes.Load() > 0 && flow.upstream.readBytes.Load() > 0 && flow.upstream.writtenBytes.Load() > 0
 }

@@ -38,8 +38,9 @@ type nativeImagePreparation interface {
 type helperCaptureOptions struct {
 	imagePin               string
 	guard                  func(context.Context) error
-	keepImage              bool // dedicated updater owner only; process retires before bytes, image stays owned
-	applicationEnvironment bool // same-user public SDK store, no GUI/runtime environment inheritance
+	keepImage              bool               // dedicated updater owner only; process retires before bytes, image stays owned
+	applicationEnvironment bool               // same-user public SDK store, no GUI/runtime environment inheritance
+	commandExit            *helperCommandExit // ordinary system-command facts only, never verifier/probe acceptance
 }
 
 func nativeImagePin(value string) ([32]byte, error) {

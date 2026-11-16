@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 	"unsafe"
@@ -105,10 +106,21 @@ type nativeDiagnosticWFP struct {
 }
 
 func (owner *nativeWFPSessionOwner) openSession() error {
-	return owner.openSessionMode(true, "Snowden owned policy observation")
+	return owner.openSessionContext(context.Background())
+}
+
+func (owner *nativeWFPSessionOwner) openSessionContext(ctx context.Context) error {
+	return owner.openSessionModeContext(ctx, true, "Snowden owned policy observation")
 }
 
 func (owner *nativeWFPSessionOwner) openSessionMode(dynamic bool, name string) error {
+	return owner.openSessionModeContext(context.Background(), dynamic, name)
+}
+
+func (owner *nativeWFPSessionOwner) openSessionModeContext(ctx context.Context, dynamic bool, name string) error {
+	if err := wfpOperationScope(ctx); err != nil {
+		return err
+	}
 	if !owner.callsReturned() || owner.openAttempted || owner.closeStarted || owner.closed || len(name) == 0 || len(name) > 128 || runtime.GOARCH != "amd64" ||
 		unsafe.Sizeof(diagnosticWFPSession{}) != 72 || unsafe.Sizeof(diagnosticWFPCondition{}) != 40 ||
 		unsafe.Sizeof(diagnosticWFPFilter{}) != 200 || unsafe.Offsetof(diagnosticWFPFilter{}.reserved) != 168 {
@@ -129,6 +141,9 @@ func (owner *nativeWFPSessionOwner) openSessionMode(dynamic bool, name string) e
 	if dynamic {
 		owner.session.flags = 1
 	}
+	if err := wfpOperationScope(ctx); err != nil {
+		return err // preparation/Find may have outlived the original operation
+	}
 	owner.openAttempted = true
 	code, _, _ := diagnosticWFPOpen.Call(0, 10, 0, uintptr(unsafe.Pointer(&owner.session)), uintptr(unsafe.Pointer(&owner.handle)))
 	runtime.KeepAlive(owner)
@@ -137,10 +152,13 @@ func (owner *nativeWFPSessionOwner) openSessionMode(dynamic bool, name string) e
 		return fmt.Errorf("WFP diagnostic session unavailable (%d)", uint32(code))
 	}
 	owner.provider = windows.GUID(wfpProviderID)
-	return nil
+	return wfpOperationScope(ctx) // late success retains this original handle for negative cleanup
 }
 
-func (owner *nativeDiagnosticWFP) open(appID string, port uint16, luid uint64) error {
+func (owner *nativeDiagnosticWFP) open(ctx context.Context, appID string, port uint16, luid uint64) error {
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
+		return err
+	}
 	if !owner.callsReturned() || appID == "" || len(appID) > 32760 || port == 0 || luid == 0 || !owner.dynamic || owner.addAttempted || owner.handle == 0 || !owner.openReturned || owner.openCode != 0 || owner.closeStarted || owner.closed || owner.transaction != nil && owner.transaction.phase != wfpTransactionFinished {
 		return fmt.Errorf("WFP diagnostic native scope unavailable")
 	}
@@ -170,6 +188,9 @@ func (owner *nativeDiagnosticWFP) open(appID string, port uint16, luid uint64) e
 	}
 	// No persistent/boot/hard-action flag. BFE ties this one filter to the
 	// original dynamic session, including client-process death/RPC rundown.
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
+		return err // no original Add was issued; pointer backing stores remain owned
+	}
 	owner.addAttempted = true
 	owner.writePending = true
 	code, _, _ := diagnosticWFPAdd.Call(uintptr(owner.handle), uintptr(unsafe.Pointer(&owner.filter)), 0, uintptr(unsafe.Pointer(&owner.filterID)))
@@ -179,7 +200,7 @@ func (owner *nativeDiagnosticWFP) open(appID string, port uint16, luid uint64) e
 	if code != 0 || owner.filterID == 0 {
 		return fmt.Errorf("WFP diagnostic filter unavailable (%d)", uint32(code))
 	}
-	return nil
+	return wfpDiagnosticOperationScope(ctx) // recorded Add success is not current-operation authority
 }
 
 func (owner *nativeWFPSessionOwner) close() error {

@@ -49,6 +49,8 @@ func (process *engineProcess) spawn(ctx context.Context, executable string, args
 		return err
 	}
 	if err := validateOwnedProcessCommand(executable, args); err != nil || policy.processes < 1 || policy.processes > 8 ||
+		policy.combinedOutput && (policy.deliveryVerifier || policy.applicationEnvironment || policy.successorGUI || !policy.cleanSystemEnvironment ||
+			policy.beforeResume != nil || policy.processes != 1 || policy.commitBytes != helperCaptureCommitBytes || policy.userTime != 0) ||
 		policy.userTime < 0 || policy.userTime%ownedProcessUserTimeTick != 0 ||
 		policy.userTime != 0 && (!policy.applicationEnvironment && !policy.deliveryVerifier || policy.successorGUI) ||
 		policy.deliveryVerifier && (policy.applicationEnvironment || !policy.cleanSystemEnvironment || policy.processes != 1 || policy.beforeResume == nil ||
@@ -96,6 +98,9 @@ func (process *engineProcess) spawn(ctx context.Context, executable string, args
 		return err
 	}
 	if err := host.native.WithJob(func(job windows.Handle) error {
+		if policy.combinedOutput {
+			return host.preparation.PrepareCombined(job)
+		}
 		return host.preparation.Prepare(job)
 	}); err != nil {
 		return err

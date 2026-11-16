@@ -42,6 +42,7 @@ type ownedProcessLimits struct {
 	commitBytes            uintptr       // zero preserves the engine's existing memory contract
 	userTime               time.Duration // aggregate Job user-mode CPU time; zero leaves it unchanged
 	cleanSystemEnvironment bool
+	combinedOutput         bool                                     // ordinary completed-command capture only; never framed engine/verifier/GUI stdio
 	deliveryVerifier       bool                                     // exact public-input SDK pipe worker; no application store environment
 	applicationEnvironment bool                                     // fixed updater check/GUI modes; explicit public store location
 	successorGUI           bool                                     // fixed bootstrap only; owns a lifetime Job, not a one-process helper

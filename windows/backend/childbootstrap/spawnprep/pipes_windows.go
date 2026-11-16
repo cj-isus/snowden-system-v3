@@ -23,6 +23,14 @@ type Pipes struct {
 	prepareAttempted, preparing, ready, retiring bool
 }
 
+type pipeMode uint8
+
+const (
+	pipeSeparate pipeMode = iota
+	pipeDetached
+	pipeCombined
+)
+
 func (p *Pipes) Input() io.WriteCloser {
 	if p == nil {
 		return nil
@@ -45,29 +53,36 @@ func (p *Pipes) Owns(input io.WriteCloser, output io.ReadCloser) bool {
 }
 
 func (p *Pipes) Prepare(job windows.Handle) error {
-	return p.prepareOnce(job, false)
+	return p.prepareOnce(job, pipeSeparate)
+}
+
+// PrepareCombined uses one bounded parent reader for stdout and stderr. Both
+// inherited output slots own distinct duplicates of the same original pipe;
+// no second reader/pipe or borrowed-handle ownership alias is introduced.
+func (p *Pipes) PrepareCombined(job windows.Handle) error {
+	return p.prepareOnce(job, pipeCombined)
 }
 
 // PrepareDetached binds the existing original stdio/allowlist/Job owner to NUL.
 // A GUI with a separate named control pipe needs no anonymous I/O pump. The
 // standard input is read-only, output/error write-only. No parent endpoints open.
 func (p *Pipes) PrepareDetached(job windows.Handle) error {
-	return p.prepareOnce(job, true)
+	return p.prepareOnce(job, pipeDetached)
 }
 
-func (p *Pipes) prepareOnce(job windows.Handle, detached bool) error {
-	if p == nil || !nativelease.ValidHandleValue(job) || p.retiring || p.prepareAttempted {
+func (p *Pipes) prepareOnce(job windows.Handle, mode pipeMode) error {
+	if p == nil || mode > pipeCombined || !nativelease.ValidHandleValue(job) || p.retiring || p.prepareAttempted {
 		return ErrResources
 	}
 	p.prepareAttempted, p.preparing = true, true
-	err := p.prepare(job, detached)
+	err := p.prepare(job, mode)
 	p.ready = err == nil
 	p.preparing = false // never deferred: a nonreturning preparation cannot be released
 	return err
 }
 
-func (p *Pipes) prepare(job windows.Handle, detached bool) error {
-	if detached {
+func (p *Pipes) prepare(job windows.Handle, mode pipeMode) error {
+	if mode == pipeDetached {
 		for index, file := range []*File{&p.inputChild, &p.outputChild, &p.stderr} {
 			if err := file.openNull(index == 0); err != nil {
 				return errors.Join(ErrResources, err)
@@ -80,11 +95,16 @@ func (p *Pipes) prepare(job windows.Handle, detached bool) error {
 		if err := openPipe(&p.outputParent, &p.outputChild); err != nil {
 			return errors.Join(ErrResources, err)
 		}
-		if err := p.stderr.openErrorSink(); err != nil {
-			return errors.Join(ErrResources, err)
+		if mode != pipeCombined {
+			if err := p.stderr.openErrorSink(); err != nil {
+				return errors.Join(ErrResources, err)
+			}
 		}
 	}
 	for index, file := range []*File{&p.inputChild, &p.outputChild, &p.stderr} {
+		if mode == pipeCombined && index == 2 {
+			file = &p.outputChild // DuplicateHandle writes into this slot's own original inherited[index]
+		}
 		fd, err := file.descriptor()
 		if err != nil {
 			return errors.Join(ErrResources, err)

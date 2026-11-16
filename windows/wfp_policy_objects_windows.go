@@ -113,6 +113,7 @@ func (owner *nativeWFPSessionOwner) queryObject(proc *windows.LazyProc, key wind
 }
 
 type nativeWFPWrite struct {
+	batch      *nativeWFPBatch // original slot owner, never a later transaction/context
 	key        windows.GUID
 	filterID   uint64
 	attempted  bool
@@ -129,11 +130,18 @@ type nativeWFPWrite struct {
 }
 
 func (owner *nativeWFPPolicyOwner) nextWrite() (*nativeWFPWrite, error) {
-	if !owner.session.callsReturned() || owner.session.dynamic || owner.session.handle == 0 || owner.session.closed || owner.session.closeStarted || owner.batch == nil || owner.batch.count == len(owner.batch.writes) ||
-		owner.session.transaction == nil || owner.session.transaction.phase != wfpTransactionActive || owner.session.transaction.readOnly {
+	if owner == nil || owner.batch == nil {
 		return nil, core.ErrNativeScopeUnavailable
 	}
-	write := &nativeWFPWrite{}
+	if err := owner.batch.operationScope(); err != nil {
+		return nil, err
+	}
+	if !owner.session.callsReturned() || owner.session.dynamic || owner.session.handle == 0 || owner.session.closed || owner.session.closeStarted || owner.batch.count == len(owner.batch.writes) ||
+		owner.session.transaction == nil || owner.session.transaction.phase != wfpTransactionActive || owner.session.transaction.readOnly ||
+		owner.batch.transaction != owner.session.transaction || owner.session.transaction.batch != owner.batch {
+		return nil, core.ErrNativeScopeUnavailable
+	}
+	write := &nativeWFPWrite{batch: owner.batch}
 	owner.batch.writes[owner.batch.count] = write // custody BEFORE a native mutation
 	owner.batch.count++
 	return write, nil
@@ -143,8 +151,19 @@ func (owner *nativeWFPPolicyOwner) callWrite(write *nativeWFPWrite, proc *window
 	if owner == nil || write == nil || write.attempted || !owner.session.callsReturned() {
 		return core.ErrHelperCleanup
 	}
+	batch := write.batch
+	if batch == nil || owner.batch != batch || batch.transaction == nil || owner.session.transaction != batch.transaction ||
+		batch.transaction.batch != batch || batch.transaction.phase != wfpTransactionActive || batch.transaction.readOnly {
+		return core.ErrNativeScopeUnavailable
+	}
+	if err := batch.operationScope(); err != nil {
+		return err
+	}
 	if err := proc.Find(); err != nil {
 		return err
+	}
+	if err := batch.operationScope(); err != nil {
+		return err // Find/input preparation cannot extend the original write's authority
 	}
 	write.attempted = true
 	owner.session.writePending = true
@@ -155,7 +174,7 @@ func (owner *nativeWFPPolicyOwner) callWrite(write *nativeWFPWrite, proc *window
 	if code != 0 {
 		return fmt.Errorf("WFP policy mutation unavailable (%d)", uint32(code))
 	}
-	return nil
+	return batch.operationScope() // returned outputs precede late source-error projection
 }
 
 func (owner *nativeWFPPolicyOwner) addProvider() error {

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/snowden-system/windows/backend/netprobe"
@@ -36,70 +35,6 @@ type NativeTUNLeasePreparation interface {
 type NativeTUNLease interface {
 	Validate(context.Context) error
 	Close() error
-}
-
-// These values describe only the live original actor. Editing a returned copy
-// cannot change the actor or install a grant. No PID or transferable handle is
-// exposed; the worker receives its original PROCESS handle privately instead.
-type NativeTUNDescriptor struct {
-	Executable string
-	Runtime    RuntimeIdentity
-	SourcePort uint16
-}
-
-type NativeTUNActor struct {
-	mu        sync.Mutex
-	engine    *Engine
-	scope     *engineTUNScope
-	process   *engineProcess
-	image     nativeImageLease
-	runtime   RuntimeIdentity
-	port      uint16
-	until     time.Time
-	operation context.Context // original bounded capture, never a context supplied by a later caller
-	active    bool
-}
-
-func (actor *NativeTUNActor) Descriptor(ctx context.Context) (NativeTUNDescriptor, error) {
-	if actor == nil {
-		return NativeTUNDescriptor{}, ErrNativeScopeUnavailable
-	}
-	actor.mu.Lock()
-	defer actor.mu.Unlock()
-	if err := errors.Join(contextError(ctx), contextError(actor.operation)); err != nil {
-		return NativeTUNDescriptor{}, errors.Join(ErrNativeScopeUnavailable, err)
-	}
-	if !actor.active || !time.Now().Before(actor.until) || actor.engine == nil || actor.scope == nil || actor.image == nil || actor.process == nil || actor.process.exited() || actor.port == 0 {
-		return NativeTUNDescriptor{}, ErrNativeScopeUnavailable
-	}
-	ctx = withOriginalOperationSources(ctx, actor.operation)
-	ctx, cancel := context.WithDeadline(ctx, actor.until) // caller may shorten, never extend the original capture
-	defer cancel()
-	identity, err := actor.engine.CurrentRuntime(ctx)
-	if err != nil || identity != actor.runtime || identity.ForwardingAdmitted {
-		return NativeTUNDescriptor{}, errors.Join(ErrNativeScopeUnavailable, err)
-	}
-	if err := actor.image.ValidateProcess(ctx, actor.process.host); err != nil {
-		return NativeTUNDescriptor{}, err
-	}
-	if err := actor.process.ancestorScope(ctx, true); err != nil {
-		return NativeTUNDescriptor{}, errors.Join(ErrNativeScopeUnavailable, err)
-	}
-	if err := errors.Join(contextError(ctx), contextError(actor.operation)); err != nil {
-		return NativeTUNDescriptor{}, errors.Join(ErrNativeScopeUnavailable, err)
-	}
-	if actor.process.exited() || !time.Now().Before(actor.until) {
-		return NativeTUNDescriptor{}, ErrNativeScopeUnavailable
-	}
-	return NativeTUNDescriptor{Executable: actor.image.Executable(), Runtime: identity, SourcePort: actor.port}, nil
-}
-
-func (actor *NativeTUNActor) deactivate() {
-	if actor != nil {
-		actor.mu.Lock()
-		actor.active = false
-		actor.mu.Unlock()
-	}
 }
 
 type nativeTUNCapture struct {
@@ -146,6 +81,10 @@ func (capture *nativeTUNCapture) revoke() (result error) {
 	capture.actor.deactivate()
 	sequence := &lifecycleCleanup{}
 	defer func() { sequence.drained, result = true, sequence.result }()
+	// Register the original metadata borrower before either revocation. It is
+	// checked last, so a pending read does not skip negative ingress/filter work,
+	// but still prevents the lane from releasing the helper/socket/image.
+	defer lifecycleCleanupStep("retire native TUN descriptor", sequence, capture.actor.descriptorRetired)
 	// Register BOTH original revocations before either callback. Goexit during
 	// ingress retirement still attempts filter cleanup, without releasing the
 	// helper/socket/image or declaring the interrupted scope retired.
