@@ -24,7 +24,7 @@ type serviceDNSChange struct {
 }
 
 func (a *App) captureServiceDNSChange(observer *serviceDNSHandoff, kind string) *serviceDNSChange {
-	if observer == nil || observer.app != a || !observer.source.Current() || observer.ctx.Err() != nil {
+	if observer == nil || observer.app != a || !observer.source.Current() || !observer.contextCurrent() {
 		return nil
 	}
 	// Reuse the periodic probe's applied-identity reader. Its historical report
@@ -76,7 +76,7 @@ func (change serviceDNSChange) eventCurrentLocked() bool {
 }
 
 func (change serviceDNSChange) current() bool {
-	if change.observer == nil || !change.observer.source.Current() || change.observer.ctx.Err() != nil || !change.source.Current() {
+	if change.observer == nil || !change.observer.source.Current() || !change.observer.contextCurrent() || !change.source.Current() {
 		return false
 	}
 	netEpoch.mu.Lock()

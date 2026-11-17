@@ -3177,3 +3177,77 @@ App startup-failure state и public error используют один fixed me
 При чтении следующего пути найден actual alias: ensureWatchdog делает ctx:=a.ctx, ctx.Err и WithCancel(ctx) под runtime_.mu+App.mu, до reservation исходного task. Это не закрыто: нужен original pending owner до callbacks, real constructor/cancel вне value locks и сохранение actual started/done/failed return без replacement. Compiler/private fixtures/callback/Goexit/reentrancy/native/OS/performance OPEN.
 
 Source/unverified: 2 Go + 1 static TS label + 4 docs; вручную просмотрены 3 diff, gofmt2 exit0. Тесты/сборки/typecheck/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v534-watchdog-context"></a>
+
+## V2-534 — original watchdog context ownership вне value locks
+
+ensureWatchdog раньше делал ctx:=a.ctx, ctx.Err и context.WithCancel(ctx) под runtime_.mu+App.mu до reservation task. Теперь под коротким runtime→App lock захватываются исходный parent/lifetime fence и резервируется единственный original watchdog с cancellation record, started/done. Actual constructor/getters/cancel выполняются после unlock. Final runtime→App→task gate проверяет именно исходного владельца, App/child fences, source и отрицательные lifecycle flags; metadata не становится родителем Context. Только успешный original creator запускает существующий run; contextReady не означает task entry.
+
+Partial actual cancel публикуется до следующих getters. Preparation unwind/ordinary return и cancel unwind/ordinary return — разные факты. Если отмена пришла до получения partial cancel, общий storeCancel выполняет сохранённый запрос сразу после публикации, вне copy mutex; CAS сохраняет единственного владельца actual callback. App/watchdog после публикации проверяют отрицательные источники до следующих parent getters. Duplicate request, timeout или close(done) без обычного возврата не разрешают replacement/cleanup success.
+
+Creator failure сохраняет original slot, ставит negative fault/blocked до cleanup и закрывает original failed-frame done только после registered stages. Оно не вызывает synchronously fault cleanup через уже удерживаемый creator operationMu; это failed preparation, не running-loop receipt. Guard/loop используют исходные immutable fences/source, без Context.Err под value locks; реальный цикл получает построенный child Context.
+
+Run finalizer заранее регистрирует context-retirement и original fault-propagation stages через существующий appCleanupStep. Panic/Goexit actual callback не пропускает следующие deferred stages; blocked ставится до ожиданий, fault merge выполняется до original done. joinWatchdog дополнительно требует contextReady и ordinary-return facts preparation/cancel. watchdog_fault/terminal/native Stop bodies и status consumers сохранены; новая Engine/OS/health/forwarding authority не создаётся.
+
+Исходный pre1423 и все original before/initial review/late promotion receipts сохранены через разрешённую Git-публикацию1424–1426; продолжение использует новый собственный CAS baseline. Gofmt3+3 относится к исходным четырём неизменившимся source files, не к повторному запуску format/test. No compiler/runtime proof.
+
+Следующий подтверждённый source-дефект: startNetWatch/recoverServiceDNSObserver вызывают newNetworkPollerOwner и newServiceDNSHandoff под netWatch.mu до pending owner reservation; guards/recovery также вызывают Context.Err под value locks. Нужен original pending-owner протокол без обхода actual producer/native-power retirement, с bounded confirmed predecessor и recovery budget. Compiler/private fixtures/custom-parent callbacks/Goexit/reentrancy/native/OS/performance OPEN.
+
+Source/unverified: 4 Go + 4 docs, один новый helper; вручную просмотрены 3 diff и новый файл, gofmt3+3 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v535-network-context"></a>
+
+## V2-535 — original network/DNS owners до real context callbacks
+
+Initial startNetWatch и reconcileServiceDNSAfterRetirement раньше создавали actual WithCancel под netWatch.mu до публикации исходного владельца. Теперь newNetworkPollerOwner/newServiceDNSHandoff выделяют только passive task/cancellation/source/channels. Actual App parent/fence захватываются под App.mu до registry lock; исходная пара резервируется, затем real children, partial cancel и child fences готовятся вне value locks. Caller interest остаётся negative fence, не родителем. Final App→watcher→poller→DNS lease сверяет именно исходную пару, parent/child/interest/source и lifecycle denial flags до запуска существующих циклов. ready означает публикацию child context; started по-прежнему относится только к actual loop entry.
+
+DNS task source и cancellation source — один исходный negative owner: dependency revocation также останавливает дальнейшую подготовку и сохраняет ранний запрос отмены. Переиспользуется appOperationCancellation: исходный partial child и factory/cancel unwind отделены от ordinary return, ранний запрос отмены не теряется. Ошибка до запуска удерживает original owners и закрывает original failed-setup done только после registered cancellation stages и receipt publication. preparationOnly/preparationReturned явно отличаются от bodyReturned; незапущенный loop не получает фиктивный return/native receipt. Panic/Goexit не пропускает последующие зарегистрированные stages, blocked callback сохраняет pending original owner. Creator не вызывает running fault cleanup с повторным захватом уже удерживаемого operationMu. DNS-only setup failure не отменяет исходный живой poller.
+
+Actual running finalizers используют original cancellation join вместо повторного raw cancel как подтверждения завершения. Guard/terminal classification/event capture/current/submit/loop-entry/epoch/power/native registration gates читают исходные fences/source под value locks; real DNS loop/I/O по-прежнему получают actual child Context. Disconnected power recovery готовит caller fence заранее, а errors.Is/localRetirementFailure выполняет после копирования исходных fault values и unlock.
+
+Actual prior runtime identity, original done/cleanupKnown/native power-handle retirement gates, callback joining/unpin, один bounded confirmed predecessor, тот же helper retirement и observer-only recovery budget сохранены. 17 original regions/file bodies сравнились без изменений. Исходники не доказывают native/OS path, quiescence всех stdlib ancestors, hard latency, RSS или успешный VPN. Private fixtures, создававшие context-ready task непосредственно constructor, требуют будущей миграции; тестовые файлы не менялись.
+
+Следующий подтверждённый source-дефект: background_probe_owner.go создаёт real WithCancel до original task reservation, делает lifetime.Err под bgReg.mu и ctx.Err под task mutex; attempt admission имеет такой же callback под owner.mu, finalizer использует raw duplicate cancel return. Следующая правка должна сохранить original serial diagnostic attempt, actual connection close/release и bounded existing protocol. Compiler/private fixtures/Goexit/reentrancy/native/OS/performance OPEN.
+
+Source/unverified: 11 Go + 4 docs, один новый helper; вручную просмотрены 10 diff и новый файл, gofmt11+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v536-background-context"></a>
+
+## V2-536 — background task до actual context и отмена вне Once
+
+startBgProbes раньше строил actual WithCancel до reservation task, проверял lifetime.Err под bgReg.mu; available/finish/attempt admission вызывали ctx.Err под task.mu. Теперь исходный passive background owner резервируется первым. Actual child готовится вне App/bgReg/task locks через существующий механизм владения; final App→registry→task gate проверяет того же владельца/stop channel, исходные lifetime/child/source и lifecycle denial flags до запуска единственного прежнего run. Prepared/started registry values не считаются loop/native/diagnostic entry.
+
+Прежний network context factory извлечён в app_task_context.go, producer frame receipt — в app_producer_retirement.go; существующий networkProducerReceipt оставлен alias. Factories/negative fences/partial cancellation/ordinary-return факты, network pair и actual native/power/cleanup/joins сохранены после нормализации имён. Компоненты используются poller, DNS и background task; новый scheduler, engine, SDK или реестр отмены не создаётся.
+
+Background run finalizer ждёт original cancellation.join и публикует body/cleanup return до done. Неудачная original setup имеет preparationOnly/preparationReturned, а не фиктивный bodyReturned; original done закрывается после partial child cleanup и receipt publication. Known cleaned unstarted setup можно подтвердить отдельно от running loop; unknown constructor/cancel и retained attempt не дают successful retirement/replacement. Blocked callback остаётся pending, без rescue goroutine или обещания hard latency.
+
+cancelBackgroundProbes выставляет stopping и закрывает passive stop через Once, затем вызывает actual cancellation вне Once/value locks. Установленный sync.Once source показывает вызов callback под внутренним mutex: прежний actual cancel там мог повторно войти в ту же отмену. Теперь duplicate notification не ждёт original callback и не подменяет его completion; actual finalizer join остаётся отдельным.
+
+Round сначала копирует original registration/source-state/activeID/path/epoch/control под короткими App→epoch locks. Value/WithValue/child fence готовятся вне locks; old/unknown binding не подменяется новым путём, после getters сверяется тот же subject. Первоначально revoked intent остаётся тем же optional scope через source-state equality; это не разрешение Engine/protected path. Actual serial attempt, diagnostic admission, Dial, Close, watch, publication и release сохранены, кроме одного passive owner gate. Бюджеты/стартовая пауза/последовательный loop/weak-health semantics не менялись.
+
+Обычная ошибка optional background setup даёт fixed предупреждение и не добавляет mandatory VPN readiness gate. Actual panic/Goexit всего исходного startup frame по-прежнему обрабатывается его original outcome; произвольный зависший callback не считается завершённым. 24 original regions/extracted bodies сравнились без изменений. Compiler/private fixture migration/reentrancy/Goexit/native/OS/performance OPEN.
+
+Следующий подтверждённый source-дефект: prepareManualDiagnostic в secret_operation.go вызывает real scopeContext/WithTimeout/AdmitDiagnostic/getters/cancel/release под App.mu до original task reservation; currentError и historical diagnosticScope.currentLocked обращаются к actual ctx/parent под value locks. ownedDialer строит WithCancel под task.mu до dial reservation. Требуется original task/dial-before-callback protocol с сохранением actual budget/socket/watch/Close/release, credential/source/path gates и max32 bound. GUI diagnostic code только прочитан; никаких вызовов или чтения значений vault/config/log не выполнялось.
+
+Source/unverified: 12 Go + 4 docs, три новых helper; вручную просмотрены 9 diff и 3 новых файла, gofmt12 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v537-manual-context"></a>
+
+## V2-537 — GUI diagnostic task/Dial до context и budget callbacks
+
+prepareManualDiagnostic раньше выполнял scopeContext/Value, WithTimeout, AdmitDiagnostic, cleanup cancel/release и final getters под App.mu до reservation. Теперь сначала под App.mu сохраняются exact original task, App parent/lifetime, registration/path/context view и только identity vault pointer. Actual parent/path wrapper, bounded child и admission создаются вне App/task locks; real partial cancel и возвращённый budget записываются до следующих getters. Final App gate сверяет того же task/vault/request/path/view, original fences/deadline и публикует actual ctx plus immutable metadata через atomic readiness. Новый watcher/executor/SDK не добавлен; запускается только прежний original watcher после publication.
+
+Общий appTaskContext поддерживает реальный bounded timeout и прежнюю cancel-only ветку; nonpositive bounded input не превращается в unbounded fallback. До публикации task/dial захватываются максимум два original negative источника request/parent-operation, которые проверяются до последующих getters. Это не заменитель Context parent и не positive authority. Initial accepted review и late source/format receipts сохранены.
+
+Admission entry и ordinary return различаются. Failed original setup удерживает partial child/lease и допускает очистку только exact own slot после обычного возврата setup, actual cancel и original release. При неизвестном setup/admission/cancel cleanup unused budget не освобождается; task/done остаются pending. Known cleaned unstarted setup имеет preparationOnly receipt, не fake RPC/body/watch return, и не публикует наблюдение.
+
+currentError читает sealed original fences/source после atomic ready, сохраняя cleanup/dial-limit/closing/request/path denial. Historical cache и final result/adaptive history используют original parent fence и фактически захваченный deadline вне mutex; child cancellation не обновляет subject и не делает старое наблюдение новым. Public Wails/schema, credential/source/path/current-view gates и distinction между observation и protected-path proof сохранены.
+
+ownedDialer резервирует каждый original bounded slot до Err/Value/Deadline/WithCancel и actual native/library callback. Исходный run владеет preparation, callback, partial/late socket и cancel join. Не начатый callback получает preparation-only receipt без фиктивного returned; actual Conn capture/late rejection/Close/error shape и max32 bound сохранены. Pending child замечается sealing/cancellation, новый слот не выделяется вместо неизвестного.
+
+Task/dial cancel, watch join и socket/Close stages регистрируются до callbacks; panic/Goexit не пропускает последующие зарегистрированные stages. Original setup/RPC освобождает budget единожды вне locks только после known retirement; interrupted/reentrant release не переигрывается. Blocked callback остаётся owned/pending, без rescue goroutine и hard latency/ancestor-quiescence/RSS promise. 21 original regions сравнились без изменений, включая native Conn Close, raw callback result handling, GUI protocol code и original completion/credential fences.
+
+Далее — core AdmitDiagnostic release: сейчас sync.Once включает actual cancel и lane.active decrement, без отдельного original ordinary-return witness для duplicate/reentrant callers. Core pool в этом срезе не менялся: protected lane, optional active≤2, rolling requests/bytes и отсутствие refund при ordinary error/cancel сохранены. Compiler/private fixture migration/reentrancy/Goexit/native/OS/performance OPEN. Никакая GUI-диагностика не выполнялась; значения vault/runtime/config/log не читались.
+
+Source/unverified: 8 Go + 4 docs, два новых helper; вручную просмотрены 6 diff и 2 новых файла, gofmt8+3 exit0. GUI-диагностика, тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.

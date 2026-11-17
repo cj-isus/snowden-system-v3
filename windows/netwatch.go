@@ -24,6 +24,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -158,16 +159,23 @@ type netWatcher struct {
 var netWatch = &netWatcher{}
 
 // startNetWatch — запустить наблюдателя ровно один раз (из app.startup).
-func (a *App) startNetWatch() {
-	appLifetime := a.appLifetimeFence() // never acquire App.mu after netWatch.mu
+func (a *App) startNetWatch() error {
+	parent := a.captureAppTaskParent() // never acquire App.mu after netWatch.mu
 	netWatch.mu.Lock()
 	if netWatch.started {
+		poller, dns, same := netWatch.poller, netWatch.dns, netWatch.app == a
 		netWatch.mu.Unlock()
-		return
+		if !same || poller == nil || dns == nil || dns.poller != poller {
+			return errors.Join(errNetworkPollerUnavailable, errServiceDNSObserverUnavailable)
+		}
+		if err := poller.awaitStarted(parent.ctx); err != nil {
+			return err
+		}
+		return dns.awaitStarted(parent.ctx)
 	}
-	if !appLifetime.Current() || a.closing.Load() {
+	if !parent.fence.Current() || a.closing.Load() {
 		netWatch.mu.Unlock()
-		return
+		return errors.Join(errNetworkPollerUnavailable, errServiceDNSObserverUnavailable)
 	}
 	netWatch.started = true
 	netWatch.stop = make(chan struct{})
@@ -176,8 +184,7 @@ func (a *App) startNetWatch() {
 	netWatch.dns = newServiceDNSHandoff(a, netWatch.poller)
 	dns, poller := netWatch.dns, netWatch.poller
 	netWatch.mu.Unlock()
-	go dns.run()
-	go poller.run(netWatch)
+	return a.prepareNetworkObservers(parent, parent.fence, poller, dns, true)
 }
 
 // stopNetWatch — остановить горутину наблюдателя (закрытие окна, перезапуск

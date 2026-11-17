@@ -12,28 +12,29 @@ import (
 // One original observer task and one pending value, not one goroutine per
 // network event. Active IPC finishes before the latest pending event is used.
 type serviceDNSHandoff struct {
-	app        *App
-	poller     *networkPollerOwner // immutable original producer dependency
-	ctx        context.Context
-	source     *core.OperationSource // original task revocation; done alone confirms task return
-	cancel     context.CancelFunc
-	done       chan struct{}
-	started    chan struct{}
-	wake       chan struct{}
-	mu         sync.Mutex
-	pending    *serviceDNSChange
-	running    bool                   // short publication lease; never held over IPC, cancellation or cleanup
-	stopping   bool                   // explicit task retirement, distinguished from unexpected parent cancellation
-	fault      error                  // sticky on this original task; replacement requires done + actual engine retirement
-	retirement networkProducerReceipt // owner.mu; functional fault remains a separate readiness fence
+	app          *App
+	poller       *networkPollerOwner // immutable original producer dependency
+	contextState appTaskContext
+	ctx          context.Context
+	source       *core.OperationSource // original task revocation; done alone confirms task return
+	cancel       context.CancelFunc
+	done         chan struct{}
+	started      chan struct{}
+	wake         chan struct{}
+	mu           sync.Mutex
+	pending      *serviceDNSChange
+	running      bool                   // short publication lease; never held over IPC, cancellation or cleanup
+	stopping     bool                   // explicit task retirement, distinguished from unexpected parent cancellation
+	fault        error                  // sticky on this original task; replacement requires done + actual engine retirement
+	retirement   networkProducerReceipt // owner.mu; functional fault remains a separate readiness fence
 	// First actual runtime/intent fence, retained across poller and DNS finalizers.
 	failureScope    *serviceDNSFaultScope
 	powerRetirement bool // expected suspend/resume continuity loss, not inferred network failure
 }
 
 func newServiceDNSHandoff(app *App, poller *networkPollerOwner) *serviceDNSHandoff {
-	ctx, cancel := context.WithCancel(app.ctx)
-	return &serviceDNSHandoff{app: app, poller: poller, ctx: ctx, source: core.NewOperationSource(), cancel: cancel, done: make(chan struct{}), started: make(chan struct{}), wake: make(chan struct{}, 1)}
+	state := newAppTaskContext()
+	return &serviceDNSHandoff{app: app, poller: poller, contextState: state, source: state.cancellation.operation, cancel: state.cancellation.request, done: make(chan struct{}), started: make(chan struct{}), wake: make(chan struct{}, 1)}
 }
 
 func (owner *serviceDNSHandoff) submit(kind string) {
@@ -49,7 +50,7 @@ func (owner *serviceDNSHandoff) submitChange(change *serviceDNSChange) {
 		return
 	}
 	kind := change.kind
-	if kind != "down" && kind != "up" && kind != "change" || owner.ctx.Err() != nil || owner.app.closing.Load() {
+	if kind != "down" && kind != "up" && kind != "change" || !owner.contextCurrent() || owner.app.closing.Load() {
 		return
 	}
 	select {
@@ -61,7 +62,7 @@ func (owner *serviceDNSHandoff) submitChange(change *serviceDNSChange) {
 		return
 	}
 	owner.mu.Lock()
-	if owner.fault != nil || owner.stopping || !owner.source.Current() || owner.ctx.Err() != nil {
+	if owner.fault != nil || owner.stopping || !owner.source.Current() || !owner.contextState.currentLocked() {
 		owner.mu.Unlock()
 		return
 	}
@@ -78,7 +79,7 @@ func (owner *serviceDNSHandoff) run() {
 	completed := false
 	defer owner.finishDNS(&completed)
 	owner.mu.Lock()
-	owner.running = !owner.stopping && owner.source.Current() && owner.ctx.Err() == nil
+	owner.running = !owner.stopping && owner.source.Current() && owner.contextState.currentLocked()
 	owner.mu.Unlock()
 	close(owner.started) // task-entry receipt only, never engine/native readiness
 	for {

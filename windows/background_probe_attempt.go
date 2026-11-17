@@ -40,7 +40,7 @@ func (scope *backgroundProbeScope) probe(target bgTarget) {
 	}
 	owner := scope.owner
 	owner.mu.Lock()
-	if owner.attempt != nil || owner.fault != nil || owner.stopping || owner.ctx.Err() != nil {
+	if owner.attempt != nil || owner.fault != nil || owner.stopping || !owner.contextState.currentLocked() {
 		owner.mu.Unlock()
 		return
 	}

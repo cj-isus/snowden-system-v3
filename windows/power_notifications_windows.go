@@ -58,7 +58,7 @@ func reserveNativePower(owner *networkPollerOwner) (*nativePowerSubscription, er
 		return nil, errPowerNotificationUnavailable
 	}
 	owner.mu.Lock()
-	if owner.power != nil || owner.ctx == nil || owner.ctx.Err() != nil || owner.stopping {
+	if owner.power != nil || !owner.contextState.currentLocked() || owner.stopping {
 		owner.mu.Unlock()
 		return nil, errPowerNotificationUnavailable
 	}

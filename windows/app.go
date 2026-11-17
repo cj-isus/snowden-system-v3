@@ -311,11 +311,16 @@ func (a *App) prepareNetworkServicesBody() bool {
 
 	// Наблюдатель смены сети (V2-054): up/change при живом туннеле →
 	// внеочередной probe; после fail-closed → немедленный авто-ретрай.
-	a.startNetWatch()
+	if err := a.startNetWatch(); err != nil {
+		a.appendLog("warn", "наблюдатели сети не подготовлены; исходные задачи сохранены")
+		return false
+	}
 	// Фоновые probe неактивных каналов (D1, V2-063): бюджетная картина
 	// «скорее жив / скорее мёртв» для порядка кандидатов failover; решения
 	// по-прежнему принимает только probe на переключении (инвариант V2-037).
-	a.startBgProbes()
+	if err := a.startBgProbes(); err != nil {
+		a.appendLog("warn", "фоновая диагностика не подготовлена; исходная задача сохранена")
+	}
 	// Сетевые эпохи (V2-057, PLAN A0): журнал эпох живёт на App.
 	globalAppForEpoch = a
 	// One existing App-lifetime watchdog also restores disconnected observers.

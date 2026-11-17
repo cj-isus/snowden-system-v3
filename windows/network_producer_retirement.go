@@ -5,25 +5,9 @@ import (
 	"errors"
 )
 
-// Original frame/cleanup receipts only, never readiness or engine retirement.
-// A functional fault (including expected power continuity loss) stays in fault;
-// it does not invent unknown cleanup after every registered stage returned.
-type networkProducerReceipt struct {
-	bodyReturned    bool
-	cleanupReturned bool
-	cleanupResult   error
-}
-
-func (receipt networkProducerReceipt) cleanupKnown() bool {
-	return receipt.cleanupReturned && receipt.cleanupResult == nil
-}
-
-func (receipt networkProducerReceipt) terminalResult(unavailable error) error {
-	if !receipt.bodyReturned || !receipt.cleanupKnown() {
-		return errors.Join(unavailable, receipt.cleanupResult)
-	}
-	return nil
-}
+// Preserve the existing private network receipt contract while sharing the
+// same actual setup/body/cleanup distinction with other App-owned producers.
+type networkProducerReceipt = appProducerReceipt
 
 func (owner *networkPollerOwner) finishPoller(watcher *netWatcher, completed *bool) {
 	payload := recover()
@@ -46,7 +30,7 @@ func (owner *networkPollerOwner) finishPoller(watcher *netWatcher, completed *bo
 		}
 		return nil
 	})
-	defer appCleanupStep("cancel original network poller", sequence, func() error { owner.cancel(); return nil })
+	defer appCleanupStep("cancel original network poller", sequence, owner.contextState.cancellation.join)
 	defer appCleanupStep("retire original power subscription", sequence, owner.retirePowerNotifications)
 	defer appCleanupStep("revoke original linked DNS control", sequence, func() error {
 		watcher.revokeServiceDNSControl(owner)
@@ -85,7 +69,7 @@ func (owner *serviceDNSHandoff) finishDNS(completed *bool) {
 		}
 		return nil
 	})
-	defer appCleanupStep("cancel original DNS observer", sequence, func() error { owner.cancel(); return nil })
+	defer appCleanupStep("cancel original DNS observer", sequence, owner.contextState.cancellation.join)
 	defer appCleanupStep("fence original DNS observer outcome", sequence, func() error {
 		owner.mu.Lock()
 		defer owner.mu.Unlock()

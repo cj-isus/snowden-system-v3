@@ -22,7 +22,7 @@ func (owner *serviceDNSHandoff) guardRunning(app *App) (func(), bool) {
 		return nil, false
 	}
 	owner.mu.Lock()
-	if owner.app != app || !owner.running || !owner.source.Current() || owner.fault != nil || owner.ctx.Err() != nil {
+	if owner.app != app || !owner.running || !owner.source.Current() || owner.fault != nil || !owner.contextState.currentLocked() {
 		owner.mu.Unlock()
 		releasePoller()
 		return nil, false
@@ -70,13 +70,13 @@ func (a *App) joinTerminalNetworkObserversBeforeStart(intent uint64) error {
 	wait, cancel := context.WithTimeout(a.ctx, 2*time.Second)
 	defer cancel()
 	poller.mu.Lock()
-	pollerTerminal := poller.fault != nil || poller.ctx.Err() != nil
+	pollerTerminal := poller.fault != nil || !poller.contextState.currentLocked()
 	poller.mu.Unlock()
 	if err := joinTerminalNetworkTask(wait, pollerTerminal, poller.done, errNetworkPollerUnavailable); err != nil {
 		return err
 	}
 	owner.mu.Lock()
-	terminal := owner.fault != nil || owner.ctx.Err() != nil
+	terminal := owner.fault != nil || !owner.contextState.currentLocked()
 	owner.mu.Unlock()
 	if err := joinTerminalNetworkTask(wait, terminal, owner.done, errServiceDNSObserverUnavailable); err != nil {
 		return err
@@ -88,7 +88,7 @@ func (a *App) joinTerminalNetworkObserversBeforeStart(intent uint64) error {
 }
 
 func (owner *serviceDNSHandoff) awaitStarted(ctx context.Context) error {
-	return awaitNetworkTaskEntry(ctx, owner.started, owner.done, owner.ctx.Done(), errServiceDNSObserverUnavailable,
+	return awaitNetworkTaskEntry(ctx, owner.started, owner.done, owner.contextState.cancellation.operation.Done(), errServiceDNSObserverUnavailable,
 		func() (func(), bool) { return owner.guardRunning(owner.app) })
 }
 
@@ -97,8 +97,9 @@ func (owner *serviceDNSHandoff) awaitStarted(ctx context.Context) error {
 // Each replacement requires its original task's full done. A failed producer
 // and its linked DNS task are replaced together, never with overlapping loops.
 func (a *App) reconcileServiceDNSAfterRetirement(ctx context.Context, previous *core.Manager, previousEngine *core.Engine) (*serviceDNSHandoff, error) {
-	appLifetime := a.appLifetimeFence() // before runtime/owner/registry locks
-	if ctx == nil || ctx.Err() != nil || !appLifetime.Current() || a.closing.Load() {
+	parent := a.captureAppTaskParent() // before runtime/owner/registry locks
+	interest, interestErr := core.CaptureOperationFence(ctx)
+	if interestErr != nil || !parent.fence.Current() || a.closing.Load() {
 		return nil, errServiceDNSObserverUnavailable
 	}
 	runtime_.mu.Lock()
@@ -146,7 +147,7 @@ func (a *App) reconcileServiceDNSAfterRetirement(ctx context.Context, previous *
 		}
 	}
 	netWatch.mu.Lock()
-	if netWatch.app != a || netWatch.poller != poller || netWatch.dns != owner || a.closing.Load() || !appLifetime.Current() || ctx.Err() != nil {
+	if netWatch.app != a || netWatch.poller != poller || netWatch.dns != owner || a.closing.Load() || !parent.fence.Current() || !interest.Current() {
 		netWatch.mu.Unlock()
 		return nil, errServiceDNSObserverUnavailable
 	}
@@ -170,14 +171,13 @@ func (a *App) reconcileServiceDNSAfterRetirement(ctx context.Context, previous *
 		poller = nextPoller
 		netWatch.last, netWatch.lastAt = netFingerprint{}, time.Time{} // no synthetic OS event/epoch
 	}
-	next := newServiceDNSHandoff(a, poller) // lifetime is App.ctx, not temporary Start ctx
+	next := newServiceDNSHandoff(a, poller) // passive reservation; actual parent remains original App.ctx
 	netWatch.retiredDNS = owner             // bounded one confirmed predecessor; never an unfinished owner
 	netWatch.dns = next
 	netWatch.mu.Unlock()
-	if pollerErr != nil {
-		go poller.run(netWatch)
+	if err := a.prepareNetworkObservers(parent, interest, poller, next, pollerErr != nil); err != nil {
+		return nil, err
 	}
-	go next.run()
 	if err := poller.awaitStarted(ctx); err != nil {
 		// A producer may fail after the earlier check. Do not strand a new
 		// DNS task on an already-failed source whose finalizer saw its predecessor.

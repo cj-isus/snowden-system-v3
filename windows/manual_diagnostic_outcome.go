@@ -97,23 +97,17 @@ func (outcome *manualDiagnosticOutcome) complete(sequence *appCleanupSequence, r
 		finished = true
 		return // original optional stage may retain its own uncertain native resource
 	}
-	if task.release != nil {
-		if task.releaseStarted {
-			task.cleanupFailed.Store(true)
-			*result = errSecretTestUnavailable
-			reject()
-			finished = true
-			return
-		}
-		task.releaseStarted = true // before original callback; an interrupted release is never replayed
-		task.release()
+	if err := task.releaseOriginalBudget(); err != nil {
+		task.cleanupFailed.Store(true)
+		*result = errSecretTestUnavailable
+		reject()
+		finished = true
+		return
 	}
-	task.releaseReturned = true
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	deadline, bounded := task.ctx.Deadline()
-	current := task.publicationCurrent && task.parent != nil && task.parent.Err() == nil && task.registration.currentLocked(a) && !a.closing.Load() &&
-		(task.path == nil || task.path.current.Load()) && (!bounded || time.Now().Before(deadline)) &&
+	current := task.publicationCurrent && task.originalParentCurrent() && task.registration.currentLocked(a) && !a.closing.Load() &&
+		(task.path == nil || task.path.current.Load()) && (!task.contextBounded || time.Now().Before(task.contextDeadline)) &&
 		sameDiagnosticContext(task.contextView, a.diagnosticContextLocked()) && (!outcome.credentials || !task.credentialsChanged.Load())
 	task.resultRejected = !current || sequence.result != nil || *result != nil
 	if task.resultRejected {

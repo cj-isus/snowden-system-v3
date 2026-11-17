@@ -30,7 +30,7 @@ type diagnosticScope struct {
 // use original done/source/path, not a replacement context or old health PASS.
 func (scope diagnosticScope) currentLocked(a *App, current *DiagnosticContextView) bool {
 	task := scope.task
-	if task == nil || task.parent == nil || task.parent.Err() != nil || a.closing.Load() || task.resultRejected || task.cleanupFailed.Load() || scope.credentials && task.credentialsChanged.Load() ||
+	if task == nil || !task.originalParentCurrent() || a.closing.Load() || task.resultRejected || task.cleanupFailed.Load() || scope.credentials && task.credentialsChanged.Load() ||
 		!task.registration.currentLocked(a) || task.path != nil && !task.path.current.Load() || !sameDiagnosticContext(task.contextView, current) {
 		return false
 	}

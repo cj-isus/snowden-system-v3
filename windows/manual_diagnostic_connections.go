@@ -13,13 +13,17 @@ import (
 const maxManualDiagnosticDials = 32
 
 type manualDiagnosticDial struct {
-	task     *manualDiagnosticTask
-	ctx      context.Context
-	cancel   context.CancelFunc
-	done     chan struct{}
-	returned bool // immutable after done; ordinary callback return only
-	mu       sync.Mutex
-	conn     *manualDiagnosticConn
+	task         *manualDiagnosticTask
+	parent       context.Context
+	contextState appTaskContext
+	ctx          context.Context
+	cancel       context.CancelFunc
+	done         chan struct{}
+	returned     bool               // immutable after done; ordinary callback return only
+	called       bool               // original native/library callback was actually entered
+	retirement   appProducerReceipt // immutable after original done
+	mu           sync.Mutex
+	conn         *manualDiagnosticConn
 }
 
 // Every protocol receives this wrapper, so watcher/SSH/HTTP Close share one
@@ -68,7 +72,7 @@ func (conn *manualDiagnosticConn) Close() (result error) {
 
 func (task *manualDiagnosticTask) ownedDialer(call func(context.Context, string, string) (net.Conn, error)) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
-		if ctx == nil || ctx.Err() != nil || task.currentError() != nil {
+		if ctx == nil || task.currentError() != nil {
 			return nil, errSecretTestUnavailable
 		}
 		task.mu.Lock()
@@ -81,29 +85,33 @@ func (task *manualDiagnosticTask) ownedDialer(call func(context.Context, string,
 			task.mu.Unlock()
 			return nil, errSecretTestUnavailable
 		}
-		original, cancel := context.WithCancel(ctx)
-		dial := &manualDiagnosticDial{task: task, ctx: original, cancel: cancel, done: make(chan struct{})}
-		task.dials = append(task.dials, dial) // before the original native/library dial callback
+		state := newAppTaskContext()
+		state.dependencies[0], state.dependencies[1] = task.registration.source, task.contextState.cancellation.operation
+		dial := &manualDiagnosticDial{task: task, parent: ctx, contextState: state, cancel: state.cancellation.request, done: make(chan struct{})}
+		task.dials = append(task.dials, dial) // before actual parent getters, constructor and original dial callback
 		task.mu.Unlock()
 		return dial.run(call, network, address)
 	}
 }
 
 func (dial *manualDiagnosticDial) run(call func(context.Context, string, string) (net.Conn, error), network, address string) (conn net.Conn, result error) {
-	defer close(dial.done)
-	defer dial.cancel()
-	defer func() {
-		if payload := recover(); payload != nil || !dial.returned {
-			dial.task.cleanupFailed.Store(true)
-			conn, result = nil, errSecretTestUnavailable
-		}
-	}()
+	returned := false
+	defer dial.finish(&returned, &conn, &result)
+	if err := dial.prepareContext(); err != nil {
+		returned = true
+		return nil, errSecretTestUnavailable
+	}
 	conn, result = dial.perform(call, network, address)
-	dial.returned = true
+	dial.returned = dial.called
+	returned = true
 	return
 }
 
 func (dial *manualDiagnosticDial) perform(call func(context.Context, string, string) (net.Conn, error), network, address string) (net.Conn, error) {
+	if dial.task.currentError() != nil || !dial.contextState.currentLocked() {
+		return nil, errSecretTestUnavailable // original preparation only; no callback return is invented
+	}
+	dial.called = true
 	raw, err := call(dial.ctx, network, address)
 	var conn *manualDiagnosticConn
 	if raw != nil {
@@ -141,8 +149,17 @@ func (task *manualDiagnosticTask) sealDials() []*manualDiagnosticDial {
 }
 
 func cancelManualDials(dials []*manualDiagnosticDial) {
-	for _, dial := range dials {
-		dial.cancel() // request all cancellations before attempting any original Close
+	sequence := new(appCleanupSequence)
+	defer func() {
+		if sequence.result != nil {
+			for _, dial := range dials {
+				dial.task.cleanupFailed.Store(true)
+			}
+		}
+	}()
+	for index := len(dials) - 1; index >= 0; index-- {
+		dial := dials[index]
+		defer appCleanupStep("cancel original manual diagnostic dial", sequence, func() error { dial.cancel(); return nil })
 	}
 }
 
@@ -170,7 +187,7 @@ func (task *manualDiagnosticTask) retireDials() {
 	task.closeDials(dials)
 	for _, dial := range dials {
 		<-dial.done // includes a late successful connection's rejection/Close
-		if !dial.returned {
+		if dial.retirement.terminalResult(errSecretTestUnavailable) != nil {
 			task.cleanupFailed.Store(true)
 		}
 		if conn := dial.connection(); conn != nil {

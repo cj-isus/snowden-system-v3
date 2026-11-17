@@ -1,18 +1,14 @@
 # STATE — public Windows source snapshot
 
-Completed source documentation: V533. This snapshot also includes reviewed in-progress V534 watchdog/context changes; V534 documentation and acceptance are not finalized. All PC-00..09 and prior requirements remain open. Tests, builds, native, VPN and release acceptance were not performed. Private operational records and full local state are excluded.
+Source documentation through V537, including finalized V534 and subsequent V535-V537 network/DNS, background and GUI diagnostic ownership changes. All PC-00..09 and prior requirements remain open. Tests, builds, native, VPN and release acceptance were not performed. Private operational records and full local state are excluded.
 
-## V2-533 — finite startup rejection без private cause callbacks
+## V2-537 — pending GUI diagnostic task/Dial и original budget
 
-[Контракт](tasks/TH-01-FORWARDING-ADMISSION.md#pc-v533-startup-rejection): Start больше не fmt-wraps startupErr под App.mu. Public error содержит static text и только static cleanup category; original cause остаётся private/sticky. State/error используют общий текст, profile/closing errors фиксированы, startup UI hint соответствует требованию перезапуска после проверки остановки. Далее — actual watchdog ctx alias/WithCancel под runtime+App locks до owner reservation.
+[Контракт](tasks/TH-01-FORWARDING-ADMISSION.md#pc-v537-manual-context): task и каждый bounded Dial резервируются до real context/admission callbacks вне mutex. Partial context/cancel/budget остаются у original owner; unknown return не освобождает slot/lease. Final original App gate публикует immutable parent/child/deadline metadata; current/history больше не вызывают Context под value locks. Registered watch/socket stages, actual cancellation join и original source revocation сохранены. Далее — original release custody в core diagnostic pool.
 
-Source/unverified: 2 Go + 1 static TS label + 4 docs; вручную просмотрены 3 diff, gofmt2 exit0. Тесты/сборки/typecheck/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+Source/unverified: 8 Go + 4 docs, два новых helper; вручную просмотрены 6 diff и 2 новых файла, gofmt8+3 exit0. GUI-диагностика, тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
 
-
-## In progress: V534
-
-Reserve the original watchdog owner before constructing its actual context outside value locks. Preserve partial cancellation and original ordinary-return witnesses. Apply a cancellation requested before the partial cancel was published, and reject canceled preparation before later parent getters. Source review only; no runtime or compiler acceptance.
 
 ## Next
 
-Finalize V534 source documentation and ownership evidence, then inspect original network/DNS producer context construction and reservation. TUN remains unavailable; schema2 activation remains unsupported. Compiler, fixtures, native, OS, provider and comparative acceptance remain open. See docs/planning/knowledge-application/PC-PLAN.md.
+Inspect core diagnostic budget release custody and every actual admission/release consumer. Preserve the protected lane, optional concurrency and rolling work limits, original context/lease ownership and ordinary return evidence; no refund on cancellation or error. TUN remains unavailable; schema2 activation remains unsupported. Compiler, fixtures, native, OS, provider and comparative acceptance remain open. See docs/planning/knowledge-application/PC-PLAN.md.

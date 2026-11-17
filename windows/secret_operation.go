@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/snowden-system/windows/backend/core"
 	"github.com/snowden-system/windows/backend/secretvault"
 )
 
@@ -16,6 +15,12 @@ import (
 // It owns no forwarding/probe/trust authority. App.mu only reserves/retires the
 // original pointer; vault, network I/O, cancellation and joins run outside it.
 type manualDiagnosticTask struct {
+	app                 *App
+	contextState        appTaskContext // immutable fences/deadline after contextReady publication
+	contextReady        atomic.Bool
+	contextDeadline     time.Time
+	contextBounded      bool
+	preparation         appProducerReceipt // App.mu; failed original setup only, never an RPC/body return
 	ctx                 context.Context
 	parent              context.Context        // original App lifetime; own cancel never cancels this parent
 	contextView         *DiagnosticContextView // immutable original presentation receipt; never authority
@@ -66,63 +71,16 @@ func (a *App) beginManualDiagnostic(timeout time.Duration, requests int, bodyByt
 }
 
 func (a *App) prepareManualDiagnostic(timeout time.Duration, requests int, bodyBytes int64, network bool) (*manualDiagnosticTask, *secretvault.Manager, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	registration := a.intentRegistrationLocked()
-	if timeout <= 0 || timeout > 90*time.Second || requests < 0 || bodyBytes < 0 ||
-		a.diagnosticTask != nil || !a.appLifetimeCurrentLocked() || a.vault == nil ||
-		a.closing.Load() || a.restartCommit != nil || a.releaseCommit != nil || !registration.currentLocked(a) {
-		return nil, nil, errSecretTestUnavailable
+	preparation, err := a.reserveManualDiagnostic(timeout, requests, bodyBytes, network)
+	if err != nil {
+		return nil, nil, err
 	}
-	base := a.ctx
-	var path *networkPathSource
-	if network {
-		base = netEpoch.scopeContext(base)
-		path, _ = base.Value(networkPathContextKey{}).(*networkPathSource)
-		if path == nil || !path.current.Load() {
-			return nil, nil, errSecretTestUnavailable
-		}
-	}
-	contextView := a.diagnosticContextLocked()
-	if contextView == nil {
-		return nil, nil, errSecretTestUnavailable // presentation preparation cannot strand admission
-	}
-	ctx, cancel := context.WithTimeout(base, timeout)
-	handedOff := false
-	var release func()
-	// Register separately: an abnormal cancellation must not skip unused budget
-	// retirement. After handoff only the original task finisher may release it.
-	defer func() {
-		if !handedOff && release != nil {
-			release()
-		}
-	}()
-	defer func() {
-		if !handedOff {
-			cancel()
-		}
-	}()
-	if requests != 0 {
-		var err error
-		ctx, release, err = core.AdmitDiagnostic(ctx, core.DiagnosticEndpoint, requests, bodyBytes, timeout)
-		if err != nil {
-			return nil, nil, errSecretTestUnavailable
-		}
-	}
-	if ctx.Err() != nil || a.closing.Load() || !registration.currentLocked(a) ||
-		path != nil && (netEpoch.pathValue.Load() != path || !path.current.Load()) {
-		return nil, nil, errSecretTestUnavailable
-	}
-	task := &manualDiagnosticTask{ctx: ctx, parent: a.ctx, contextView: contextView, cancel: cancel, registration: registration, closing: &a.closing,
-		path: path, release: release, done: make(chan struct{}), watchDone: make(chan struct{}), resultRejected: true}
-	a.diagnosticTask = task // busy until this original call AND its watcher return
-	handedOff = true        // exact original task owns cancellation/budget before its watcher starts
-	go task.watch()
-	return task, a.vault, nil
+	return preparation.prepare()
 }
 
 func (task *manualDiagnosticTask) currentError() error {
-	if task.ctx.Err() != nil || task.cleanupFailed.Load() || task.dialLimitReached.Load() || task.closing == nil || task.closing.Load() ||
+	if task == nil || !task.contextReady.Load() || !task.contextState.cancellation.operation.Current() || !task.contextState.parentFence.Current() ||
+		!task.contextState.childFence.Current() || task.cleanupFailed.Load() || task.dialLimitReached.Load() || task.closing == nil || task.closing.Load() ||
 		!task.registration.source.Current() || task.path != nil && !task.path.current.Load() {
 		return errSecretTestUnavailable
 	}
@@ -145,31 +103,48 @@ func (task *manualDiagnosticTask) watchBody() {
 	case <-task.ctx.Done():
 	case <-task.registration.source.Done(): // Start/Stop/profile successor revokes the original intent
 	}
-	task.cancel()
 	dials := task.sealDials()
-	cancelManualDials(dials)
-	task.closeDials(dials)
+	sequence := new(appCleanupSequence)
+	defer func() {
+		if sequence.result != nil {
+			task.cleanupFailed.Store(true)
+		}
+	}()
+	defer appCleanupStep("close original watched diagnostic sockets", sequence, func() error { task.closeDials(dials); return nil })
+	defer appCleanupStep("cancel original watched diagnostic dials", sequence, func() error { cancelManualDials(dials); return nil })
+	defer appCleanupStep("cancel original watched diagnostic context", sequence, func() error { task.cancel(); return nil })
 }
 
-func (a *App) finishManualDiagnostic(task *manualDiagnosticTask) error {
+func (a *App) finishManualDiagnostic(task *manualDiagnosticTask) (result error) {
 	currentBeforeCancel := task.currentError() == nil
-	task.cancel()
-	<-task.watchDone // cancellation/deadline is not completion
-	task.retireDials()
-	if !task.bodyReturned || !task.watchReturned.Load() || task.cleanupFailed.Load() {
-		return errSecretTestUnavailable // original pointer/done retained; no replacement or false success
-	}
-	task.retirementConfirmed = true
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	deadline, bounded := task.ctx.Deadline()
-	publicationCurrent := currentBeforeCancel && task.parent != nil && task.parent.Err() == nil && task.registration.currentLocked(a) && !a.closing.Load() &&
-		(task.path == nil || task.path.current.Load()) && (!bounded || time.Now().Before(deadline)) &&
-		sameDiagnosticContext(task.contextView, a.diagnosticContextLocked())
-	task.publicationCurrent = publicationCurrent
-	if !publicationCurrent {
-		return errSecretTestUnavailable // resources retired, but the old result is not current
-	}
+	sequence := new(appCleanupSequence)
+	defer func() {
+		if result != nil || !task.bodyReturned || !task.watchReturned.Load() || task.cleanupFailed.Load() {
+			task.cleanupFailed.Store(true)
+			result = errSecretTestUnavailable
+			return // exact task/budget/done retained; no completion inferred from cancellation
+		}
+		task.retirementConfirmed = true
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		task.publicationCurrent = currentBeforeCancel && task.originalParentCurrent() && task.registration.currentLocked(a) && !a.closing.Load() &&
+			(task.path == nil || task.path.current.Load()) && (!task.contextBounded || time.Now().Before(task.contextDeadline)) &&
+			sameDiagnosticContext(task.contextView, a.diagnosticContextLocked())
+		if !task.publicationCurrent {
+			result = errSecretTestUnavailable // resources retired; stale observation never becomes current
+		}
+	}()
+	defer sequence.finish(&result)
+	defer appCleanupStep("join original diagnostic context cancellation", sequence, task.contextState.cancellation.join)
+	defer appCleanupStep("retire original diagnostic dials", sequence, func() error { task.retireDials(); return nil })
+	defer appCleanupStep("join original diagnostic watcher", sequence, func() error {
+		<-task.watchDone
+		if !task.watchReturned.Load() {
+			return errSecretTestUnavailable
+		}
+		return nil
+	})
+	defer appCleanupStep("cancel original diagnostic context", sequence, func() error { task.cancel(); return nil })
 	return nil
 }
 

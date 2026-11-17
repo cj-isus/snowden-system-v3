@@ -15,6 +15,7 @@ var errNetworkPollerUnavailable = errors.New("наблюдатель сети н
 // confirms that the original collector/event-delivery stack has returned.
 type networkPollerOwner struct {
 	app                 *App
+	contextState        appTaskContext
 	ctx                 context.Context
 	cancel              context.CancelFunc
 	started             chan struct{}
@@ -33,8 +34,8 @@ type networkPollerOwner struct {
 }
 
 func newNetworkPollerOwner(app *App) *networkPollerOwner {
-	ctx, cancel := context.WithCancel(app.ctx)
-	return &networkPollerOwner{app: app, ctx: ctx, cancel: cancel, started: make(chan struct{}), done: make(chan struct{}), powerWake: make(chan struct{}, 1)}
+	state := newAppTaskContext()
+	return &networkPollerOwner{app: app, contextState: state, cancel: state.cancellation.request, started: make(chan struct{}), done: make(chan struct{}), powerWake: make(chan struct{}, 1)}
 }
 
 // Called before the DNS lease; neither guard covers I/O or callbacks.
@@ -43,7 +44,7 @@ func (owner *networkPollerOwner) guardRunning(app *App) (func(), bool) {
 		return nil, false
 	}
 	owner.mu.Lock()
-	if owner.app != app || !owner.running || owner.fault != nil || owner.ctx.Err() != nil {
+	if owner.app != app || !owner.running || owner.fault != nil || !owner.contextState.currentLocked() {
 		owner.mu.Unlock()
 		return nil, false
 	}
@@ -180,7 +181,7 @@ func awaitNetworkTaskEntry(ctx context.Context, started, done, stopped <-chan st
 }
 
 func (owner *networkPollerOwner) awaitStarted(ctx context.Context) error {
-	return awaitNetworkTaskEntry(ctx, owner.started, owner.done, owner.ctx.Done(), errNetworkPollerUnavailable,
+	return awaitNetworkTaskEntry(ctx, owner.started, owner.done, owner.contextState.cancellation.operation.Done(), errNetworkPollerUnavailable,
 		func() (func(), bool) { return owner.guardRunning(owner.app) })
 }
 

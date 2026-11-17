@@ -155,10 +155,10 @@ func (batch *adaptiveBatch) subjectCurrent(ctx context.Context) bool {
 // view retains original values across our own cancellation; no I/O uses it.
 func (batch *adaptiveBatch) publishHistory(report *AdaptiveStatus) error {
 	task := batch.task
-	deadline, bounded := task.ctx.Deadline()
+	deadline, bounded := task.contextDeadline, task.contextBounded
 	validation := context.WithoutCancel(task.ctx)
 	current := func() bool {
-		return task.parent != nil && task.parent.Err() == nil && bounded && time.Now().Before(deadline) &&
+		return task.originalParentCurrent() && bounded && time.Now().Before(deadline) &&
 			!task.cleanupFailed.Load() && batch.subjectCurrent(validation)
 	}
 	if !current() {

@@ -136,7 +136,7 @@ func (e *networkEpoch) enterPowerObservedPoller(owner *networkPollerOwner) bool 
 	defer e.mu.Unlock()
 	owner.mu.Lock()
 	defer owner.mu.Unlock()
-	if owner.stopping || owner.ctx.Err() != nil || owner.fault != nil || owner.powerRetirement {
+	if owner.stopping || !owner.contextState.currentLocked() || owner.fault != nil || owner.powerRetirement {
 		return false
 	}
 	if e.powerBlocked.Load() {

@@ -24,7 +24,7 @@ func (owner *networkPollerOwner) notePowerNotification(event uintptr) {
 	}
 	owner.mu.Lock()
 	defer owner.mu.Unlock()
-	if owner.stopping || owner.ctx.Err() != nil || owner.powerRetirement || owner.fault != nil {
+	if owner.stopping || !owner.contextState.currentLocked() || owner.powerRetirement || owner.fault != nil {
 		return
 	}
 	owner.powerRetirement = true
@@ -121,12 +121,16 @@ func (a *App) recoverDisconnectedPowerObservers(ctx context.Context) {
 	if ctx == nil || ctx.Err() != nil || !netEpoch.powerBlocked.Load() {
 		return
 	}
+	interest, err := core.CaptureOperationFence(ctx) // actual getters before App/registry/owner value locks
+	if err != nil {
+		return
+	}
 	a.operationMu.Lock()
 	defer a.operationMu.Unlock()
 	scope := func() (uint64, bool) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return a.operationID, ctx.Err() == nil && a.appLifetimeCurrentLocked() && a.startupErr == nil && !a.protectionDesired &&
+		return a.operationID, interest.Current() && a.appLifetimeCurrentLocked() && a.startupErr == nil && !a.protectionDesired &&
 			!a.profileTransition && !a.closing.Load() && a.restartCommit == nil && !a.installedImageChanged &&
 			(a.state.State == "stopped" || a.state.State == "error")
 	}
@@ -156,12 +160,14 @@ func (a *App) recoverDisconnectedPowerObservers(ctx context.Context) {
 		return
 	}
 	poller.mu.Lock()
-	knownPower := poller.powerRetirement && errors.Is(poller.fault, errPowerContinuityChanged) && !localRetirementFailure(poller.fault)
+	pollerPower, pollerFault := poller.powerRetirement, poller.fault
 	tried := poller.powerRecoveryTried && poller.powerRecoveryIntent == intent
 	poller.mu.Unlock()
 	dns.mu.Lock()
-	knownPower = knownPower && dns.powerRetirement && errors.Is(dns.fault, errPowerContinuityChanged) && !localRetirementFailure(dns.fault)
+	dnsPower, dnsFault := dns.powerRetirement, dns.fault
 	dns.mu.Unlock()
+	knownPower := pollerPower && dnsPower && errors.Is(pollerFault, errPowerContinuityChanged) && !localRetirementFailure(pollerFault) &&
+		errors.Is(dnsFault, errPowerContinuityChanged) && !localRetirementFailure(dnsFault)
 	if !knownPower || tried || !current() {
 		return // independent native/custody faults require explicit reconciliation
 	}

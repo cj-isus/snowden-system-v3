@@ -4270,6 +4270,30 @@ Source/unverified: 4 Go + 1 static TS label + 4 docs; вручную просм�
 
 Source/unverified: 2 Go + 1 static TS label + 4 docs; вручную просмотрены 3 diff, gofmt2 exit0. Тесты/сборки/typecheck/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
 
+### V2-534 — PC-01, pending watchdog и original context retirement
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v534-watchdog-context): watchdog резервируется до реального constructor, value-only gates используют исходные fences, actual partial cancel и preparation/cancel return сохраняются. Creator failure и run completion различаются; cleanup/fault stages не пропускаются при abnormal callback. Общая prepublication cancellation не теряется. Network/DNS pending constructors и runtime-приёмка ещё OPEN.
+
+Source/unverified: 4 Go + 4 docs, один новый helper; вручную просмотрены 3 diff и новый файл, gofmt3+3 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-535 — PC-01, original network/DNS context preparation
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v535-network-context): passive poller/DNS reservation до actual WithCancel/getters, final exact-pair gate, distinct failed-preparation completion и original cancel join. Context callbacks исключены из затронутых watcher/task/event/power value gates; actual native retirement и recovery budget сохранены. Background-probe reservation/context/cancel и runtime-приёмка ещё OPEN.
+
+Source/unverified: 11 Go + 4 docs, один новый helper; вручную просмотрены 10 diff и новый файл, gofmt11+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-536 — PC-01, original background-probe context custody
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v536-background-context): task reserve до actual context, original cancellation return и distinct preparation-only completion; callbacks вне Once/value locks. Round захватывает исходные request/path/epoch/source до getters и сверяет их после; existing network helpers переиспользованы без новой policy. Optional diagnostics не стали обязательным VPN gate. GUI diagnostic context/dial locks и runtime-приёмка ещё OPEN.
+
+Source/unverified: 12 Go + 4 docs, три новых helper; вручную просмотрены 9 diff и 3 новых файла, gofmt12 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-537 — PC-01, original GUI diagnostic context/dial custody
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v537-manual-context): original task/max32 dials до actual callbacks, timeout/admission вне locks, exact atomic publication и immutable parent/deadline gates. Failed preparation и actual RPC/Dial return различаются; unknown context/budget/native cleanup сохраняет owner/lease. Existing credential/source/path/result gates сохранены. Core budget release custody и runtime-приёмка ещё OPEN.
+
+Source/unverified: 8 Go + 4 docs, два новых helper; вручную просмотрены 6 diff и 2 новых файла, gofmt8+3 exit0. GUI-диагностика, тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
 Абсолютный запрет владельца на тестирование/сборки/исполнение сети сохраняется.
 
 1. ПК-владельцу: закончить W4c original-helper/WFP admission, сохранив закрытый

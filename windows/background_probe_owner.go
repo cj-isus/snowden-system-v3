@@ -13,23 +13,26 @@ var errBackgroundProbeUnavailable = errors.New("original background probe outcom
 // One original process-lifetime producer. Registry flags are scheduling data;
 // only this owner retains its original serial attempt and cleanup uncertainty.
 type backgroundProbeTask struct {
-	app      *App
-	ctx      context.Context
-	cancel   context.CancelFunc
-	stop     chan struct{}
-	done     chan struct{}
-	stopOnce sync.Once
-	mu       sync.Mutex
-	stopping bool
-	returned bool // original loop and cancel ordinary return; read after done
-	fault    error
-	attempt  *backgroundProbeAttempt
+	app          *App
+	contextState appTaskContext
+	ctx          context.Context
+	cancel       context.CancelFunc
+	stop         chan struct{}
+	done         chan struct{}
+	stopOnce     sync.Once
+	mu           sync.Mutex
+	stopping     bool
+	returned     bool // original loop and cancel ordinary return; read after done
+	retirement   appProducerReceipt
+	fault        error
+	attempt      *backgroundProbeAttempt
 }
 
 type backgroundProbeScope struct {
 	app           *App
 	owner         *backgroundProbeTask
 	ctx           context.Context
+	fence         core.OperationFence
 	registration  intentRegistration
 	sourceCurrent bool // captured state of the latest intent, never positive authority
 	path          *networkPathSource
@@ -47,7 +50,7 @@ func (a *App) backgroundProbeOwner() *backgroundProbeTask {
 func (owner *backgroundProbeTask) available() bool {
 	owner.mu.Lock()
 	defer owner.mu.Unlock()
-	return !owner.stopping && owner.fault == nil && owner.ctx.Err() == nil
+	return !owner.stopping && owner.fault == nil && owner.contextState.currentLocked()
 }
 
 func (owner *backgroundProbeTask) fail() {
@@ -56,35 +59,30 @@ func (owner *backgroundProbeTask) fail() {
 	owner.fault = errBackgroundProbeUnavailable // fixed local fault, never a channel failure
 }
 
-func (a *App) startBgProbes() {
-	ctx := func() context.Context {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		if !a.appLifetimeCurrentLocked() || a.closing.Load() || a.quitRequested || a.startupErr != nil {
-			return nil
-		}
-		return a.ctx
-	}()
-	if ctx == nil {
-		return
+func (a *App) startBgProbes() error {
+	parent := a.captureAppTaskParent()
+	if !parent.fence.Current() || a.closing.Load() {
+		return errBackgroundProbeUnavailable
 	}
-	lifetime, cancel := context.WithCancel(ctx)
-	handedOff := false
-	defer func() {
-		if !handedOff {
-			cancel()
-		}
-	}()
 	bgReg.mu.Lock()
-	defer bgReg.mu.Unlock()
-	if bgReg.started || a.backgroundProbe != nil || a.closing.Load() || lifetime.Err() != nil {
-		return
+	if bgReg.started || a.backgroundProbe != nil {
+		owner := a.backgroundProbe
+		bgReg.mu.Unlock()
+		if owner != nil && owner.app == a && owner.available() {
+			return nil // existing prepared owner only, not loop entry or a diagnostic result
+		}
+		return errBackgroundProbeUnavailable
 	}
-	owner := &backgroundProbeTask{app: a, ctx: lifetime, cancel: cancel, stop: make(chan struct{}), done: make(chan struct{})}
-	a.backgroundProbe = owner // before scheduling; no failed/stopped replacement
+	state := newAppTaskContext()
+	owner := &backgroundProbeTask{app: a, contextState: state, cancel: state.cancellation.request, stop: make(chan struct{}), done: make(chan struct{})}
+	a.backgroundProbe = owner // reserve before the real constructor; never replace
 	bgReg.started, bgReg.stop = true, owner.stop
-	handedOff = true
+	bgReg.mu.Unlock()
+	if err := owner.prepareContext(parent); err != nil {
+		return err
+	}
 	go owner.run()
+	return nil
 }
 
 func (owner *backgroundProbeTask) run() {
@@ -97,24 +95,26 @@ func (owner *backgroundProbeTask) run() {
 func (owner *backgroundProbeTask) finish(returned *bool) {
 	payload := recover()
 	defer close(owner.done)
-	cancelReturned := false
+	bodyReturned := *returned && payload == nil
+	sequence := new(appCleanupSequence)
+	var cleanupResult error
 	defer func() {
-		cancelPayload := recover()
 		owner.mu.Lock()
 		defer owner.mu.Unlock()
-		owner.returned = *returned && payload == nil && cancelReturned && cancelPayload == nil
+		owner.retirement = appProducerReceipt{bodyReturned: bodyReturned, cleanupReturned: sequence.drained && cleanupResult == nil, cleanupResult: cleanupResult}
+		owner.returned = bodyReturned && owner.retirement.cleanupKnown()
 		if !owner.returned || owner.attempt != nil {
 			owner.fault = errBackgroundProbeUnavailable
 		}
 	}()
+	defer sequence.finish(&cleanupResult)
+	defer appCleanupStep("retire original background context", sequence, owner.contextState.cancellation.join)
 	owner.mu.Lock()
-	unexpected := !*returned || payload != nil || (!owner.stopping && owner.ctx.Err() == nil && !owner.app.closing.Load())
+	unexpected := !bodyReturned || (!owner.stopping && owner.contextState.currentLocked() && !owner.app.closing.Load())
 	if unexpected {
 		owner.fault = errBackgroundProbeUnavailable
 	}
 	owner.mu.Unlock()
-	owner.cancel()
-	cancelReturned = true
 }
 
 func (a *App) cancelBackgroundProbes() <-chan struct{} {
@@ -125,13 +125,11 @@ func (a *App) cancelBackgroundProbes() <-chan struct{} {
 	if owner.app != a {
 		return owner.done // no cancellation against another App; result-aware join rejects it
 	}
-	owner.stopOnce.Do(func() {
-		owner.mu.Lock()
-		owner.stopping = true
-		owner.mu.Unlock()
-		defer close(owner.stop) // an abnormal cancel does not skip the original negative stop signal
-		owner.cancel()
-	})
+	owner.mu.Lock()
+	owner.stopping = true
+	owner.mu.Unlock()
+	owner.stopOnce.Do(func() { close(owner.stop) }) // passive notification only; no callback holds Once's mutex
+	owner.cancel()                                  // duplicates notify; the original finalizer joins actual return
 	return owner.done
 }
 
@@ -153,7 +151,13 @@ func (a *App) backgroundProbeResult(done <-chan struct{}) error {
 	}
 	owner.mu.Lock()
 	defer owner.mu.Unlock()
-	if !owner.returned || owner.fault != nil || owner.attempt != nil {
+	if owner.attempt != nil || owner.retirement.terminalResult(errBackgroundProbeUnavailable) != nil {
+		return errBackgroundProbeUnavailable
+	}
+	if owner.retirement.preparationOnly {
+		return nil // confirmed original unstarted setup cleanup, never a successful running loop
+	}
+	if !owner.returned || owner.fault != nil {
 		return errBackgroundProbeUnavailable
 	}
 	return nil
@@ -186,29 +190,19 @@ func (a *App) captureBackgroundProbeScope() (*backgroundProbeScope, error) {
 	if owner == nil || owner.app != a || !owner.available() || tunRequested() {
 		return nil, errBackgroundProbeUnavailable
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	scope := &backgroundProbeScope{app: a, owner: owner, registration: a.intentRegistrationLocked(), activeID: a.state.ActiveID}
-	scope.sourceCurrent = scope.registration.source.Current()
-	if a.closing.Load() || a.profileTransition || a.trustBlocked || a.startupErr != nil || a.installedImageChanged ||
-		a.restartCommit != nil || a.releaseCommit != nil || !scope.registration.sameLocked(a) {
-		return nil, errBackgroundProbeUnavailable
+	scope, err := a.captureBackgroundProbeScopeValues(owner)
+	if err != nil {
+		return nil, err
 	}
-	scope.ctx = netEpoch.scopeContext(owner.ctx)
-	scope.path, _ = scope.ctx.Value(networkPathContextKey{}).(*networkPathSource)
-	netEpoch.mu.Lock()
-	defer netEpoch.mu.Unlock()
-	scope.epoch = netEpoch.num
-	scope.control = netEpoch.controlSource
-	if scope.epoch <= 0 || scope.path == nil || scope.path != netEpoch.path || !scope.path.current.Load() ||
-		!scope.control.Current() || netEpoch.knownDown || netEpoch.powerBlocked.Load() {
-		return nil, errBackgroundProbeUnavailable
-	}
-	return scope, nil
+	return scope.prepareContext()
 }
 
 func (scope *backgroundProbeScope) current() bool {
-	if scope.ctx.Err() != nil || scope.app.backgroundProbeOwner() != scope.owner || !scope.owner.available() || tunRequested() {
+	return scope.ctx != nil && scope.fence.Current() && scope.valuesCurrent()
+}
+
+func (scope *backgroundProbeScope) valuesCurrent() bool {
+	if scope.app.backgroundProbeOwner() != scope.owner || !scope.owner.available() || tunRequested() {
 		return false
 	}
 	current := func() bool {
