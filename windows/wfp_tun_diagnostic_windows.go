@@ -4,9 +4,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/netip"
-	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/snowden-system/windows/backend/core"
@@ -25,6 +26,8 @@ type nativeTUNWFPPolicy struct{}
 
 type nativeTUNWFPLease struct {
 	mu             sync.Mutex
+	sealed         atomic.Bool
+	call           *nativeTUNWFPCall
 	actor          *core.NativeTUNActor
 	descriptor     core.NativeTUNDescriptor
 	luid           uint64
@@ -57,7 +60,7 @@ func (nativeTUNWFPPolicy) NewLease(actor *core.NativeTUNActor) core.NativeTUNLea
 func (nativeTUNWFPPolicy) Acquire(ctx context.Context, actor *core.NativeTUNActor) (core.NativeTUNLease, error) {
 	lease := &nativeTUNWFPLease{actor: actor}
 	err := lease.Acquire(ctx)
-	if err != nil && !lease.claimed {
+	if err != nil && !lease.hasCustody() {
 		return nil, err // returned normally before this lease claimed any resource
 	}
 	return lease, err
@@ -67,101 +70,124 @@ func (lease *nativeTUNWFPLease) Acquire(ctx context.Context) (finalErr error) {
 	if lease == nil {
 		return core.ErrNativeScopeUnavailable
 	}
+	call, err := lease.beginCall(nativeTUNWFPAcquire, ctx)
+	if err != nil {
+		return err
+	}
+	returned := false
+	defer lease.finishCall(call, &returned, &finalErr)
+	finalErr = call.prepareContext()
+	if finalErr == nil {
+		finalErr = lease.acquireOwned(call)
+	}
+	returned = true
+	return finalErr
+}
+
+// Only this lease's admitted caller accesses its native payload. All actor,
+// image, interface and WFP work runs outside the lease metadata mutex.
+func (lease *nativeTUNWFPLease) acquireOwned(call *nativeTUNWFPCall) error {
+	ctx := call.ctx
 	if err := wfpDiagnosticOperationScope(ctx); err != nil {
 		return err
 	}
-	lease.mu.Lock()
-	defer lease.mu.Unlock()
-	if lease.closed || lease.acquireStarted {
-		return core.ErrNativeScopeUnavailable
+	call.stage = "claim"
+	if err := lease.claimDiagnostic(call); err != nil {
+		return err
 	}
-	if err := wfpDiagnosticOperationScope(ctx); err != nil {
-		return err // do not claim a global owner after waiting past the source/deadline
-	}
-	lease.acquireStarted = true
-	complete := false
-	defer func() {
-		if recovered := recover(); recovered != nil || !complete && finalErr == nil {
-			finalErr = core.ErrNativeScopeUnavailable
-		}
-	}()
-	diagnosticWFP.Lock()
-	if diagnosticWFP.owner != nil {
-		diagnosticWFP.Unlock()
-		complete = true
-		return core.ErrHelperBusy
-	}
-	diagnosticWFP.owner, lease.claimed = lease, true // original capture and global owner precede native calls
-	diagnosticWFP.Unlock()
+	call.stage = "descriptor"
 	descriptor, err := lease.actor.Descriptor(ctx)
 	if err != nil || descriptor.Runtime.TUNName != render.TUNInterfaceName {
 		return core.ErrNativeScopeUnavailable
 	}
 	lease.descriptor = descriptor
-	exe, err := os.Executable()
-	if err != nil {
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
 		return err
 	}
+	call.stage = "image"
 	helperApp, err := lease.native.imageAppID(ctx, descriptor.Executable)
 	if err != nil || helperApp == "" {
-		return core.ErrNativeImageUnavailable
+		return errors.Join(core.ErrNativeImageUnavailable, err)
 	}
-	engineApp, err := lease.native.imageAppID(ctx, exe)
+	engineApp, err := lease.native.applicationAppID(ctx, "")
 	if err != nil || engineApp == "" || helperApp == engineApp {
-		return core.ErrNativeScopeUnavailable // same-image engine bypass is not TUN evidence
+		return errors.Join(core.ErrNativeScopeUnavailable, err) // same-image engine bypass is not TUN evidence
 	}
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
+		return err
+	}
+	call.stage = "interface"
 	lease.luid, err = waitInterfaceLUIDContext(ctx, descriptor.Runtime.TUNName, 250*time.Millisecond)
 	if err != nil {
 		return err
 	}
 	lease.spec = diagnosticWFPRule(helperApp, descriptor.SourcePort, lease.luid)
+	call.stage = "session"
 	if err := lease.native.openSessionContext(ctx); err != nil {
 		return err
 	}
 	// Reject ANY general LUID permit and any diagnostic/unknown owned filter.
 	// Acquisition cannot silently adopt a previous session's same stable ID.
+	call.stage = "base"
 	if err := verifyWFPDiagnosticContext(ctx, &lease.native.nativeWFPSessionOwner, nil); err != nil {
 		return err
 	}
 	if current, err := lease.actor.Descriptor(ctx); err != nil || current != descriptor {
 		return core.ErrNativeScopeUnavailable
 	}
+	call.stage = "filter"
 	if err := lease.native.open(ctx, helperApp, descriptor.SourcePort, lease.luid); err != nil {
 		return err
 	}
-	if err := lease.validateLocked(ctx, false); err != nil {
+	call.stage = "validate"
+	if err := lease.validateOwned(ctx); err != nil {
 		return err
 	}
 	if err := wfpDiagnosticOperationScope(ctx); err != nil {
 		return err
 	}
-	lease.opened, complete = true, true
 	return nil
 }
 
-func (lease *nativeTUNWFPLease) Validate(ctx context.Context) error {
+func (lease *nativeTUNWFPLease) Validate(ctx context.Context) (finalErr error) {
 	if lease == nil {
 		return core.ErrNativeScopeUnavailable
 	}
-	lease.mu.Lock()
-	defer lease.mu.Unlock()
-	return lease.validateLocked(ctx, true)
+	call, err := lease.beginCall(nativeTUNWFPValidate, ctx)
+	if err != nil {
+		return err
+	}
+	returned := false
+	defer lease.finishCall(call, &returned, &finalErr)
+	finalErr = call.prepareContext()
+	if finalErr == nil {
+		call.stage = "validate"
+		finalErr = lease.validateOwned(call.ctx)
+	}
+	returned = true
+	return finalErr
 }
 
-func (lease *nativeTUNWFPLease) validateLocked(ctx context.Context, requireOpened bool) error {
+func (lease *nativeTUNWFPLease) validateOwned(ctx context.Context) error {
 	if err := wfpDiagnosticOperationScope(ctx); err != nil {
 		return err
 	}
-	if !lease.claimed || !lease.acquireStarted || requireOpened && !lease.opened || lease.closed || lease.native.closed || lease.native.closeStarted || !lease.native.openReturned || lease.native.openCode != 0 || lease.native.handle == 0 || lease.luid == 0 {
+	if !lease.claimed || !lease.acquireStarted || lease.native.closed || lease.native.closeStarted || !lease.native.openReturned || lease.native.openCode != 0 || lease.native.handle == 0 || lease.luid == 0 {
 		return core.ErrNativeScopeUnavailable
 	}
 	current, err := lease.actor.Descriptor(ctx)
 	if err != nil || current != lease.descriptor {
 		return core.ErrNativeScopeUnavailable
 	}
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
+		return err
+	}
 	luid, err := waitInterfaceLUIDContext(ctx, current.Runtime.TUNName, 250*time.Millisecond)
 	if err != nil || luid != lease.luid {
 		return core.ErrNativeScopeUnavailable
+	}
+	if err := wfpDiagnosticOperationScope(ctx); err != nil {
+		return err
 	}
 	if err := verifyWFPDiagnosticContext(ctx, &lease.native.nativeWFPSessionOwner, &lease.spec); err != nil {
 		return err
@@ -173,16 +199,23 @@ func (lease *nativeTUNWFPLease) validateLocked(ctx context.Context, requireOpene
 	return wfpDiagnosticOperationScope(ctx)
 }
 
-func (lease *nativeTUNWFPLease) Close() error {
+func (lease *nativeTUNWFPLease) Close() (finalErr error) {
 	if lease == nil {
 		return core.ErrNativeScopeUnavailable
 	}
-	lease.mu.Lock()
-	defer lease.mu.Unlock()
-	if lease.closed {
-		return nil
+	call, err := lease.beginCall(nativeTUNWFPClose, nil)
+	if err != nil || call == nil {
+		return err
 	}
-	lease.opened = false
+	returned := false
+	defer lease.finishCall(call, &returned, &finalErr)
+	call.stage = "native-close"
+	finalErr = lease.closeOwned()
+	returned = true
+	return finalErr
+}
+
+func (lease *nativeTUNWFPLease) closeOwned() error {
 	diagnosticWFP.Lock()
 	owned := diagnosticWFP.owner == lease
 	diagnosticWFP.Unlock()
@@ -190,8 +223,7 @@ func (lease *nativeTUNWFPLease) Close() error {
 		if owned {
 			return core.ErrNativeScopeUnavailable
 		}
-		lease.closed = true // pure allocation or a returned busy refusal; never touch another lease
-		return nil
+		return nil // finalizer retires pure allocation without touching another lease
 	}
 	if !owned || lease.native.addAttempted && !lease.native.addReturned {
 		return core.ErrNativeScopeUnavailable // no native Close while original Add may be unresolved
@@ -203,11 +235,7 @@ func (lease *nativeTUNWFPLease) Close() error {
 	// BFE contract. Do not reopen a session/adopt a same-key filter as a cleanup
 	// substitute. This receipt says nothing about another actor's base changes;
 	// any later forwarding gate must verify the complete policy afresh.
-	diagnosticWFP.Lock()
-	defer diagnosticWFP.Unlock()
-	if diagnosticWFP.owner != lease {
-		return core.ErrNativeScopeUnavailable
-	}
-	lease.closed, diagnosticWFP.owner = true, nil
+	// Original identity/unpublication is a value-only final commit, after this
+	// native callback returned normally; a concurrent Close cannot pass pending.
 	return nil
 }

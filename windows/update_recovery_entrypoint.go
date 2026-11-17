@@ -32,7 +32,7 @@ func runRecoveryEntrypoint(ctx context.Context, expectedSHA string, repair bool)
 	}
 	a := NewApp()
 	recoveryEntrypointOwners = a
-	a.ctx, a.installedImageChanged = ctx, true
+	a.installedImageChanged = true // restricted before any original context callback
 	a.updateMu.Lock()
 	defer a.updateMu.Unlock()
 	a.operationMu.Lock()
@@ -55,6 +55,9 @@ func runRecoveryEntrypoint(ctx context.Context, expectedSHA string, repair bool)
 			}
 		}
 	}()
+	if err := a.bindHeadlessLifetime(ctx); err != nil {
+		return core.ErrHelperCleanup
+	}
 	root, candidate, verified, err := a.prepareUpdatePairCandidate(ctx, false, expectedSHA)
 	if err != nil {
 		return err
@@ -140,7 +143,7 @@ func runRecoveryEntrypoint(ctx context.Context, expectedSHA string, repair bool)
 	receipt, err := a.pairAcceptance.CommitGUI(ctx, guard, func(commit core.UpdateGUICommit) error {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if !lifecyclePublicationCurrent(ctx) || a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() ||
+		if !lifecyclePublicationCurrent(ctx) || !a.appLifetimeCurrentLocked() || a.closing.Load() ||
 			!a.startupIntent.currentLocked(a) || a.restartCommit != nil || a.releaseCommit != nil {
 			return context.Canceled
 		}

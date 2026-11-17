@@ -17,6 +17,7 @@ type adapterSnapshot struct {
 }
 
 type adapterObservationTask struct {
+	parent                            context.Context // retained original constructor parent on partial failure
 	ctx                               context.Context
 	cancel                            context.CancelFunc
 	deadline                          time.Time
@@ -25,6 +26,7 @@ type adapterObservationTask struct {
 
 // One original native-query frame, not a native OS/RSS/latency attestation.
 // A stopped UI or expired deadline cannot replace an unreturned query.
+// The mutex protects the slot only; task fields belong to the original goroutine.
 var adapterObservations struct {
 	sync.Mutex
 	owner *adapterObservationTask
@@ -42,24 +44,30 @@ func (a *App) observationParent() context.Context {
 
 // Shared negative App-lifetime fence for read-only observations only.
 func (a *App) observationParentCurrent(parent context.Context) bool {
-	if parent == nil || parent.Err() != nil {
+	if a == nil {
+		return false
+	}
+	publication := capturePublicationContext(parent)
+	if publication == nil {
 		return false
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.ctx == parent && !a.closing.Load() && !a.quitRequested
+	return sameContextIdentity(a.ctx, parent) && publication.current() && !a.closing.Load() && !a.quitRequested
 }
 
 func observeAdapterFacts(parent context.Context) (snapshot adapterSnapshot, err error) {
-	if !lifecyclePublicationCurrent(parent) || !adapterObservations.TryLock() {
+	publication := capturePublicationContext(parent)
+	if publication == nil || !adapterObservations.TryLock() {
 		return snapshot, errAdapterObservation
 	}
-	defer adapterObservations.Unlock()
 	if adapterObservations.owner != nil {
+		adapterObservations.Unlock()
 		return snapshot, errAdapterObservation
 	}
-	owner := &adapterObservationTask{}
+	owner := &adapterObservationTask{parent: parent}
 	adapterObservations.owner = owner
+	adapterObservations.Unlock() // exact slot reserved; no context/native/cancel work under registry mutex
 	defer func() {
 		if !owner.returned {
 			_ = recover()
@@ -69,13 +77,19 @@ func observeAdapterFacts(parent context.Context) (snapshot adapterSnapshot, err 
 			snapshot, err = adapterSnapshot{}, errAdapterObservation
 			return
 		}
+		adapterObservations.Lock()
+		defer adapterObservations.Unlock()
+		if adapterObservations.owner != owner {
+			snapshot, err = adapterSnapshot{}, errAdapterObservation
+			return // never clear a successor for this original query frame
+		}
 		adapterObservations.owner = nil
-		if err != nil || !lifecyclePublicationCurrent(parent) || !time.Now().Before(owner.deadline) {
+		if err != nil || !publication.current() || !time.Now().Before(owner.deadline) {
 			snapshot, err = adapterSnapshot{}, errAdapterObservation
 		}
 	}()
 	owner.pending = true
-	owner.ctx, owner.cancel = context.WithTimeout(parent, adapterObservationBudget)
+	owner.ctx, owner.cancel = context.WithTimeout(owner.parent, adapterObservationBudget)
 	owner.deadline, _ = owner.ctx.Deadline()
 	owner.pending = false
 	owner.pending = true

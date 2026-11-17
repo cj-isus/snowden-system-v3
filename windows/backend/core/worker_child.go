@@ -190,7 +190,16 @@ func serveEngineWorker(input, output *os.File) (exitCode int) {
 				}
 			}
 		}
-		if writeWorkerFrame(output, reply, maxWorkerReplyBytes) != nil {
+		var beforeWrite func() error
+		if request.Action == "probe" && reply.Code == "ok" && (reply.AdmissionToken != "" || reply.NativeAdmissionToken != "") {
+			beforeWrite = func() error {
+				if !engine.workerReplyPermitCurrent(&request, reply) {
+					return errWorkerProtocol
+				}
+				return nil
+			}
+		}
+		if writeWorkerFrameGuarded(output, reply, maxWorkerReplyBytes, beforeWrite) != nil {
 			return 2
 		}
 		if stop {

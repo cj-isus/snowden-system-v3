@@ -28,7 +28,7 @@ func (a *App) finishStartCancellation(ctx context.Context, intent uint64, cause 
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.ctx == nil || a.ctx.Err() != nil || a.operationID != intent || !a.protectionDesired || a.closing.Load() ||
+	if !a.appLifetimeCurrentLocked() || a.operationID != intent || !a.protectionDesired || a.closing.Load() ||
 		!a.failClosedState() || a.retry.timer == nil || a.retry.done || a.retry.intent != intent {
 		return
 	}

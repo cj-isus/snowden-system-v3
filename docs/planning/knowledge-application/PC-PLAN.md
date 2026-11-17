@@ -3700,6 +3700,540 @@ typed failures/unknown/overflow не снимают marker. Manual Release autho
 Source-only: locale/native/Job/stdio/compile и весь план OPEN. Далее bounded/durable
 marker read/write/remove и original file identity. [Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v491-owned-legacy-firewall).
 
+<a id="pc-v492-protection-marker-custody"></a>
+### PC-01 — V2-492: маркер и исходная файловая custody
+
+1KiB read/write и strict scalar JSON исключают unbounded ReadFile/field folding;
+существующий WriteNew не перезаписывает занятое имя и требует flush/Close.
+Existing WithWriter охватывает Arm/Release, normal-return fence удерживает
+исходный lock/domain при panic/Goexit callback. WindowsRemovalSlot удерживает
+исходный deny-write/delete marker handle и ancestors через обе cleanup ветви;
+disposition относится к нему, absence проверяется через исходный parent.
+Recovery до16MiB metadata-only, без JSON/content read; oversized/untrusted
+требует явного восстановления. Pending/unknown custody не равна file absence.
+5Go4docs/manual5diff2new/gofmt5+1+1exit0/18reviewed0cached;q87/s95 unchanged.
+Source only: no tests/build/native/network/newGit. Durability/legacy cooperation/
+session ownership/OS/compile acceptance и весь незакрытый PC/old9 объём OPEN.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v492-protection-marker-custody).
+
+<a id="pc-v493-restrict-barrier-proof"></a>
+### PC-01 — V2-493: negative success требует существующего полного барьера
+
+Restrict до commit проверяет intended general-permit revocation; после original
+confirmed commit проверяет existing strict base на той же session. Отсутствующие
+или повреждённые blocking/provider/sublayer/filter inputs дают typed local cleanup
+error, не успех BlockDirect. Commit revocation не откатывается ради base validation.
+First failedGrant и pendingGrant сохраняются до original cleanup/final negative
+scope normal return. Manual Release reset/closure ordering остаётся следующим.
+2Go4docs/manual2diff0new/gofmt2exit0/14reviewed0cached;q87/s95 unchanged.
+Source only: no tests/build/native/network/newGit; полный PC/old9 объём OPEN.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v493-restrict-barrier-proof).
+
+<a id="pc-v494-stop-revoke-finalize"></a>
+### PC-01 — V2-494: ранний отзыв и финальный protection outcome
+
+Private Revoke использует существующего original WFP owner: только20/21, без
+pendingGrant clearing или full-barrier authority. Stop фиксирует original policy,
+выполняет early revoke, facts/metrics/Manager/App-helper cleanup, затем full
+Restrict либо final revoke для Disconnect. Ошибки не стираются финальным успехом.
+Manual Release Close/reset/unpublication перенесены после original deferred
+cleanup/scope; только known original native Close разрешает unpublish.
+Поздняя caller cancellation остаётся error, не отменяя confirmed retirement.
+5Go4docs/manual5diff0new/gofmt5exit0/14reviewed0cached;q87/s95 unchanged.
+Source only: no tests/build/native/network/newGit. Legacy/private enum/fixture/
+Stop/native/OS и полный PC/old9 объём OPEN. Далее diagnostic lease callbacks.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v494-stop-revoke-finalize).
+
+<a id="pc-v495-diagnostic-lease-calls"></a>
+### PC-01 — V2-495: original diagnostic call и неблокирующий Close admission
+
+Lease.mu теперь защищает metadata; context/actor/image/interface/native callbacks
+выполняются вне него. One original call/ctx/deadline/source остаётся до normal
+body+final fence return; panic/Goexit сохраняет pending fault. Close seals source
+и отказывает в cleanup при busy, не закрывая original native owner параллельно.
+Original known native retirement и global identity предшествуют unclaim.
+Optional lease source только сужает existing positive Open/Add scope; negative
+cleanup не зависит от истёкшего positive ctx. Новых timers/workers/policy owners нет.
+3Go4docs/manual3diff1new/gofmt3exit0/10reviewed0cached;q87/s95 unchanged.
+Source only: no tests/build/native/network/newGit; concurrency/private fixture/
+queries/native/OS и весь PC/old9 объём OPEN.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v495-diagnostic-lease-calls).
+
+<a id="pc-v496-wfp-query-source"></a>
+### PC-01 — V2-496: actual query source и independent negative cleanup
+
+Enum/object/AppID и actual readonly Begin учитывают original query scope.
+Batch/session backlinks и writer-exit fence не позволяют readonly snapshot
+потерять polarity или переиспользовать закончившийся batch. Positive reads
+проверяют original source/deadline; negative writer reads сохраняют ctx.Err-only
+caller+original contract. Query result не разрешает Add/forwarding.
+Original output slots и Free/Destroy/Abort/Close не зависят от истёкшего source;
+failed facts обнуляются. Root read больше не открывает session через Background.
+6Go4docs/manual6diff0new/gofmt6exit0/11reviewed0cached;q87/s95 unchanged.
+Source only: no tests/build/native/network/newGit; fixtures/ABI/native/OS и весь
+PC/old9 объём OPEN. Далее native condition/AppID decoder bounds и ошибки.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v496-wfp-query-source).
+
+<a id="pc-v497-wfp-appid-codec"></a>
+### PC-01 — V2-497: bounded AppID/path codec с exact platform round trip
+
+Pure WFP decoders выделены из reader; scalar active-union semantics сохранены.
+Shared codec различает UTF16 units и text bytes, сохраняет existing65522-byte
+blob cap, nonempty/exact NUL и round-trip identity. Producers/query path и direct
+GetAppID decoding используют его, original native cleanup/causes не теряются.
+Source установленного Go подтвердил WTF8, поэтому strict UTF8 запрет не введён.
+4Go4docs/manual4diff1new/gofmt4+1exit0/9reviewed4 local sources;q87/s95 unchanged.
+Source only: no tests/build/native/network/newGit; Unicode/toolchain/private
+fixtures/ABI/native/OS и полный PC/old9 объём OPEN. Далее original AppID/image custody.
+[Подробности](../../tasks/TH-01-TUN-LIFECYCLE.md#pc-v497-wfp-appid-codec).
+
+<a id="pc-v498-wfp-application-image"></a>
+### PC-01 — V2-498: current exe custody для WFP AppID
+
+ApplicationImageLease компонует existing current-App original file/ancestor
+inspector; no external signing/loaded-section claim. Arm получает AppID внутри
+writer под непустым exact current path. Root verify использует один original
+session/image, diagnostic — retained app image и existing actor/helper custody.
+Image живёт до writer finalization, не до конца persistent policy: owned updater
+rename не получает новый постоянный deny-delete. Unknown cleanup retains owner;
+late image/source failure сохраняет exact failed grant/Restrict predecessor.
+Negative writes не зависят от успешного image cleanup; original negative batch
+сохраняет actual cancellation/deadline без revoked positive values в inspector.
+7Go4docs/manual7diff2new/gofmt7+1+1exit0/16reviewed0SDK;q87/s95 unchanged.
+Source only; no tests/build/native/network/newGit. Full PC-00…09/all9 active;
+OS/update/Stop/ABI/performance acceptance OPEN, TUN unavailable/schema2 unsupported.
+
+<a id="pc-v499-actor-final-source"></a>
+### PC-01 — V2-499: original actor revocation и финальный descriptor scope
+
+Final context callbacks больше не выполняются под actor.mu; read сохраняется
+до normal body/cancel/final fence, actual deadline проверяется при value commit.
+Abnormal completion сохраняет original pending/fault. Actor Revoked — one-way
+negative fence до deactivate lock; same original actor дополнительно проверяется
+WFP call source, без нового права выдавать трафик или замены полных proofs.
+Независимые negative ingress/filter/native cleanup и helper/image custody сохранены.
+2Go4docs/manual2diff0new/gofmt2exit0/9reviewed0SDK;q87/s95 unchanged.
+Source only, no tests/build/native/network/newGit. Full PC-00…09/all9 active;
+concurrency/last-check-syscall/native/OS/Stop/resources OPEN; TUN unavailable.
+
+<a id="pc-v500-observation-operation"></a>
+### PC-01 — V2-500: metadata-only original operation observation
+
+Existing post-retirement observation publication сохранён. Production source и
+claiming operation используют заранее captured Done/deadline/core source values
+без вызовов original context под receipt mutex. Same original atomic pointers,
+Done identity и receipt lifetime сохранены. Actual RPC ctx/таймауты не заменены;
+view не используется как parent/RPC context. Known preparation error invalidates
+parent permits и burns receipt; abnormal path сохраняет deferred burn.
+3Go4docs/manual3diff1new/gofmt3+1exit0/13reviewed0SDK;q87/s95 unchanged.
+Source only, no tests/build/native/network/newGit. Generic Engine/RPC callbacks,
+private fixtures/OS/cancellation/resources OPEN; full PC-00…09/all9 active.
+
+<a id="pc-v501-native-preparation-scope"></a>
+### PC-01 — V2-501: parent native preparation и one-use consume
+
+Metadata-only original operation фиксируется до parent Engine.mu. Read-only
+проверяет текущий permit; consume снимает оба parent slots до final validation
+exact captured permit. Actual Manager authority/RPC context и native gate false
+сохранены. Worker inner-only draft не принят: outer runLocalWorkerProbe lock и
+порядок burn требуют отдельного решения; original worker file byte-identical.
+1Go4docs/manual1diff1unchanged/gofmt2+1exit0/10reviewed0SDK;q87/s95 unchanged.
+Source only; no tests/build/native/network/newGit. Full PC-00…09/all9 active;
+worker/RPC/callback/entropy/private fixtures/OS/resources остаются OPEN.
+
+<a id="pc-v502-worker-native-entropy"></a>
+### PC-01 — V2-502: worker native preparation без entropy под admission.mu
+
+Original fact burns до context/entropy; initial lock фиксирует expiry и исходные
+ссылки. Контекст/nonce готовятся вне admission.mu, final lock проверяет exact
+original binding/receipt/epoch/state, пустые slots и исходные deadlines. Нельзя
+заменить поздний permit или продлить бюджет ожиданием. Close/fault может seal;
+outer Engine.mu/actual RPC и separate native emission/commit прежние.
+1Go4docs/manual1diff0new/gofmt1exit0/11reviewed0SDK;q87/s95 unchanged.
+Source only; no tests/build/native/network/newGit. Full PC-00…09/all9 active;
+outer Engine/RPC/ordinary issue/emission/consume/fixtures/OS/resources OPEN.
+
+<a id="pc-v503-forwarding-issuance"></a>
+### PC-01 — V2-503: ordinary issuance с original attempt
+
+Private issue API выделен в компонент; attempt и expiry фиксируются до entropy.
+Admission mutex освобождён при rand.Read/encoding; final commit проверяет exact
+original pointer/state/epoch/receipt/vacant slots/deadline. Shared clear отзывает
+issuer, finalizer не очищает successor/token. Native current/preparation отвергают
+in-flight ordinary issue. Existing admission без нового token/entropy сохранён.
+3Go4docs/manual3diff1new/gofmt3exit0/10reviewed0SDK;q87/s95 unchanged.
+Source only; no tests/build/native/network/newGit. Full PC-00…09/all9 active;
+outer Engine/RPC/cancellation/native emission-consume/fixtures/OS/resources OPEN.
+
+<a id="pc-v504-native-token-handoff"></a>
+### PC-01 — V2-504: original native emission/consumption
+
+Emit/consume burns до callbacks; original metadata capture без admission.mu,
+final value commit требует exact candidate/consume attempt/source/deadlines.
+Shared clear отзывает consumer; own-only cleanup не очищает successor, ordinary/
+native issuance требуют vacancy. Fixed match отделён от actual slot ownership.
+Worker consume выделен в компонент; actual RPC/outer Engine/native gate false
+сохранены.6Go4docs/manual6diff1new/gofmt5+1exit0/12reviewed0SDK;q87/s95 unchanged.
+Source only; no tests/build/native/network/newGit. Full PC-00…09/all9 active;
+outer Engine/RPC/selector/context/private fixtures/OS/resources OPEN.
+
+<a id="pc-v505-worker-prewrite-permit"></a>
+### PC-01 — V2-505: actual candidate перед записью token reply
+
+Optional original-owner guard выполняется после JSON encoding и существующего
+length check до header/body. Child проверяет fresh ordinary/native token по
+actual private gate/current candidate/deadline; report shape само по себе не
+authority. Отказ идёт в existing output-failure exit без header. Negative/
+no-token/default codec/wire/parent source/I-O/consume/gate false прежние.
+3Go4docs/manual3diff1new/gofmt3exit0/12reviewed0SDK;q87/s95 unchanged.
+Source only; no tests/build/native/network/newGit. Full PC-00…09/all9 active;
+verify-write atomicity/output time/fixtures/OS/Stop/resources OPEN.
+
+### V2-506 — PC-01, original operation parent handoff / source-only
+
+Ordinary parent permit теперь сохраняет exact original process pointer и
+metadata-only view исходной lifecycle-операции. Producer получает original Run
+context отдельно от временного diagnostic reservation: обычный release в Run
+отменяет diagnostic child, поэтому этот child не может быть identity допуска.
+App value wrapper и Manager probe→commit сохраняют original Done. Перед публикацией
+проверяются original sources/process; без nonnil Done наблюдение возвращает факты,
+но не создаёт parent handoff.
+
+Private admit выделен в компонент; он сначала сжигает оба parent permits, затем
+проверяет same original Done/current old+caller sources/deadlines и exact process
+до и после RPC. Повторный/fresh context не переносит старый допуск на новую
+операцию. Actual RPC context, worker token expiry/one-use consume, original
+retirement и native no-steal сохранены. Native forwarding gate остаётся false.
+
+Outer Engine/RPC context callbacks остаются отдельным открытым вопросом; incoming
+snapshot выполняется под Engine lock после burn. Это не приёмка Windows, Stop,
+partial output, compiler/private fixtures, kernel, ресурсов или скорости.
+2Go4docs/5existing1new/manual2diff1new/gofmt2+1+1exit0/12reviewed0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-507 — PC-01, original parent exchange / source-only
+
+Обмен с worker выделен в отдельный компонент. Его первый defer запрещает
+повторные команды исходному процессу, если обмен не дошёл до принятого ответа
+и обычного возврата deferred timeout cancel. Panic/Goexit до или после регистрации
+I/O не оставляет процесс пригодным для повторного обмена. Прерывание не подавляется;
+владение процессом, pipes и Job остаётся у существующего reaper.
+
+Перед успешным ответом требуется exact original captureIO/ioDone и завершение
+исходного I/O без неизвестного raw call; после ancestor/source callbacks повторно
+проверяются те же квитанция, процесс и его состояние. Частичные frame/late errors
+уже учитывались в original ownedPipeIO — этот путь и корреляция wire сохранены.
+Незавершённое I/O на timeout не превращается в преждевременную sticky cleanup
+ошибку: окончательную очистку по-прежнему определяет original reaper. Сохранены
+отказ до резервирования request ID и negative-command ancestor exemptions.
+
+Это source/unverified: callback под outer Engine lock ещё может зависнуть;
+finalizer не доказывает прерываемость, Windows cleanup, скорость или ресурсы.
+2Go4docs/5existing1new/manual2diff1new/gofmt2+1+1exit0/12reviewed0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-508 — PC-01, revocable parent handoff / source-only
+
+Обычный admit сначала под коротким Engine lock сжигает обе parent-квитанции
+и сохраняет exact original permit в revocable forwardingConsume. Чтение incoming
+Done/Deadline/source values выполняется после unlock. Общий сброс отзывает также
+эту попытку: Stop, новый probe или повторный admit не оставляют её действующей.
+
+После snapshot повторный lock проверяет ту же попытку, исходную операцию,
+current old+caller sources/deadlines, exact process и конфигурацию до RPC.
+Отложенная очистка убирает только свой original permit и выполняется после
+освобождения второго lock; ошибка/panic/Goexit не очищает квитанцию преемника.
+После RPC проверки используют fixed original/caller metadata без повторного
+вызова исходных context getters. Actual RPC получает прежний real ctx.
+
+Это source/unverified. RPC/native/context callbacks под outer Engine lock
+остаются открытым объёмом; нет доказательства полного Stop, прерываемости,
+Windows cleanup, скорости или ресурсов. Native forwarding gate остаётся false.
+3Go4docs/all7existing/manual3diff/gofmt3exit0/12reviewed0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-509 — PC-01, prepared RPC context / source-only
+
+Для ordinary admit RPC добавлен отдельный контекст: real stdlib child
+готовится вне Engine lock, Deadline фиксируется как min(original deadline,
+control budget), а core source pointers сохраняются из исходной операции.
+Done/Err и cancellation-key lookup обслуживает stdlib child; metadata-only view
+не используется как RPC parent. Это сохраняет отмену и не сбрасывает бюджет
+после ожидания Engine lock. Истёкший бюджет до request не резервирует protocol ID.
+
+RPC остаётся сериализованным у исходного process/pipe owner. После его возврата
+lock освобождается, отмена RPC child вызывается один раз и должна нормально
+вернуться, затем под новым lock проверяются исходные consume pointer, операция,
+process/config и live usable state. Обычная отмена короткого RPC child не отменяет
+lifecycle operation. Deferred cleanup после последней проверки и повторный
+parent unlink исключены из успешного пути; преемник не очищается старой попыткой.
+
+Scope — текущие IPC getters, source/unverified. Unknown Value keys могут
+делегировать к caller; custom constructor/native callbacks/другие Engine paths
+и полный Stop ещё открыты. Нет доказательства compiler/Windows cleanup,
+прерываемости, скорости или ресурсов. Go1.26.7 context source просмотрен офлайн.
+2Go4docs/5existing1new/manual2diff1new/gofmt2+1+1exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-510 — PC-01, probe RPC context / source-only
+
+Оба private probe wrappers готовят RPC-контекст до Engine lock через общий
+компонент. Для него сохраняется snapshot фактического diagnostic ctx: более
+короткий deadline и дополнительные negative sources не теряются. Исходная
+lifecycle operation остаётся отдельной identity для parent/native допуска.
+Request settings/timeout проверяются существующим валидатором; native nonce
+добавляется только после исходного claim.
+
+Ошибки подготовки сохраняют ordinary native-no-steal либо native clear/burn;
+отмена RPC child выполняется после Engine unlock. Locked producer принимает
+prepared context и отклоняет nil. Общая фабрика сверяет Done/deadline metadata
+с реальным parent; при уже ограничивающем earlier/equal deadline использует
+WithCancel без дублирующего таймера. Deadline не продлевается, source binding
+не обновляется, metadata-only view не становится RPC parent.
+
+Source/unverified: generic private fixtures/custom parent/unknown Value/native
+callbacks/другие Engine entry paths ещё открыты. Нет доказательства полного
+Stop, compiler/Windows cleanup, прерываемости, скорости или ресурсов.
+2Go4docs/all6existing/manual2diff/gofmt2exit0/14project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-511 — PC-01, current runtime observation / source-only
+
+CurrentRuntime готовит original metadata и общий RPC child до Engine lock.
+Typed helper выполняет current request через прежние protocol/I-O/process
+границы с exact workerStateReplyScope. После unlock отмена child вызывается
+один раз и должна нормально вернуться; затем проверяются original sources,
+absolute budget, тот же process/instance, live usable state и последний command ID.
+
+State scope теперь удерживает исходный immutable raw header для всех state
+actions. Final fence сравнивает именно этот header/length, без нового parse/hash
+или копии; исходный ограниченный буфер остаётся жив до конца проверки. Start
+correlation сохранена. Смена команды/конфига/процесса отзывает старое наблюдение:
+возвращается empty identity, преемник не очищается. Это read-only факт, не permit,
+forwarding authority или доказательство kernel health.
+
+Source/unverified. SwitchDefaultContext, legacy/direct current helpers и Start
+ещё не переведены; native calls/unknown Value/custom parent/hard Stop открыты.
+Нет доказательства compiler/Windows cleanup, прерываемости, скорости или ресурсов.
+2Go4docs/all6existing/manual2diff/gofmt2exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-512 — PC-01, isolated switch acceptance / source-only
+
+SwitchDefaultContext выделен в selector-компонент. Короткий value lock
+сохраняет исходные isolated process/instance/raw header до чтения контекста.
+RPC готовится вне Engine lock; фактическое переключение требует того же origin
+и сохраняет старые request scope/ID/digest/targetRaw publication/reaper gates.
+Embedded worker/local selector и его rollback сохранены отдельной веткой.
+
+Отмена RPC вызывается один раз вне lock, после неё проверяются original source,
+budget, process/instance и exact published target graph. Обычные status queries
+не считаются новой selection. Поздний отказ или abnormal cancel использует
+original reaper только при том же процессе и graph; преемник не очищается.
+Fallible reap не повторяется abnormal finalizer после уже обработанного отказа.
+
+Новый private unconfirmed-switch marker различает обычный preflight reject
+и возможное уже завершённое изменение. Manager выбирает StateError и прежний
+owned proxy restore даже при live process, не подтверждая старый канал по одному
+Status=running. Marker сам не доказывает reconciliation/cleanup.
+
+Source/unverified. Start/legacy current/native locks/unknown Value/custom parent
+и hard Stop остаются открытыми. Нет доказательства compiler/Windows cleanup,
+прерываемости, скорости или ресурсов.
+3Go4docs/6existing1new/manual3diff1new/gofmt3+1exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-513 — PC-01, isolated Start context / source-only
+
+Public isolated Start выделен в отдельный компонент. После original context
+snapshot короткий value lock регистрирует exact pre-native attempt. RPC child
+и protected config normalization/legacy file validation готовятся вне Engine lock.
+Stop/close отзывает регистрацию даже без процесса; отложенная очистка убирает
+только свой slot. Каждая попытка удерживает свой исходный raw.
+
+Prepared start проверяет тот же slot/raw и отсутствие другого owner, публикует
+прошедший прежний валидатор target и запускает прежний worker protocol. Exact
+partial process сохраняется на attempt до native acquisition. Перед fallible
+error reap отмечается факт попытки: abnormal finalizer не повторяет неизвестный
+результат. Separate own-slot defer выполняется и при Goexit; физический unknown
+owner остаётся у Engine/Job, а не исчезает вместе с metadata.
+
+Hello/start stage caps сохранены внутри общего absolute sum budget. RPC cancel
+вне lock вызывается один раз до final original source/budget/process/target fence.
+Это не lifetime worker: embedded start сохраняет background runCtx и detach.
+Reload остаётся отдельным непереведённым путём; native/file/SDK interruption,
+unknown Value/custom parent и hard Stop ещё открыты.
+
+Source/unverified; нет доказательства compiler/Windows cleanup, скорости или ресурсов.
+3Go4docs/6existing1new/manual3diff1new/gofmt3+1exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-514 — PC-01, isolated Reload ownership / source-only
+
+Isolated Reload выделен в компонент с exact original process/config reservation
+на всё время validation→old close→candidate→возможный rollback. Общий negative
+origin переиспользуется со Switch. RPC и полная проверка кандидата готовятся вне
+Engine lock. Stop отзывает parent; Start и Switch отклоняют незавершённый lifecycle,
+включая промежуток без процесса. Resource-only close сохраняет свой reload parent.
+
+В зарегистрированной попытке ErrReloadRejected требует untouched current original, не busy/changed
+owner. Факт начала замены фиксируется до old close и возвращается отдельно;
+решение об откате опирается на него и actual no-process/no-cleanup-fault/current
+slot/source/last graph. Для rollback проверяются сохранённые старые rendered bytes
+вне lock; gates повторяются перед новым child. Неизвестный candidate owner не
+заменяется. Candidate/rollback используют прежние start records, partial owner,
+Job/I-O reaper и запрет повторного unknown cleanup.
+
+Cancel RPC выполняется один раз вне lock до final child/graph/source/budget fence.
+Old-config-restored marker требует actual accepted rollback worker; Manager
+по-прежнему делает fresh protected probe/commit. Embedded lifetime/rollback
+сохранены. Raw isolated start bypass отклоняется; starter принимает prepared ctx
+и current nonnil child. Общий бюджет составлен из прежних stage ceilings.
+
+Source/unverified. Native/SDK interruption, unknown Value/custom parent, legacy
+controls и hard Stop открыты. Нет доказательства compiler/Windows cleanup,
+прерываемости, скорости или ресурсов.
+6Go4docs/8existing2new/manual6diff2new/gofmt6+1+1+1exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-515 — PC-01, service-DNS command context / source-only
+
+Parent DNS operation удерживает original process/graph/private slot через prepare,
+RPC и final cancel; no-ID source cancellation сохранена. Rejection/reap ограничен
+original owner, metadata discard выполняется отдельно. CurrentDefault isolated
+использует CurrentRuntime; embedded и child DNS не менялись. [Полный контракт](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v515-dns-control-context).
+Native scopes/hard Stop/concurrency/OS/resources/speed не приняты.
+4Go4docs/7existing1new/manual4diff1new/gofmt4+2+1+3exit0/15project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-516 — PC-01, original native consume / source-only
+
+Original permit/process/raw захвачены и parent lanes отозваны до context callbacks.
+Private consume-slot, prepare/cancel вне Engine, repeated Manager/source/budget/
+owner checks до opaque admission. Newer RPC/shared clear/Stop/reaper отзывают
+старую попытку. [Полный контракт](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v516-native-consume-context).
+Compiled gate=false; WFP compensation/Manager runtime unchanged, native scopes/OS OPEN.
+4Go4docs/7existing1new/manual4diff1new/gofmt4exit0/16project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-517 — PC-01, native scope open / source-only
+
+Original scope-open reservation до caller getters, prepared RPC/cancel вне Engine,
+partial target custody до duplication и final original source/slot/scope fence.
+Switch/probe guards и actual retirement-attempt marker; automatic unknown reap
+не повторяется. [Полный контракт](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v517-tun-open-context).
+End RPC context prep/native/OS/latency/resources остаются OPEN.
+6Go4docs/9existing1new/manual6diff1new/gofmt6+1exit0/20project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-518 — PC-01, native scope close / source-only
+
+Original scope close reservation до caller getters, prepared RPC/cancel вне Engine.
+Actual ACK — cleanup fact, current operation success требует post-cancel original
+source/slot/ACK/live fence. Original-only cleanup без unknown retry, late open
+respects closing owner. [Полный контракт](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v518-tun-close-context).
+Child/receipt/TTL/WFP/activation сохранены; compiler/native/OS/latency/resources OPEN.
+5Go4docs/8existing1new/manual5diff1new/gofmt5exit0/16project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-519 — PC-01, worker context contracts / source-only
+
+Production parent caller audit → typed RPC/metadata signatures и explicit nil
+guards; native probe сохраняет typed original snapshot. Fixed Stop owns stdlib
+Background/deadline, исходный exchange I/O/reply/cancel body unchanged.
+[Полный контракт](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v519-worker-context-contracts).
+Private fixtures/compiler и native/OS/latency/resources приёмка OPEN.
+7Go4docs/11existing0new/manual7diff0new/gofmt7exit0/20project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-520 — PC-01, probe publication / source-only
+
+Original-worker permit candidates публикуются после RPC cancel и diagnostic release,
+final original source/budget/slot/live/expiry fence. Staged native no-steal и revoke
+при новом work/Stop, independent own-stage discard. [Полный контракт](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v520-probe-publication).
+Actual worker/diagnostic body retained; compiler/private fixtures/native/outer
+App-Manager/OS/resources приёмка OPEN.
+5Go4docs/8existing1new/manual5diff1new/gofmt5+2exit0/22project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-521 — PC-01, outer App probe publication / source-only
+
+Root native lease публикуется после deferred report trust/source finalizer под
+исходным subject lease. Exact Run reservation, revoke на clear/take, own-only
+abnormal discard через final subject release. [Полный контракт](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v521-root-probe-publication).
+Core/Manager/WFP retained; compiler/private fixtures/concurrency/native/OS OPEN.
+3Go4docs/6existing1new/manual3diff1new/gofmt3exit0/16project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/fixtures/build/SDK/product/
+native/admin/live/VPN/network changes/new commit-push/otherroles/chats. Authorized
+Git ref and collaborator read-only refresh only. FullPC00-09/all9/72tasks/100OPEN56
+product NOT_RUN+2 historic Git; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+### V2-522 — PC-01, terminal trust observation budget
+
+[Реализован source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v522-terminal-trust-budget): duration последней реальной проверки учитывается до terminal handoff; original cleanup при утрате актуальности. Последний sample выполняется после proxy readback вне locks.
+
+Source/unverified: 3 Go + 4 docs; manual diff и gofmt3 exit0. Тесты/сборки/native/сеть не запускались; полный PC-00…09/TH-00…08 и Windows-приёмка остаются OPEN.
+
+### V2-523 — PC-01, terminal context preparation
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v523-terminal-context): original ctx getters убраны из terminal Manager/App/epoch locks. Optional preparation сохраняет exact source pointers; legacy completion получает только core metadata. Это не RPC context/parent или forwarding authority.
+
+Source/unverified: 5 Go + 4 docs; просмотр diff, gofmt5+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-524 — PC-01, App publication context fence
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v524-app-publication-fence): исходный контекст читается до publication locks; original Done/deadline/intent/operation/path продолжают отзывать публикацию. TUN и metrics удерживают также original parent fence. Другие native context paths и fixture/compiler приёмка OPEN.
+
+Source/unverified: 6 Go + 4 docs, включая 2 новых компонента; diff просмотрен, gofmt6+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-525 — PC-01, optional observation continuity
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v525-native-observation-fence): native-наблюдение учитывает original path/down/suspend даже без смены номера эпохи. Draft/final publication использует foreground fence; cached read не привязан к own action cancel. Metrics/adapter context equality больше не сравнивает несравнимые значения.
+
+Source/unverified: 5 Go + 4 docs; diff просмотрен, gofmt5 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-526 — PC-01, original App lifetime fence
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v526-app-lifetime): root ctx predicates сведены к original fence; startup/headless сохраняют разные acquisition paths и запрещают rebind. Zero fence не разрешает positive work. Настоящие parent contexts, cleanup и запрет native activation сохраняются. Child factories/caller getters и приёмка OPEN.
+
+Source/unverified: 26 Go + 4 docs, один новый helper; diff просмотрен, gofmt25+1+5 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-527 — PC-01, staging и adapter context callbacks
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v527-context-value-locks): staging callbacks вне App locks, original intent/path final gate; adapter callbacks/query/cancel вне registry mutex при retained original owner. Неизвестное завершение не разрешает replacement. Foreground begin/update/proxy context creation/cancel ещё OPEN.
+
+Source/unverified: 2 Go + 4 docs; diff просмотрен, gofmt2+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
 Абсолютный запрет владельца на тестирование/сборки/исполнение сети сохраняется.
 
 1. ПК-владельцу: закончить W4c original-helper/WFP admission, сохранив закрытый

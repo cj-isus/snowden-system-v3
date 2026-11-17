@@ -141,6 +141,8 @@ type protectedProbeAttempt struct {
 	subject      appProbeSubject
 	subjectValid bool
 	workStarted  bool
+	scope        context.Context // original source-bound descendant, never a new subject
+	native       *appNativeProbePublication
 }
 
 func (p appProtectedProbe) Run(ctx context.Context) (report *core.ProbeReport) {
@@ -165,7 +167,29 @@ func (p appProtectedProbe) Run(ctx context.Context) (report *core.ProbeReport) {
 			}
 		}
 	}()
+	defer func() {
+		if !returned {
+			attempt.native.discard() // independent of abnormal report formatting/getters
+		}
+	}()
+	if p.lifecycle && p.config != nil && p.config.TUNName != "" {
+		attempt.native = p.nativeCommit.reserveProbe() // before caller/factory/native callbacks
+	}
 	report = p.runProtectedProbe(ctx, attempt)
+	if err := p.publishNativeProbe(attempt, report); err != nil {
+		attempt.native.discard()
+		failure := tunnelProtectionFailure(err)
+		report = report.Clone()
+		if report == nil {
+			report = &core.ProbeReport{}
+		}
+		report.AllPassed, report.Stale, report.ProtectionUnavailable = false, true, true
+		report.CleanupUnconfirmed = report.CleanupUnconfirmed || failure.CleanupUnconfirmed
+		report.Results = append(report.Results, failure.Results...)
+		if attempt.subject.path != nil {
+			report.BindObservationPath(&attempt.subject.path.current, attempt.subjectValid && attempt.workStarted)
+		}
+	}
 	returned = true
 	return report
 }
@@ -228,11 +252,15 @@ func (p appProtectedProbe) runProtectedProbe(ctx context.Context, attempt *prote
 	if subjectValid && subject.path != nil && p.app != nil {
 		ctx = core.WithOperationSources(ctx, core.OperationSources{Intent: subject.intentSource, Path: &subject.path.current, Closing: &p.app.closing, Blocked: &p.app.watchdogBlocked})
 	}
+	attempt.scope = ctx
 	if !subjectValid || !subject.current(p.app, ctx, p.config) {
 		return &core.ProbeReport{ProtectionUnavailable: true, Results: []core.ProbeResult{{Name: "владелец наблюдения", Status: "unavailable", Detail: "исходная операция, сессия или сетевой путь отозваны; наблюдение не запускается"}}}
 	}
 	if p.config == nil {
 		return probeFailure("probe config is not available")
+	}
+	if p.lifecycle && p.config.TUNName != "" && attempt.native == nil {
+		return tunnelProtectionFailure() // another preparation/revocation cannot be replaced
 	}
 	if _, err := p.LifetimeRemaining(); err != nil {
 		return trustFailureReport(err)
@@ -283,7 +311,7 @@ func (p appProtectedProbe) runProtectedProbe(ctx context.Context, attempt *prote
 	if lease.native != nil {
 		name = "Правила блокировки"
 		detail = "Правила блокировки повторно проверены для текущей операции после диагностики. Общий трафик ещё не разрешён."
-		if err := p.nativeCommit.store(lease); err != nil {
+		if err := attempt.native.stage(lease); err != nil {
 			return tunnelProtectionFailure(err)
 		}
 	}

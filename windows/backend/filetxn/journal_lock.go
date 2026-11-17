@@ -55,8 +55,11 @@ func withJournalScope(journal string, use func() error, readOnly bool) (finalErr
 	if err != nil {
 		return err
 	}
+	callbackReturned := true
 	defer func() {
-		if recover() != nil {
+		if recover() != nil || !callbackReturned {
+			// Goexit also unwinds without returning an ownership outcome.
+			// Poison before release, which must retain the original writer.
 			finalErr = domain.fail(ErrWriteRetirement)
 		}
 		if errors.Is(finalErr, ErrWriteRetirement) || errors.Is(finalErr, ErrReadClose) {
@@ -75,7 +78,10 @@ func withJournalScope(journal string, use func() error, readOnly bool) (finalErr
 			return err
 		}
 	}
-	return use()
+	callbackReturned = false
+	finalErr = use()
+	callbackReturned = true
+	return finalErr
 }
 
 func (domain *journalDomain) acquireWriter() (func() error, error) {

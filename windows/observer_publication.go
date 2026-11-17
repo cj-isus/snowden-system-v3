@@ -64,7 +64,8 @@ func lifecyclePublicationCurrent(ctx context.Context) bool {
 // Use historical evidence only to keep its scope, never retag it or refresh
 // health/probe time. The native-only scope helper cannot cover SOCKS here.
 func (a *App) publishRetainedLifecycleLocked(ctx context.Context, cc *render.ClientConfig, manager *core.Manager, intent uint64) bool {
-	if !lifecyclePublicationCurrent(ctx) || cc == nil || manager == nil {
+	publication := capturePublicationContext(ctx)
+	if publication == nil || cc == nil || manager == nil {
 		return false
 	}
 	report := normalizeProbeReport(manager.LastProbeReport())
@@ -86,13 +87,13 @@ func (a *App) publishRetainedLifecycleLocked(ctx context.Context, cc *render.Cli
 	netEpoch.mu.Lock()
 	valid := a.reportIntentCurrentLocked(report) && !a.trustBlocked &&
 		a.observedClock == clock && a.restartCommit == nil && !a.installedImageChanged && !a.watchdogBlocked.Load() &&
-		reportPathCurrentLocked(report) && lifecyclePublicationCurrent(ctx)
+		reportPathCurrentLocked(report) && publication.current()
 	if valid {
 		now, err := clock.Now(cc.Validity.ClockFloor)
 		if err == nil {
 			_, err = cc.Validity.Remaining(now)
 		}
-		valid = err == nil && lifecyclePublicationCurrent(ctx)
+		valid = err == nil && publication.current()
 	}
 	if valid {
 		releaseDNS, live := runtime_.dns.guardRunning(a)
@@ -117,8 +118,12 @@ func (a *App) publishRetainedLifecycleLocked(ctx context.Context, cc *render.Cli
 // Manager's normally retired child context is not that publication context.
 func (a *App) publishObservationContextLocked(ctx context.Context, cc *render.ClientConfig, report *core.ProbeReport, phase observationPhase, failureClass string) bool {
 	lifecycle := phase == observationStarted || phase == observationApplied
-	if lifecycle && !lifecyclePublicationCurrent(ctx) {
-		return false
+	var publication *publicationContext
+	if lifecycle {
+		publication = capturePublicationContext(ctx)
+		if publication == nil {
+			return false
+		}
 	}
 	if cc == nil || report == nil || report.ObservationID == 0 || phase > observationSafetyStopping {
 		return false
@@ -211,7 +216,7 @@ func (a *App) publishObservationContextLocked(ctx context.Context, cc *render.Cl
 			return false
 		}
 	}
-	if lifecycle && !lifecyclePublicationCurrent(ctx) {
+	if lifecycle && !publication.current() {
 		netEpoch.mu.Unlock()
 		a.mu.Unlock()
 		releaseOwner()

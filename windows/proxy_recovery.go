@@ -93,7 +93,7 @@ func proxyRecoveryUIError(err error) error {
 // App.mu held; this grants only local maintenance interest, including intent0.
 func (owner *appProxyRecovery) currentLocked(app *App) bool {
 	return app.proxyRecovery == owner && owner.registration.currentLocked(app) && owner.current.Load() && !owner.cancelRequested &&
-		app.ctx != nil && app.ctx.Err() == nil && !app.closing.Load() && app.restartCommit == nil && app.releaseCommit == nil &&
+		app.appLifetimeCurrentLocked() && !app.closing.Load() && app.restartCommit == nil && app.releaseCommit == nil &&
 		!app.installedImageChanged && app.startupErr == nil && !app.profileTransition &&
 		(app.state.State == "stopped" || app.state.State == "error")
 }

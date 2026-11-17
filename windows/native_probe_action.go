@@ -41,6 +41,10 @@ func (a *App) runNativeProbeBody(outcome *nativeProbeActionOutcome) error {
 	defer a.endOperation(end)
 	ctx, cancel := context.WithTimeout(parent, nativeProbeLimit)
 	defer cancel()
+	publication := capturePublicationContext(ctx)
+	if publication == nil {
+		return core.ErrNativeScopeUnavailable
+	}
 	scope, err := a.captureNativeProbeScope(ctx, intent)
 	if err != nil {
 		return nativeProbePublicError(err)
@@ -53,6 +57,9 @@ func (a *App) runNativeProbeBody(outcome *nativeProbeActionOutcome) error {
 		defer release()
 		draft := &nativeProbeObservation{scope: scope, view: emptyNativeProbeView("running", "dns_batch_running"), expires: nativeProbeExpiry(now, scope)}
 		draft.view.StartedAt, draft.view.ExpiresAt = scope.started.UTC().Format(time.RFC3339Nano), draft.expires.UTC().Format(time.RFC3339Nano)
+		if !publication.current() {
+			return nil, core.ErrNativeScopeUnavailable
+		}
 		outcome.draft, a.nativeObservation = draft, draft
 		return draft, nil
 	}()
@@ -89,8 +96,8 @@ func (a *App) runNativeProbeBody(outcome *nativeProbeActionOutcome) error {
 	if err != nil {
 		return nativeProbePublicError(err)
 	}
-	if ctx.Err() != nil {
-		return nativeProbePublicError(ctx.Err())
+	if !publication.current() {
+		return core.ErrNativeScopeUnavailable
 	}
 	draft.view, draft.expires = view, expires
 	committed = true

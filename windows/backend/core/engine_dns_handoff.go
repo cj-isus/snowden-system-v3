@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 )
 
@@ -14,54 +13,6 @@ func (e *Engine) PauseServiceDNS(ctx context.Context, expected RuntimeIdentity) 
 
 func (e *Engine) ResumeServiceDNS(ctx context.Context, expected RuntimeIdentity) error {
 	return e.serviceDNSCommand(ctx, expected, "dns_resume")
-}
-
-func (e *Engine) serviceDNSCommand(ctx context.Context, expected RuntimeIdentity, action string) error {
-	if action != "dns_pause" && action != "dns_resume" {
-		return ErrForwardingNotAdmitted
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := contextError(ctx); err != nil {
-		return err
-	}
-	if !e.isolated || e.process == nil || e.cleanupErr != nil || e.process.instance != expected.Instance || expected.Instance == 0 ||
-		!expected.ForwardingAdmitted || expected.AdmissionEpoch == 0 || !validWorkerTag(expected.DefaultOutbound) ||
-		e.nativePermit.busyLocked(e) || e.tunScope != nil {
-		return errors.Join(ErrEngineWorkerUnavailable, e.cleanupErr)
-	}
-	cfg, digest, err := runtimeConfiguration(e.rawJSON)
-	if err != nil || digest != expected.ConfigDigest {
-		return ErrForwardingNotAdmitted
-	}
-	selected, tunName := "", ""
-	for _, outbound := range cfg.Outbounds {
-		if outbound.Tag == "proxy" {
-			selected = outbound.Default
-		}
-	}
-	for _, inbound := range cfg.Inbounds {
-		if inbound.Type == "tun" {
-			if tunName != "" {
-				return ErrForwardingNotAdmitted
-			}
-			tunName = inbound.InterfaceName
-		}
-	}
-	if selected != expected.DefaultOutbound || tunName != expected.TUNName {
-		return ErrForwardingNotAdmitted
-	}
-	subject := hex.EncodeToString(digest[:])
-	sequence := e.process.sequence
-	command := workerRequest{Action: action, Selector: "proxy", Tag: selected, Subject: subject, AdmissionEpoch: expected.AdmissionEpoch}
-	reply, err := e.process.request(ctx, command, workerControlTimeout)
-	if e.process.sourceCanceledBeforeRequest(ctx, sequence, err) {
-		return err // superseded before reservation; original DNS state was not touched
-	}
-	if err != nil || contextError(ctx) != nil || e.process.exited() || !validWorkerControlReply(&command, reply) {
-		return e.retireIsolatedFailureLocked(ErrEngineWorkerUnavailable, err, contextError(ctx))
-	}
-	return nil
 }
 
 // Original child-side box/selector/admission check, never a public report's

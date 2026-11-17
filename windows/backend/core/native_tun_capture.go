@@ -309,8 +309,12 @@ func (e *Engine) ObserveNativeTUN(parent context.Context, pin string, limit time
 	if err != nil || current != identity {
 		return observation, errors.Join(ErrNativeScopeUnavailable, err)
 	}
+	operation, err := snapshotNativeTUNOperation(parent)
+	if err != nil {
+		return observation, errors.Join(ErrNativeScopeUnavailable, err)
+	}
 	observation = NativeTUNObservation{runtime: identity, egress: address.String(),
-		source: &nativeTUNObservationSource{engine: e, scope: originalScope, operation: parent, runtime: identity, egress: address.String(), completed: time.Now()}}
+		source: &nativeTUNObservationSource{engine: e, scope: originalScope, operation: operation, runtime: identity, egress: address.String(), completed: time.Now()}}
 	complete = true
 	return observation, nil
 }

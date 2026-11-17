@@ -26,7 +26,7 @@ type protectionReleaseCommit struct {
 }
 
 func (a *App) protectionReleaseCurrentLocked(registration intentRegistration) bool {
-	return registration.intent != 0 && registration.currentLocked(a) && a.ctx != nil && a.ctx.Err() == nil && !a.closing.Load() &&
+	return registration.intent != 0 && registration.currentLocked(a) && a.appLifetimeCurrentLocked() && !a.closing.Load() &&
 		!a.protectionDesired && !a.profileTransition && a.restartCommit == nil
 }
 

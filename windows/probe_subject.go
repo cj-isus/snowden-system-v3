@@ -127,17 +127,22 @@ func (subject appProbeSubject) current(a *App, ctx context.Context, config *rend
 // Retain the same value-only publication lease when a consumer must commit
 // local state under these identities. Never perform I/O or callbacks here.
 func (subject appProbeSubject) lockCurrent(a *App, ctx context.Context, config *render.ClientConfig) (func(), bool) {
-	if a == nil || config == nil || config.SessionID == 0 || subject.manager == nil || subject.engine == nil || subject.intent == 0 || !subject.intentSource.Current() || subject.path == nil || !lifecyclePublicationCurrent(ctx) {
+	if a == nil || config == nil || config.SessionID == 0 || subject.manager == nil || subject.engine == nil || subject.intent == 0 || !subject.intentSource.Current() || subject.path == nil {
 		return nil, false
 	}
-	if original, ok := ctx.Value(appOperationContextKey{}).(*appOperationScope); ok {
-		if original == nil || original.app != a || original.intent != subject.intent || original.intentSource != subject.intentSource {
+	publication := capturePublicationContext(ctx)
+	if publication == nil {
+		return nil, false
+	}
+	if publication.hasOperation {
+		original := publication.operation
+		if original == nil || original.app != a || original.intent != subject.intent || original.intentSource != subject.intentSource || !original.operation.Current() {
 			return nil, false
 		}
 	} else if subject.operation {
 		return nil, false
 	}
-	if path, ok := ctx.Value(networkPathContextKey{}).(*networkPathSource); ok && path != subject.path {
+	if publication.hasPath && publication.path != subject.path {
 		return nil, false
 	}
 	runtime_.mu.Lock()
@@ -191,18 +196,27 @@ func (subject appProbeSubject) lockCurrent(a *App, ctx context.Context, config *
 		return nil, false
 	}
 	if subject.path != netEpoch.path || !subject.path.current.Load() || netEpoch.knownDown || netEpoch.powerBlocked.Load() ||
-		subject.epoch != netEpoch.num || !lifecyclePublicationCurrent(ctx) {
+		subject.epoch != netEpoch.num || !publication.current() {
 		return nil, false
 	}
 	handedOff = true
 	return release, true
 }
 
-// The original Manager already holds its own terminal lock and has verified
-// active operation/engine ownership. Do not call lifecycleSubject/current or
-// inspect runtime here: their upstream locks would invert publication order.
-// Keep only App/epoch value locks until Manager has fixed its terminal state.
+// Compatibility entrypoint. Manager prepares the guard through the separate
+// preparation API before taking its terminal lock; only that returned guard
+// acquires App/epoch value locks during the terminal decision.
 func (p appProtectedProbe) GuardLifecycleCompletion(ctx context.Context, manager *core.Manager) (func(), error) {
+	guard, err := p.PrepareLifecycleCompletion(ctx, manager)
+	if err != nil {
+		return nil, err
+	}
+	return guard()
+}
+
+// Manager calls preparation outside its lock. The returned downstream guard
+// retains only these exact original value sources; it never calls ctx methods.
+func (p appProtectedProbe) PrepareLifecycleCompletion(ctx context.Context, manager *core.Manager) (core.LifecycleCompletionGuard, error) {
 	intent, valid := p.app.operationIntent(ctx)
 	if !valid || !p.subject.operation || p.subject.manager != manager || manager == nil || intent != p.subject.intent ||
 		p.config == nil || p.config.SessionID == 0 {
@@ -212,23 +226,30 @@ func (p appProtectedProbe) GuardLifecycleCompletion(ctx context.Context, manager
 	if path == nil {
 		return nil, errSessionSuperseded
 	}
-	a := p.app
-	a.mu.Lock()
-	netEpoch.mu.Lock()
-	release := func() {
-		netEpoch.mu.Unlock()
-		a.mu.Unlock()
-	}
-	transferred := false
-	defer func() {
-		if !transferred {
-			release() // also release partial acquisition on a source-check panic
-		}
-	}()
-	if a.operationID != intent || a.intentSource != p.subject.intentSource || !p.subject.intentSource.Current() || !a.protectionDesired || a.profileTransition || a.closing.Load() || a.trustBlocked || a.restartCommit != nil || a.installedImageChanged ||
-		netEpoch.path != path || !path.current.Load() || netEpoch.knownDown || netEpoch.powerBlocked.Load() || !lifecyclePublicationCurrent(ctx) {
+	scope, _ := ctx.Value(appOperationContextKey{}).(*appOperationScope)
+	if scope == nil || scope.intentSource != p.subject.intentSource {
 		return nil, errSessionSuperseded
 	}
-	transferred = true
-	return release, nil
+	intentSource, operationSource := scope.intentSource, scope.operation
+	a := p.app
+	return func() (func(), error) {
+		a.mu.Lock()
+		netEpoch.mu.Lock()
+		release := func() {
+			netEpoch.mu.Unlock()
+			a.mu.Unlock()
+		}
+		transferred := false
+		defer func() {
+			if !transferred {
+				release()
+			}
+		}()
+		if a.operationID != intent || a.intentSource != intentSource || !intentSource.Current() || !operationSource.Current() || !a.protectionDesired || a.profileTransition || a.closing.Load() || a.trustBlocked || a.restartCommit != nil || a.installedImageChanged ||
+			netEpoch.path != path || !path.current.Load() || netEpoch.knownDown || netEpoch.powerBlocked.Load() {
+			return nil, errSessionSuperseded
+		}
+		transferred = true
+		return release, nil
+	}, nil
 }

@@ -16,8 +16,8 @@ import (
 // Retained before the original relative FILE_OPEN. The later absence probe has
 // its own output slot; it cannot overwrite a failed delete/Close receipt.
 type nativeFileDeletion struct {
-	file, absence        boundedNativeWriteFile
-	attempted, uncertain bool
+	file, absence                  boundedNativeWriteFile
+	attempted, prepared, uncertain bool
 }
 
 func (deletion *nativeFileDeletion) Uncertain() bool {
@@ -44,6 +44,27 @@ func (owner *nativeJournalDirectory) RemoveFile(name string, size int, sha strin
 // absence of a caller-fixed target after the complete old set authenticates.
 // Neither mode trusts paths chosen by a journal or follows reparse/hard links.
 func (deletion *nativeFileDeletion) erase(parents *boundedNativeWrite, parent *boundedNativeWriteFile, name string, expected *journalCleanupFile) (finalErr error) {
+	if deletion.attempted {
+		return ErrStagingCleanup
+	}
+	defer func() {
+		if recover() != nil {
+			finalErr = ErrStagingCleanup
+		}
+		finalErr = errors.Join(finalErr, deletion.close())
+	}()
+	if err := deletion.prepare(parents, parent, name, expected); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil // unchanged journal cleanup semantics for exact native absence
+		}
+		return err
+	}
+	return deletion.commit(parents, parent, name)
+}
+
+// prepare retains the original deny-write/delete handle before any caller work.
+// Only the enclosing original owner may retire it or commit its disposition.
+func (deletion *nativeFileDeletion) prepare(parents *boundedNativeWrite, parent *boundedNativeWriteFile, name string, expected *journalCleanupFile) error {
 	if deletion.attempted || !windowsReadComponent(name) || expected != nil &&
 		(expected.name != name || expected.size < 0 || expected.size > maxFileSize || len(expected.sha) != 64) {
 		return ErrStagingCleanup
@@ -51,21 +72,6 @@ func (deletion *nativeFileDeletion) erase(parents *boundedNativeWrite, parent *b
 	deletion.attempted = true
 	deletion.file = boundedNativeWriteFile{path: filepath.Join(parent.path, name), deleteRead: true}
 	file := &deletion.file
-	defer func() {
-		if recover() != nil {
-			finalErr = ErrStagingCleanup
-		}
-		if deletion.Uncertain() {
-			return // unknown native operation keeps both original output slots
-		}
-		if err := deletion.absence.Close(); err != nil {
-			finalErr = errors.Join(finalErr, err)
-			return
-		}
-		if err := file.Close(); err != nil {
-			finalErr = errors.Join(finalErr, err)
-		}
-	}()
 	if err := parents.validateDirectories(); err != nil {
 		return err
 	}
@@ -73,17 +79,23 @@ func (deletion *nativeFileDeletion) erase(parents *boundedNativeWrite, parent *b
 		return err
 	}
 	if err := parents.open(file, parent.handle, name, windows.FILE_OPEN); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil // exact native absence with no acquired output, not Close inference
-		}
 		return err
 	}
-	initial := file.identity
 	if expected != nil {
 		if err := deletion.match(expected); err != nil {
 			return err
 		}
 	}
+	deletion.prepared = true
+	return nil
+}
+
+func (deletion *nativeFileDeletion) commit(parents *boundedNativeWrite, parent *boundedNativeWriteFile, name string) error {
+	file := &deletion.file
+	if !deletion.prepared || deletion.Uncertain() || !windowsReadComponent(name) || file.path != filepath.Join(parent.path, name) {
+		return ErrStagingCleanup
+	}
+	initial := file.identity
 	current, err := parents.inspect(file)
 	if err != nil || current.FileSizeHigh != initial.FileSizeHigh || current.FileSizeLow != initial.FileSizeLow || current.LastWriteTime != initial.LastWriteTime {
 		return errors.Join(ErrStagingCleanup, err)
@@ -104,15 +116,39 @@ func (deletion *nativeFileDeletion) erase(parents *boundedNativeWrite, parent *b
 		return err
 	}
 	deletion.uncertain = false
+	deletion.prepared = false
+	return deletion.observeAbsence(parents, parent, name)
+}
+
+func (deletion *nativeFileDeletion) observeAbsence(parents *boundedNativeWrite, parent *boundedNativeWriteFile, name string) error {
+	if deletion.Uncertain() || !windowsReadComponent(name) || deletion.absence.handle != 0 || deletion.absence.closeAttempted {
+		return ErrStagingCleanup
+	}
+	if err := parents.validateDirectories(); err != nil {
+		return err
+	}
+	if _, err := parents.inspect(parent); err != nil {
+		return err
+	}
 	// Accepted disposition/our Close alone need not mean the name is absent:
 	// other handles can delay deletion, or a competing writer can recreate it.
 	// Observe through the same original parent; never delete that replacement.
-	deletion.absence = boundedNativeWriteFile{path: file.path, inspectOnly: true}
-	err = parents.open(&deletion.absence, parent.handle, name, windows.FILE_OPEN)
+	deletion.absence = boundedNativeWriteFile{path: filepath.Join(parent.path, name), inspectOnly: true}
+	err := parents.open(&deletion.absence, parent.handle, name, windows.FILE_OPEN)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	return errors.Join(ErrStagingCleanup, err)
+}
+
+func (deletion *nativeFileDeletion) close() error {
+	if deletion.Uncertain() {
+		return ErrWriteRetirement // retain both original outputs; never retry unknown I/O
+	}
+	if err := deletion.absence.Close(); err != nil {
+		return err
+	}
+	return deletion.file.Close()
 }
 
 // Match cleanup bytes while the original file disallows write/delete sharing.

@@ -2,8 +2,6 @@ package core
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"net"
 	"sync"
@@ -30,9 +28,11 @@ type forwardingAdmission struct {
 	closed                      bool
 	subject, selector, pending  string
 	pendingUntil                time.Time
+	pendingIssue                *forwardingIssue // original ordinary issuance, before token publication
 	tunScope                    *tunDiagnosticScope
 	nativeReceipt               *workerNativeTUNReceipt  // one completed actual flow, not forwarding authority
 	nativePending               *workerTUNPreparedPermit // prepared only; ordinary consume cannot open it
+	nativeConsuming             *workerTUNConsumption    // exact attempt after original prepared slot was burned
 	routes                      map[*forwardingRoute]struct{}
 	routeStop                   chan struct{}
 	routeFault                  bool // permanent local custody fault; never a channel-health result
@@ -57,31 +57,6 @@ func (admission *forwardingAdmission) state() (uint64, bool) {
 	admission.mu.Lock()
 	defer admission.mu.Unlock()
 	return admission.epoch, admission.open.Load() && !admission.closed
-}
-
-// Called only after the actual worker probe passed. Public reports cannot mint
-// this receipt; it is single-use and valid for the existing control budget.
-func (admission *forwardingAdmission) issue(subject, selector string, expectedEpoch uint64) (uint64, string, error) {
-	admission.mu.Lock()
-	defer admission.mu.Unlock()
-	admission.clearPendingLocked()
-	if admission.closed || admission.tunScope != nil || admission.epoch == 0 || admission.epoch != expectedEpoch || !workerSubject(subject) || !validWorkerTag(selector) {
-		return 0, "", ErrForwardingNotAdmitted
-	}
-	if admission.open.Load() {
-		if admission.subject != subject || admission.selector != selector {
-			return 0, "", ErrForwardingNotAdmitted
-		}
-		return admission.epoch, "", nil // observed existing admission, no new authority
-	}
-	var nonce [32]byte
-	if _, err := rand.Read(nonce[:]); err != nil {
-		return 0, "", err
-	}
-	admission.subject, admission.selector = subject, selector
-	admission.pending = hex.EncodeToString(nonce[:])
-	admission.pendingUntil = time.Now().Add(workerControlTimeout)
-	return admission.epoch, admission.pending, nil
 }
 
 func (admission *forwardingAdmission) consume(subject, selector string, epoch uint64, token string) error {

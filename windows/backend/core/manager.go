@@ -48,9 +48,11 @@ type lifecycleOperation struct {
 	cleanupResult   *lifecycleCleanup // original cleanup sequence; owner goroutine only
 	cancel          context.CancelFunc
 	done            chan struct{}
-	stopRequested   bool               // guarded by Manager.mu; distinct from our own context retirement
-	lifetime        *operationLifetime // original sampler; installed only by this operation's caller
-	runningLifetime *lifetimeWatch     // original previous running task, captured under Manager.mu
+	stopRequested   bool                  // guarded by Manager.mu; distinct from our own context retirement
+	lifetime        *operationLifetime    // original sampler; installed only by this operation's caller
+	runningLifetime *lifetimeWatch        // original previous running task, captured under Manager.mu
+	terminalTrust   *lifecycleTrustBudget // original terminal sample, never refreshed under Manager.mu
+	terminalContext *lifecycleCompletion  // original callback-free completion metadata/guard
 }
 
 // Manager — сериализованный жизненный цикл. Все переходы под mu; активная
@@ -553,10 +555,10 @@ func (m *Manager) SwitchChannel(ctx context.Context, selectorTag, tag string, ne
 		}
 		previous, err := engine.SwitchDefaultContext(operationCtx, selectorTag, tag)
 		if err != nil {
-			// Seamless невозможен ИЛИ движок не работает: состояние не менялось
-			// (или движок мёртв — ниже выясним probe'ом). Ошибка переключения
-			// сама по себе не роняет туннель.
-			if engine.Status() != "running" {
+			// Ordinary preflight rejection may leave the old selector unchanged.
+			// An unconfirmed/superseded switch cannot rearm the old state merely
+			// because its original or successor process is still running.
+			if errors.Is(err, errSwitchStateUnconfirmed) || engine.Status() != "running" {
 				finalState = StateError
 				return errors.Join(err, m.restoreProxy(proxy))
 			}

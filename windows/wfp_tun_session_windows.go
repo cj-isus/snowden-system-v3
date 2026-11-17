@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"unsafe"
 
+	"github.com/snowden-system/windows/backend/core"
 	"github.com/tailscale/wf"
 	"golang.org/x/sys/windows"
 )
@@ -91,6 +92,8 @@ type nativeWFPSessionOwner struct {
 	queryPath     []uint16
 	reader        diagnosticWFPReader
 	transaction   *nativeWFPTransaction
+	queryBatch    *nativeWFPBatch             // original policy source survives read-only snapshot transactions
+	application   *core.ApplicationImageLease // retained before current-exe/ancestor acquisition
 }
 
 type nativeDiagnosticWFP struct {
@@ -159,11 +162,11 @@ func (owner *nativeDiagnosticWFP) open(ctx context.Context, appID string, port u
 	if err := wfpDiagnosticOperationScope(ctx); err != nil {
 		return err
 	}
-	if !owner.callsReturned() || appID == "" || len(appID) > 32760 || port == 0 || luid == 0 || !owner.dynamic || owner.addAttempted || owner.handle == 0 || !owner.openReturned || owner.openCode != 0 || owner.closeStarted || owner.closed || owner.transaction != nil && owner.transaction.phase != wfpTransactionFinished {
+	if !owner.callsReturned() || appID == "" || port == 0 || luid == 0 || !owner.dynamic || owner.addAttempted || owner.handle == 0 || !owner.openReturned || owner.openCode != 0 || owner.closeStarted || owner.closed || owner.transaction != nil && owner.transaction.phase != wfpTransactionFinished {
 		return fmt.Errorf("WFP diagnostic native scope unavailable")
 	}
 	var err error
-	owner.appID, err = windows.UTF16FromString(appID)
+	owner.appID, err = encodeWFPAppIDText(appID)
 	if err != nil {
 		return err
 	}
@@ -204,6 +207,13 @@ func (owner *nativeDiagnosticWFP) open(ctx context.Context, appID string, port u
 }
 
 func (owner *nativeWFPSessionOwner) close() error {
+	if err := owner.closeSession(); err != nil {
+		return err
+	}
+	return owner.retireApplicationImage()
+}
+
+func (owner *nativeWFPSessionOwner) closeSession() error {
 	if !owner.callsReturned() {
 		return fmt.Errorf("WFP original native operation did not return")
 	}

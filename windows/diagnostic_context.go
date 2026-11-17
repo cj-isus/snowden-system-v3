@@ -20,7 +20,7 @@ func (a *App) diagnosticContextLocked() *DiagnosticContextView {
 		lifecycle = "error"
 	}
 	view := &DiagnosticContextView{Schema: 1, Intent: strconv.FormatUint(a.operationID, 10), Path: "0",
-		IntentCurrent: a.ctx != nil && a.ctx.Err() == nil && a.intentSource.Current(), Closing: a.closing.Load(),
+		IntentCurrent: a.appLifetimeCurrentLocked() && a.intentSource.Current(), Closing: a.closing.Load(),
 		Channel: a.state.ActiveID, Mode: a.state.ProxyMode, Lifecycle: lifecycle, Ready: a.state.CoreReady && !blocked && a.startupErr == nil}
 	if path != nil {
 		view.Path = strconv.FormatUint(path.identity, 10)

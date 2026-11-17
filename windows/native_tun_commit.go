@@ -13,29 +13,18 @@ import (
 // Value copies of appProtectedProbe share one preparation slot. Periodic Run
 // never writes it; lifecycle preparation and consumption are each one-shot.
 type appNativeCommitSlot struct {
-	mu    sync.Mutex
-	lease *tunnelLease
+	mu      sync.Mutex
+	lease   *tunnelLease
+	pending *appNativeProbePublication // private candidate; take cannot consume it
 }
 
 func (slot *appNativeCommitSlot) clear() {
 	if slot != nil {
 		slot.mu.Lock()
 		slot.lease = nil
+		slot.pending = nil // revoke delayed probe publication before negative cleanup
 		slot.mu.Unlock()
 	}
-}
-
-func (slot *appNativeCommitSlot) store(lease tunnelLease) error {
-	if slot == nil || lease.native == nil {
-		return core.ErrNativeScopeUnavailable
-	}
-	slot.mu.Lock()
-	defer slot.mu.Unlock()
-	if slot.lease != nil {
-		return core.ErrNativeScopeUnavailable
-	}
-	slot.lease = &lease
-	return nil
 }
 
 func (slot *appNativeCommitSlot) take() *tunnelLease {
@@ -46,6 +35,7 @@ func (slot *appNativeCommitSlot) take() *tunnelLease {
 	defer slot.mu.Unlock()
 	lease := slot.lease
 	slot.lease = nil
+	slot.pending = nil // consumption also burns any unfinished preparation
 	return lease
 }
 

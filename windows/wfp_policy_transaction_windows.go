@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/snowden-system/windows/backend/core"
 	"golang.org/x/sys/windows"
@@ -25,6 +26,7 @@ const (
 
 type nativeWFPTransaction struct {
 	batch           *nativeWFPBatch // original policy batch, bound before Begin; nil for legacy/read-only callers
+	readContext     context.Context // immutable original scoped read; negative Abort never depends on it
 	phase           wfpTransactionPhase
 	readOnly        bool
 	beginAttempted  bool
@@ -61,8 +63,22 @@ func (owner *nativeWFPSessionOwner) beginTransaction(readOnly bool) error {
 }
 
 func (owner *nativeWFPSessionOwner) beginTransactionBound(readOnly bool, batch *nativeWFPBatch) error {
+	return owner.beginTransactionScoped(readOnly, batch, nil)
+}
+
+func (owner *nativeWFPSessionOwner) beginReadTransaction(ctx context.Context) error {
+	if ctx == nil {
+		return core.ErrNativeScopeUnavailable
+	}
+	return owner.beginTransactionScoped(true, nil, ctx)
+}
+
+func (owner *nativeWFPSessionOwner) beginTransactionScoped(readOnly bool, batch *nativeWFPBatch, readContext context.Context) error {
+	if readContext != nil && (!readOnly || batch != nil) {
+		return core.ErrNativeScopeUnavailable
+	}
 	if batch != nil {
-		if readOnly || batch.transaction != nil {
+		if readOnly || batch.transaction != nil || batch.session != nil {
 			return core.ErrNativeScopeUnavailable
 		}
 		if err := batch.operationScope(); err != nil {
@@ -72,10 +88,12 @@ func (owner *nativeWFPSessionOwner) beginTransactionBound(readOnly bool, batch *
 	if !owner.callsReturned() || owner.handle == 0 || owner.closed || owner.closeStarted || owner.transaction != nil && owner.transaction.phase != wfpTransactionFinished {
 		return core.ErrNativeScopeUnavailable
 	}
-	transaction := &nativeWFPTransaction{phase: wfpTransactionStarting, readOnly: readOnly, batch: batch}
+	transaction := &nativeWFPTransaction{phase: wfpTransactionStarting, readOnly: readOnly, batch: batch, readContext: readContext}
 	owner.transaction = transaction // original receipt exists BEFORE any native call
 	if batch != nil {
 		batch.transaction = transaction // retain the exact partial Begin, never adopt an earlier transaction on error
+		batch.session, owner.queryBatch = owner, batch
+		batch.queryActive.Store(true) // this original batch can be bound only once
 	}
 	for _, proc := range []*windows.LazyProc{wfpTransactionBegin, wfpTransactionCommit, wfpTransactionAbort} {
 		if err := proc.Find(); err != nil {
@@ -86,6 +104,12 @@ func (owner *nativeWFPSessionOwner) beginTransactionBound(readOnly bool, batch *
 	flags := uintptr(0)
 	if readOnly {
 		flags = 1
+	}
+	if transaction.readContext != nil {
+		if err := owner.queryScope(transaction.readContext); err != nil {
+			transaction.phase = wfpTransactionFinished // no original Begin was issued
+			return err
+		}
 	}
 	if batch != nil {
 		if err := batch.operationScope(); err != nil {
@@ -102,6 +126,9 @@ func (owner *nativeWFPSessionOwner) beginTransactionBound(readOnly bool, batch *
 		return fmt.Errorf("WFP transaction begin unavailable (%d)", uint32(code))
 	}
 	transaction.phase = wfpTransactionActive
+	if transaction.readContext != nil {
+		return owner.queryScope(transaction.readContext) // preserve the original late Begin for independent Abort
+	}
 	if batch != nil {
 		return batch.operationScope() // a late Begin is still owned and independently abortable
 	}
@@ -165,6 +192,7 @@ type wfpPolicyAction uint8
 const (
 	wfpPolicyArm wfpPolicyAction = iota
 	wfpPolicyGrant
+	wfpPolicyRevoke // removal of general permits only; no barrier or failed-grant reconciliation proof
 	wfpPolicyRestrict
 	wfpPolicyRelease
 )
@@ -175,7 +203,9 @@ const (
 // to success by comparing configuration or rereading the same stable keys.
 type nativeWFPBatch struct {
 	action       wfpPolicyAction
-	operation    context.Context // immutable original request; a later caller cannot refresh this batch
+	operation    context.Context        // immutable original request; a later caller cannot refresh this batch
+	session      *nativeWFPSessionOwner // original query polarity/source backlink, assigned before Begin
+	queryActive  atomic.Bool            // revoked at original writer exit, not a policy/health receipt
 	transaction  *nativeWFPTransaction
 	writes       [40]*nativeWFPWrite
 	count        int
@@ -212,8 +242,34 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 		return err
 	}
 	var owner *nativeWFPPolicyOwner
+	var currentBatch *nativeWFPBatch
+	var restrictedGrant *nativeWFPBatch
+	var restrictedPending bool
+	defer func() {
+		if owner == nil {
+			return
+		}
+		defer func() {
+			if finalErr != nil && restrictedPending {
+				// Restrict's receipt is not retired until the image finalizer
+				// also returned normally. Keep the exact first failed grant.
+				owner.pendingGrant, owner.failedGrant = true, restrictedGrant
+			}
+			owner.retainFailedGrant(finalErr)
+		}()
+		defer wfpCleanupStep(&finalErr, func() error { return wfpPolicyOperationScope(ctx, action) })
+		// Runs AFTER the original writer finalizer, before unlocking. Holding
+		// the image across this batch prevents path replacement during AppID/
+		// Add/verification, without blocking a later owned update rename.
+		wfpCleanupStep(&finalErr, owner.session.retireApplicationImage)
+	}()
 	complete := false
 	defer func() {
+		defer func() {
+			if currentBatch != nil {
+				currentBatch.queryActive.Store(false)
+			}
+		}() // after all original finalization, including abnormal unwind
 		if recovered := recover(); recovered != nil || !complete && finalErr == nil {
 			finalErr = core.ErrNativeScopeUnavailable
 		}
@@ -226,7 +282,7 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 				finalErr = errors.Join(finalErr, core.ErrHelperCleanup)
 			}
 			owner.retainFailedGrant(finalErr)
-			if owner.pendingGrant || owner.session.closeStarted && !owner.session.closed {
+			if owner.pendingGrant && action != wfpPolicyRevoke || owner.session.closeStarted && !owner.session.closed {
 				finalErr = errors.Join(finalErr, core.ErrHelperCleanup)
 			}
 		}()
@@ -234,7 +290,32 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 		cleanup := cleanupWFPWriterTransaction(owner)
 		cleanupReturned = true
 		finalErr = errors.Join(finalErr, cleanup, wfpPolicyOperationScope(ctx, action))
-		if cleanup != nil || owner.pendingGrant || owner.session.closeStarted && !owner.session.closed {
+		if action == wfpPolicyRestrict && complete && finalErr == nil {
+			// Preserve the original failed grant until the full closed-base
+			// post-commit snapshot, original cleanup and final negative caller
+			// scope all returned normally. A later cleanup failure cannot lose it.
+			restrictedPending, restrictedGrant = owner.pendingGrant, owner.failedGrant
+			owner.pendingGrant, owner.failedGrant = false, nil
+		}
+		if action == wfpPolicyRelease && complete && finalErr == nil {
+			// Keep the original owner and failed grant through the full reader/
+			// transaction finalizer. Only a normally confirmed original Close
+			// permits unpublication; a late caller error cannot undo retirement.
+			if wfpPolicyWriter.owner != owner {
+				finalErr = core.ErrHelperCleanup
+			} else if err := guardedWFPReadClose(&owner.session); err != nil {
+				finalErr = errors.Join(core.ErrHelperCleanup, err)
+			} else if !owner.session.closed || owner.session.handle != 0 || !owner.session.callsReturned() {
+				finalErr = core.ErrHelperCleanup
+			} else {
+				owner.pendingGrant, owner.failedGrant = false, nil
+				wfpPolicyWriter.owner = nil
+				finalErr = wfpPolicyOperationScope(ctx, action)
+			}
+		}
+		// Revoke is only a negative cleanup stage. Keeping pendingGrant is
+		// required there and never authorizes a later Arm/Grant or base proof.
+		if cleanup != nil || owner.pendingGrant && action != wfpPolicyRevoke || owner.session.closeStarted && !owner.session.closed {
 			finalErr = errors.Join(finalErr, core.ErrHelperCleanup, cleanup)
 		}
 		finalized = true
@@ -270,10 +351,16 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 	if owner.pendingGrant && (action == wfpPolicyArm || action == wfpPolicyGrant) {
 		return core.ErrHelperCleanup // restrictive cleanup must precede any new grant
 	}
+	if action == wfpPolicyArm || action == wfpPolicyGrant {
+		if err := owner.session.retireApplicationImage(); err != nil {
+			return err // no successor image after an unresolved original Close
+		}
+	}
 	if err := wfpPolicyOperationScope(ctx, action); err != nil {
 		return err
 	}
 	owner.batch = &nativeWFPBatch{action: action, operation: ctx}
+	currentBatch = owner.batch
 	if err := owner.session.beginTransactionBound(false, owner.batch); err != nil {
 		return err
 	}
@@ -296,15 +383,6 @@ func withWFPPolicyWriter(ctx context.Context, action wfpPolicyAction, operation 
 	}
 	if err := owner.batch.operationScope(); err != nil {
 		return err
-	}
-	if action == wfpPolicyRestrict || action == wfpPolicyRelease {
-		owner.pendingGrant, owner.failedGrant = false, nil
-	}
-	if action == wfpPolicyRelease {
-		if err := guardedWFPReadClose(&owner.session); err != nil {
-			return errors.Join(core.ErrHelperCleanup, err)
-		}
-		wfpPolicyWriter.owner = nil
 	}
 	complete = true
 	return nil

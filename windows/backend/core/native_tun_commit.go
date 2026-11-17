@@ -40,16 +40,26 @@ func (commit *nativeForwardingCommit) current(ctx context.Context, engine *Engin
 }
 
 func (engine *Engine) nativePreparationCurrent(ctx context.Context) bool {
+	operation, err := snapshotNativeTUNOperation(ctx)
+	if err != nil {
+		return false
+	}
 	engine.mu.Lock()
 	defer engine.mu.Unlock()
-	return engine.nativePreparationLocked(ctx, nil)
+	return engine.nativePreparationLocked(operation, nil)
 }
 
 // Caller holds Engine.mu. Source identity and the private worker verdict are
 // independent of any public report. The worker rechecks its own deadlines.
-func (engine *Engine) nativePreparationLocked(ctx context.Context, source *nativeTUNObservationSource) bool {
-	permit := engine.nativePermit
-	if !permit.busyLocked(engine) || contextError(ctx) != nil || ctx.Done() == nil || permit.source.operation.Done() != ctx.Done() ||
+func (engine *Engine) nativePreparationLocked(ctx *nativeTUNOperation, source *nativeTUNObservationSource) bool {
+	return engine.nativePermitPreparationLocked(ctx, source, engine.nativePermit)
+}
+
+// The consume path passes its exact captured permit after removing both parent
+// slots. Read-only callers keep their existing slot; neither path calls a new
+// context factory while holding Engine.mu. ctx is prepared metadata, not RPC.
+func (engine *Engine) nativePermitPreparationLocked(ctx *nativeTUNOperation, source *nativeTUNObservationSource, permit *engineNativeTUNPermit) bool {
+	if ctx == nil || !permit.busyLocked(engine) || contextError(ctx) != nil || ctx.Done() == nil || permit.source.operation.Done() != ctx.Done() ||
 		source != nil && source != permit.source || !probePassed(permit.diagnostic) {
 		return false
 	}
@@ -71,8 +81,12 @@ func (engine *Engine) ValidateNativeForwardingContext(ctx context.Context, obser
 	if !commit.current(ctx, engine) || observation.source == nil {
 		return ErrNativeScopeUnavailable
 	}
+	operation, err := snapshotNativeTUNOperation(ctx)
+	if err != nil {
+		return errors.Join(ErrNativeScopeUnavailable, err)
+	}
 	engine.mu.Lock()
-	valid := engine.nativePreparationLocked(ctx, observation.source)
+	valid := engine.nativePreparationLocked(operation, observation.source)
 	engine.mu.Unlock()
 	if !valid || !commit.current(ctx, engine) {
 		return ErrNativeScopeUnavailable
@@ -103,60 +117,6 @@ func (admission NativeTUNAdmission) current(ctx context.Context, manager *Manage
 	expected := permit.source.runtime
 	expected.ForwardingAdmitted = true // explicit completed phase; all other fields stay exact
 	return err == nil && identity == expected && admission.commit.current(ctx, engine)
-}
-
-// Called by the compiled platform only after its exact WFP-ready phase. Both
-// parent lanes are burned before every outcome; ordinary admit cannot do this.
-func (engine *Engine) CommitPreparedNative(ctx context.Context, observation NativeTUNObservation) (NativeTUNAdmission, error) {
-	if engine == nil {
-		return NativeTUNAdmission{}, ErrNativeScopeUnavailable
-	}
-	var commit *nativeForwardingCommit
-	if ctx != nil {
-		commit, _ = ctx.Value(nativeForwardingCommitKey{}).(*nativeForwardingCommit)
-	}
-	managerCurrent := commit.current(ctx, engine)
-	engine.mu.Lock()
-	valid := engine.nativePreparationLocked(ctx, observation.source)
-	permit := engine.nativePermit
-	engine.clearForwardingPermitsLocked()
-	defer engine.mu.Unlock()
-	if !NativeTUNForwardingAvailable() || !managerCurrent || !valid || observation.source == nil || permit.source != observation.source {
-		return NativeTUNAdmission{}, ErrNativeScopeUnavailable
-	}
-	process := engine.process
-	command := workerRequest{Action: "admit_native", Selector: "proxy", Subject: permit.subject, Tag: permit.selector, AdmissionEpoch: permit.epoch,
-		ScopeNonce: permit.source.scope.request.Nonce, NativeAdmissionToken: permit.token}
-	reply, err := process.request(ctx, command, workerControlTimeout)
-	if err != nil || contextError(ctx) != nil || engine.process != process || process.exited() || !validWorkerControlReply(&command, reply) {
-		return NativeTUNAdmission{}, engine.retireIsolatedFailureLocked(ErrForwardingNotAdmitted, err, contextError(ctx))
-	}
-	return NativeTUNAdmission{engine: engine, permit: permit, commit: commit}, nil
-}
-
-func (engine *Engine) consumeLocalNativeForwarding(ctx context.Context, subject, selector string, epoch uint64, nonce, token string) error {
-	engine.mu.Lock()
-	defer engine.mu.Unlock()
-	actual, selected, guarded, tunMode, err := engine.forwardingSubjectLocked()
-	if err != nil || guarded == nil {
-		return ErrForwardingNotAdmitted
-	}
-	gate := guarded.admission
-	gate.mu.Lock()
-	defer gate.mu.Unlock()
-	permit := gate.nativePending
-	valid := permit.currentLocked(gate, subject, selector, epoch, nonce)
-	gate.clearPendingLocked() // remove original slot before ANY consume outcome
-	if !NativeTUNForwardingAvailable() || contextError(ctx) != nil || !tunMode || actual != subject || selected != selector || !valid ||
-		!permit.emitted || !workerSubject(token) || permit.token != token || !time.Now().Before(permit.until) || !permit.native.current(subject, selector, epoch, nonce) {
-		return ErrForwardingNotAdmitted
-	}
-	gate.open.Store(true)
-	if contextError(ctx) != nil {
-		gate.open.Store(false)
-		return ErrForwardingNotAdmitted
-	}
-	return nil
 }
 
 // This recognizes only the explicit pending activation step. No independent

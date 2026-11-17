@@ -2599,3 +2599,489 @@ gofmt5+1exit0. Own receipts: .artifacts/memory/bootstrap-v383-w4c-.
 Previous percentage-only answer was no implementation progress; this continuation
 resumes original pre-checkpoint943 and completes source/document evidence.
 No tests/fixtures/build/vet/types/parser/SDK/native/registry/WFP/TUN/browser/network/generation. Source return records do not prove native interruption, deadlines, cleanup, filter behavior, ABI, compiler compatibility or protected egress. nativeTUNForwardingAccepted remains false; TUN unavailable and schema2 installer unsupported. Root NETGUARD-001/legacy/migration/fullPC00..09/old9/native/OS/release remain OPEN;100OPEN56NOT_RUN.
+
+<a id="pc-v506-parent-permit-operation"></a>
+
+## V2-506 — ordinary parent permit / original lifecycle operation
+
+Ordinary parent permit теперь сохраняет exact original process pointer и
+metadata-only view исходной lifecycle-операции. Producer получает original Run
+context отдельно от временного diagnostic reservation: обычный release в Run
+отменяет diagnostic child, поэтому этот child не может быть identity допуска.
+App value wrapper и Manager probe→commit сохраняют original Done. Перед публикацией
+проверяются original sources/process; без nonnil Done наблюдение возвращает факты,
+но не создаёт parent handoff.
+
+Private admit выделен в компонент; он сначала сжигает оба parent permits, затем
+проверяет same original Done/current old+caller sources/deadlines и exact process
+до и после RPC. Повторный/fresh context не переносит старый допуск на новую
+операцию. Actual RPC context, worker token expiry/one-use consume, original
+retirement и native no-steal сохранены. Native forwarding gate остаётся false.
+
+Outer Engine/RPC context callbacks остаются отдельным открытым вопросом; incoming
+snapshot выполняется под Engine lock после burn. Это не приёмка Windows, Stop,
+partial output, compiler/private fixtures, kernel, ресурсов или скорости.
+2Go4docs/5existing1new/manual2diff1new/gofmt2+1+1exit0/12reviewed0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v508-parent-admit-snapshot"></a>
+
+## V2-508 — ordinary admit metadata outside Engine lock
+
+Обычный admit сначала под коротким Engine lock сжигает обе parent-квитанции
+и сохраняет exact original permit в revocable forwardingConsume. Чтение incoming
+Done/Deadline/source values выполняется после unlock. Общий сброс отзывает также
+эту попытку: Stop, новый probe или повторный admit не оставляют её действующей.
+
+После snapshot повторный lock проверяет ту же попытку, исходную операцию,
+current old+caller sources/deadlines, exact process и конфигурацию до RPC.
+Отложенная очистка убирает только свой original permit и выполняется после
+освобождения второго lock; ошибка/panic/Goexit не очищает квитанцию преемника.
+После RPC проверки используют fixed original/caller metadata без повторного
+вызова исходных context getters. Actual RPC получает прежний real ctx.
+
+Это source/unverified. RPC/native/context callbacks под outer Engine lock
+остаются открытым объёмом; нет доказательства полного Stop, прерываемости,
+Windows cleanup, скорости или ресурсов. Native forwarding gate остаётся false.
+3Go4docs/all7existing/manual3diff/gofmt3exit0/12reviewed0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v509-admit-rpc-context"></a>
+
+## V2-509 — ordinary admit RPC context / final cancellation fence
+
+Для ordinary admit RPC добавлен отдельный контекст: real stdlib child
+готовится вне Engine lock, Deadline фиксируется как min(original deadline,
+control budget), а core source pointers сохраняются из исходной операции.
+Done/Err и cancellation-key lookup обслуживает stdlib child; metadata-only view
+не используется как RPC parent. Это сохраняет отмену и не сбрасывает бюджет
+после ожидания Engine lock. Истёкший бюджет до request не резервирует protocol ID.
+
+RPC остаётся сериализованным у исходного process/pipe owner. После его возврата
+lock освобождается, отмена RPC child вызывается один раз и должна нормально
+вернуться, затем под новым lock проверяются исходные consume pointer, операция,
+process/config и live usable state. Обычная отмена короткого RPC child не отменяет
+lifecycle operation. Deferred cleanup после последней проверки и повторный
+parent unlink исключены из успешного пути; преемник не очищается старой попыткой.
+
+Scope — текущие IPC getters, source/unverified. Unknown Value keys могут
+делегировать к caller; custom constructor/native callbacks/другие Engine paths
+и полный Stop ещё открыты. Нет доказательства compiler/Windows cleanup,
+прерываемости, скорости или ресурсов. Go1.26.7 context source просмотрен офлайн.
+2Go4docs/5existing1new/manual2diff1new/gofmt2+1+1exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v510-probe-rpc-context"></a>
+
+## V2-510 — ordinary/native probe RPC context
+
+Оба private probe wrappers готовят RPC-контекст до Engine lock через общий
+компонент. Для него сохраняется snapshot фактического diagnostic ctx: более
+короткий deadline и дополнительные negative sources не теряются. Исходная
+lifecycle operation остаётся отдельной identity для parent/native допуска.
+Request settings/timeout проверяются существующим валидатором; native nonce
+добавляется только после исходного claim.
+
+Ошибки подготовки сохраняют ordinary native-no-steal либо native clear/burn;
+отмена RPC child выполняется после Engine unlock. Locked producer принимает
+prepared context и отклоняет nil. Общая фабрика сверяет Done/deadline metadata
+с реальным parent; при уже ограничивающем earlier/equal deadline использует
+WithCancel без дублирующего таймера. Deadline не продлевается, source binding
+не обновляется, metadata-only view не становится RPC parent.
+
+Source/unverified: generic private fixtures/custom parent/unknown Value/native
+callbacks/другие Engine entry paths ещё открыты. Нет доказательства полного
+Stop, compiler/Windows cleanup, прерываемости, скорости или ресурсов.
+2Go4docs/all6existing/manual2diff/gofmt2exit0/14project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v511-current-runtime-context"></a>
+
+## V2-511 — CurrentRuntime original observation после RPC cleanup
+
+CurrentRuntime готовит original metadata и общий RPC child до Engine lock.
+Typed helper выполняет current request через прежние protocol/I-O/process
+границы с exact workerStateReplyScope. После unlock отмена child вызывается
+один раз и должна нормально вернуться; затем проверяются original sources,
+absolute budget, тот же process/instance, live usable state и последний command ID.
+
+State scope теперь удерживает исходный immutable raw header для всех state
+actions. Final fence сравнивает именно этот header/length, без нового parse/hash
+или копии; исходный ограниченный буфер остаётся жив до конца проверки. Start
+correlation сохранена. Смена команды/конфига/процесса отзывает старое наблюдение:
+возвращается empty identity, преемник не очищается. Это read-only факт, не permit,
+forwarding authority или доказательство kernel health.
+
+Source/unverified. SwitchDefaultContext, legacy/direct current helpers и Start
+ещё не переведены; native calls/unknown Value/custom parent/hard Stop открыты.
+Нет доказательства compiler/Windows cleanup, прерываемости, скорости или ресурсов.
+2Go4docs/all6existing/manual2diff/gofmt2exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v512-switch-rpc-context"></a>
+
+## V2-512 — isolated switch RPC / original mutation acceptance
+
+SwitchDefaultContext выделен в selector-компонент. Короткий value lock
+сохраняет исходные isolated process/instance/raw header до чтения контекста.
+RPC готовится вне Engine lock; фактическое переключение требует того же origin
+и сохраняет старые request scope/ID/digest/targetRaw publication/reaper gates.
+Embedded worker/local selector и его rollback сохранены отдельной веткой.
+
+Отмена RPC вызывается один раз вне lock, после неё проверяются original source,
+budget, process/instance и exact published target graph. Обычные status queries
+не считаются новой selection. Поздний отказ или abnormal cancel использует
+original reaper только при том же процессе и graph; преемник не очищается.
+Fallible reap не повторяется abnormal finalizer после уже обработанного отказа.
+
+Новый private unconfirmed-switch marker различает обычный preflight reject
+и возможное уже завершённое изменение. Manager выбирает StateError и прежний
+owned proxy restore даже при live process, не подтверждая старый канал по одному
+Status=running. Marker сам не доказывает reconciliation/cleanup.
+
+Source/unverified. Start/legacy current/native locks/unknown Value/custom parent
+и hard Stop остаются открытыми. Нет доказательства compiler/Windows cleanup,
+прерываемости, скорости или ресурсов.
+3Go4docs/6existing1new/manual3diff1new/gofmt3+1exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v513-isolated-start-context"></a>
+
+## V2-513 — isolated Start / revocable pre-native reservation
+
+Public isolated Start выделен в отдельный компонент. После original context
+snapshot короткий value lock регистрирует exact pre-native attempt. RPC child
+и protected config normalization/legacy file validation готовятся вне Engine lock.
+Stop/close отзывает регистрацию даже без процесса; отложенная очистка убирает
+только свой slot. Каждая попытка удерживает свой исходный raw.
+
+Prepared start проверяет тот же slot/raw и отсутствие другого owner, публикует
+прошедший прежний валидатор target и запускает прежний worker protocol. Exact
+partial process сохраняется на attempt до native acquisition. Перед fallible
+error reap отмечается факт попытки: abnormal finalizer не повторяет неизвестный
+результат. Separate own-slot defer выполняется и при Goexit; физический unknown
+owner остаётся у Engine/Job, а не исчезает вместе с metadata.
+
+Hello/start stage caps сохранены внутри общего absolute sum budget. RPC cancel
+вне lock вызывается один раз до final original source/budget/process/target fence.
+Это не lifetime worker: embedded start сохраняет background runCtx и detach.
+Reload остаётся отдельным непереведённым путём; native/file/SDK interruption,
+unknown Value/custom parent и hard Stop ещё открыты.
+
+Source/unverified; нет доказательства compiler/Windows cleanup, скорости или ресурсов.
+3Go4docs/6existing1new/manual3diff1new/gofmt3+1exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v514-isolated-reload-context"></a>
+
+## V2-514 — isolated Reload / validated replacement and rollback
+
+Isolated Reload выделен в компонент с exact original process/config reservation
+на всё время validation→old close→candidate→возможный rollback. Общий negative
+origin переиспользуется со Switch. RPC и полная проверка кандидата готовятся вне
+Engine lock. Stop отзывает parent; Start и Switch отклоняют незавершённый lifecycle,
+включая промежуток без процесса. Resource-only close сохраняет свой reload parent.
+
+В зарегистрированной попытке ErrReloadRejected требует untouched current original, не busy/changed
+owner. Факт начала замены фиксируется до old close и возвращается отдельно;
+решение об откате опирается на него и actual no-process/no-cleanup-fault/current
+slot/source/last graph. Для rollback проверяются сохранённые старые rendered bytes
+вне lock; gates повторяются перед новым child. Неизвестный candidate owner не
+заменяется. Candidate/rollback используют прежние start records, partial owner,
+Job/I-O reaper и запрет повторного unknown cleanup.
+
+Cancel RPC выполняется один раз вне lock до final child/graph/source/budget fence.
+Old-config-restored marker требует actual accepted rollback worker; Manager
+по-прежнему делает fresh protected probe/commit. Embedded lifetime/rollback
+сохранены. Raw isolated start bypass отклоняется; starter принимает prepared ctx
+и current nonnil child. Общий бюджет составлен из прежних stage ceilings.
+
+Source/unverified. Native/SDK interruption, unknown Value/custom parent, legacy
+controls и hard Stop открыты. Нет доказательства compiler/Windows cleanup,
+прерываемости, скорости или ресурсов.
+6Go4docs/8existing2new/manual6diff2new/gofmt6+1+1+1exit0/13project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v515-dns-control-context"></a>
+
+## V2-515 — service-DNS parent command / original process slot
+
+Parent service-DNS pause/resume выделен из child-side DNS в свой компонент.
+Проверка expected instance/digest/selector/TUN/epoch сохранена; exact original
+process/instance/raw удерживается private pending slot самого процесса. Конкурирующая
+DNS-команда не обгоняет старую; новый worker этот slot не наследует. Подготовка
+RPC и cancel выполняются вне Engine mutex, actual pipe operation сериализована.
+
+Факт возможной отправки отмечается до request; прежний no-ID source-canceled
+результат сохраняет no-churn поведение. После cancel повторяются original source,
+fixed deadline, slot, graph и live checks. Ошибка очищает только прежний process/
+graph без нового lifecycle/native owner. Reap отмечается до fallible вызова,
+own-slot discard выполняется отдельным defer даже при abnormal cleanup.
+Существующий protocol ID отличает свой DNS request от новой non-current команды:
+новая команда отзывает exact DNS slot до exchange, current/read-only сохраняет.
+Stop/resource close и общий reaper отзывают slot до fallible callbacks. Старое
+DNS-завершение не очищает новый owner даже при прежнем process/config.
+
+Isolated CurrentDefault использует существующий CurrentRuntime; embedded selector
+и child-side admitted-DNS/finite fault/wire не изменены. Новая forwarding/native/
+path-health authority не появляется. Source/unverified: native/SDK/custom context/
+unknown Value, hard Stop, concurrency/OS/resources/speed остаются открыты.
+4Go4docs/7existing1new/manual4diff1new/gofmt4+2+1+3exit0/15project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v516-native-consume-context"></a>
+
+## V2-516 — parent native consume / capture before context
+
+CommitPreparedNative выделен в parent-компонент. Он захватывает исходные
+permit/process/instance/raw и отзывает обе родительские линии до чтения контекста.
+Private consume-slot принадлежит исходному процессу. Подготовка RPC и cancel
+выполняются вне Engine mutex; Manager проверяется вне lock после подготовки и
+после cancel. До выдачи opaque admission повторяются source/deadline/slot/graph/
+live/permit checks. Строка nativeTUNForwardingAccepted=false сохранена; закрытый
+путь после burn не вызывает context getters. Prepared helper также проверяет gate.
+
+Свой protocol ID сохраняет consume-slot; новая non-current команда отзывает его
+до exchange. Shared clear/Stop/resource close/reaper отзывают slot до fallible
+работы. Read-only current не меняет его. Факт возможной отправки и попытка reap
+фиксируются до вызовов; no-ID source cancellation не очищает незатронутый worker
+и не возвращает burned token. Own-slot discard выполняется отдельно даже при
+abnormal cleanup, не затрагивая нового владельца.
+
+App WFP compensation, NativeTUNAdmission, Manager fresh runtime/activation и wire
+сохранены. Source/unverified: native begin/end scopes, unknown Value/custom ctx,
+SDK/native interruption, concurrency/OS/latency/resources остаются открыты.
+4Go4docs/7existing1new/manual4diff1new/gofmt4exit0/16project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v517-tun-open-context"></a>
+
+## V2-517 — native TUN open / original partial target custody
+
+Открытие TUN scope выделено в компонент. Private pending slot исходного процесса
+фиксирует process/instance/raw/helper/image/capture до context getters. Caller
+по-прежнему удерживает protectedHelper lane. Подготовка RPC и один cancel вне
+Engine; actual image/current reply/target duplication/open сериализованы через
+prepared context. Общий логический бюджет состоит из двух прежних control caps
+и сохраняет более ранний deadline родителя; native preemption не доказан.
+
+Частичный scope сохраняется в Engine/capture до DuplicateHandle. Remote handle
+не закрывается в родительской таблице: при отказе используется исходный target Job.
+После cancel повторяются original source/deadline/slot/graph/scope/live/helper
+checks. Success снимает свой slot под тем же final lock; failure сохраняет partial
+scope и ограничивает reap прежним graph/owner. Отдельный metadata discard работает
+при abnormal cleanup. Новые non-current команды/shared clear/Stop отзывают slot;
+свой open ID/current read сохраняют его. Switch и probe учитывают scoped owner.
+
+Факт retirementAttempted хранится на исходном scope и фиксируется реальным reaper
+до fallible work. Automatic end/revoke не повторяет неизвестную попытку; retired
+по-прежнему требует actual Job retirement, closed — отдельный scope-close ACK.
+Подготовка контекста end RPC остаётся следующим незавершённым срезом. Native/SDK/
+unknown Value/custom ctx/compiler/concurrency/Windows/latency/resources OPEN.
+6Go4docs/9existing1new/manual6diff1new/gofmt6+1exit0/20project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v518-tun-close-context"></a>
+
+## V2-518 — native TUN close / original cleanup receipt
+
+Закрытие TUN scope выделено в parent-компонент. Exact scope/process/instance/raw
+фиксируются до context getters, старые parent permits отзываются до публикации
+closing slot. Проверяются old subject и отсутствие duplicate/unknown retirement/
+нового lifecycle owner. Подготовка RPC и один cancel вне Engine; actual command
+использует prepared context и прежний control cap/ранний parent deadline.
+
+Только валидный нормальный ответ исходного worker сохраняет closed как факт
+scope cleanup и private ACK. Он хранится до outer cancel независимо от поздней
+ошибки операции; это не Job retirement, current success или admission. Nil result
+операции требует final original source/deadline/graph/slot/ACK/live fence после
+cancel. Success снимает own slot под тем же lock. Newer non-current/shared clear/
+Stop/reaper отзывают попытку; own ID/current read сохраняют её.
+
+Failure очищает только unclosed/unretired исходный scope без нового lifecycle
+owner; persistent retirementAttempted исключает unknown retry. Отдельный own-slot
+discard работает при abnormal cleanup. Late open rejection учитывает closing owner.
+Существующий retireCapture consumer не изменён: он использует только реальный
+closed/retired факт. Positive observation по-прежнему требует original foreground
+scope, helper/filter/Job cleanup и fresh runtime/worker confirmation. Child proof/
+wire/TTL/WFP/activation сохранены; native/SDK/custom context/OS приёмка OPEN.
+5Go4docs/8existing1new/manual5diff1new/gofmt5exit0/16project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v519-worker-context-contracts"></a>
+
+## V2-519 — parent worker / RPC and metadata types
+
+Фактические parent request/exchange/current-switch/source-before-ID теперь
+принимают workerRPCContext. Обход production callers показал, что normal paths
+уже передавали prepared child. Nil child/process проверяются до getters/ID.
+Exchange создаёт реальный stdlib child от typed parent; исходный frame/I-O/
+cancel/correlation/final-fence body сохранён побайтно.
+
+Fixed requestStop создаёт только stdlib Background/deadline, не читая контекст
+пользователя. Под Engine это отдельный negative cleanup путь с прежним close cap
+и ancestor exception; reply не заменяет original Job retirement. Native observation
+хранит только nativeTUNOperation snapshot; claim/confirm/preparation разделяют
+typed metadata и prepared RPC. Nil metadata проверяется до getters, native probe
+передаёт исходный snapshot без возврата к context.Context. Burn/identity/TTL/ACK
+не изменены; новая authority или activation не появляется.
+
+Source/unverified. Internal signature/private fixture compatibility не проверена
+компилятором, fixtures не менялись. Unknown Value/custom parent/native/SDK/hard
+Stop и полная runtime/Windows/resources приёмка остаются OPEN.
+7Go4docs/11existing0new/manual7diff0new/gofmt7exit0/20project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v520-probe-publication"></a>
+
+## V2-520 — original probe / publish after parent cleanup
+
+Parent probe раньше сохранял permit внутри Engine до deferred RPC cancel
+и release диагностического бюджета. Теперь private publication slot исходного
+worker удерживает process/instance/raw/lifecycle/ID и permit-кандидаты до обычного
+возврата обоих cleanup. Native-кандидат сохраняет прежний bounded no-steal, но не
+виден как native preparation/consumption. Shared clear/Stop/reaper/new non-current
+request отзывают stage; own ID/current read сохраняют его.
+
+RPC удерживает точный diagnostic parent metadata отдельно от real stdlib child.
+После cancel проверяется ещё живой diagnostic Done/source/budget/owner. Затем
+Run выполняет release один раз вне Engine. Final check учитывает original lifecycle,
+fixed deadline, frozen negative sources, exact slot/graph/live/expiry, сохраняя
+различие с намеренной отменой собственного diagnostic child. Только после этого
+публикуются parent permits и снимается own slot под тем же lock.
+
+Abnormal/error удаляет только own stage и burns native source; stale metadata не
+очищает successor. Existing actual IPC failure reaper сохранён, no-ID source cancel
+не очищает незатронутый worker. Diagnostic pool и local worker/flow/wire/TTL/WFP/
+activation не менялись. Source/unverified: compiler/private fixtures/concurrency/
+cancel-release/outer App-Manager/native/Windows/resources приёмка OPEN.
+5Go4docs/8existing1new/manual5diff1new/gofmt5+2exit0/22project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/build/SDK/product/native/
+admin/live/network/newGit/otherroles/chats. FullPC00-09/all9/72tasks/100OPEN56 product
+NOT_RUN+2 historic Git checks; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v521-root-probe-publication"></a>
+
+## V2-521 — App native preparation / publish after report finalizer
+
+App раньше сохранял native lease до deferred finalizer отчёта, проверки доверия
+и исходного subject. Новый private record одного Run резервируется до callbacks,
+удерживает validated lease как stage и публикует его только после обычного возврата
+finalizer. Exact source-bound context/subject сохраняется; исходный runtime →
+Manager → App → epoch value lease удерживается до записи root slot. Под mutex slot
+нет context/trust/native/Engine/I-O callbacks; existing subject guard переиспользован.
+
+BeforeChange/Stop clear и take отзывают pending record. Late completion не может
+вернуть отозванную попытку; discard сверяет exact pending/candidate pointer и не
+трогает successor. Независимый abnormal discard охватывает report formatting и
+release исходного subject. Stale/trust/unsafe/no-native result удаляет own stage.
+Ошибка final identity сохраняет original report scope и restrictive path.
+
+Periodic/non-TUN не резервируют slot. Root lease не является forwarding admission,
+ошибка диагностики не становится PASS. Core permits/worker/wire/TTL/diagnostic pool/
+Manager/lifetime/Job reaper/WFP/native commit body сохранены; compiled native gate
+false. Source/unverified: compiler/private fixtures/finalizer/concurrent invalidation/
+context callbacks/lock release/native ABI/Windows/latency/resources приёмка OPEN.
+3Go4docs/6existing1new/manual3diff1new/gofmt3exit0/16project2stdlib0SDK;
+q87s95/261cache190verbatim59owned unchanged. No tests/fixtures/build/SDK/product/
+native/admin/live/VPN/network changes/new commit-push/otherroles/chats. Authorized
+Git ref and collaborator read-only refresh only. FullPC00-09/all9/72tasks/100OPEN56
+product NOT_RUN+2 historic Git; TUN unavailable/schema2 unsupported/rootNETGUARD001 OPEN.
+
+<a id="pc-v522-terminal-trust-budget"></a>
+
+## V2-522 — срок trust observation перед terminal handoff
+
+После join operationLifetime код раньше отбрасывал duration последней проверки. Source/native proxy readback и source lease release могли завершиться уже после её срока.
+
+Новый private `lifecycleTrustBudget` фиксирует monotonic начало реального callback. После source/proxy readback выполняется новый sample вне locks. Затем неизменный бюджет проверяется после guard/release и до/после резервирования running-watch перед active/done handoff. Истёкший budget сохраняет original owner/report invalidation/cleanup. Только exact новый observer, который ещё не запускался, отменяется и удаляется без фиктивного done.
+
+`SessionValidity.Remaining` включает секундный потолок повторного наблюдения за часами: утрата актуальности — `trust_unavailable`, не утверждение об истечении конкретного сертификата. Legacy non-Lifetime не получает искусственный TTL. Worker/WFP/Job и тела samplers не менялись. Context callbacks, short-duration/concurrency/compiler/private fixtures/native/OS и фактическое разрешение трафика остаются непроверенными.
+
+Source/unverified: 3 Go + 4 docs; manual diff и gofmt3 exit0. Тесты/сборки/native/сеть не запускались; полный PC-00…09/TH-00…08 и Windows-приёмка остаются OPEN.
+
+<a id="pc-v523-terminal-context"></a>
+
+## V2-523 — terminal completion без original ctx getters под lock
+
+`terminalContextCause` и App terminal guard раньше вызывали методы исходного Context под Manager/App/epoch locks. Новый private completion удерживает original Done/deadline/core source pointers и уже известный Cause, подготовленные вне locks. Metadata переиспользует existing nativeTUNOperation только для negative checks, никогда как RPC/SDK context или parent.
+
+Optional `LifecycleCompletionPreparationProbe` строит App downstream guard заранее. Closure сохраняет exact original intent/operation/path, без raw ctx; после захвата App/epoch сравнивает state/atomics. Core повторяет metadata check после guard/release и до/после watch reservation; original operation/cleanup/task receipts сохраняются. Legacy сигнатура оставлена, но arbitrary Value fallback отсутствует: custom keys требуют preparation refinement.
+
+Late Done/source revocation запрещает completion; точная классификация позднего Cause, private fixtures/compiler, custom adapter callbacks и остальные App subject/native context paths остаются OPEN. Worker/Job/WFP/samplers/native false gate не менялись.
+
+Source/unverified: 5 Go + 4 docs; просмотр diff, gofmt5+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v524-app-publication-fence"></a>
+
+## V2-524 — App publication без original ctx getters под lock
+
+Opaque `core.OperationFence` переиспользует исходные Done/deadline/core source pointers. Внешний Err проверяется при capture; `Current` работает только с metadata. Тип не реализует Context, не владеет отменой и не заменяет реальный RPC/native parent.
+
+Private publication capture сохраняет копию исходных App scope values и intent/operation/path pointers до runtime/Manager/App/epoch locks. Subject.lockCurrent, retained/started/applied state, original TUN scope и metrics parent проверяют эти сохранённые источники. Revocation после ожидания locks также запрещает публикацию; successor не подставляется. Existing release/clock/config/epoch/physical cleanup сохраняются. Nonlifecycle report path не получает нового требования к ctx.
+
+TUN сохраняет original operation fence при создании scope до helper/native acquisition; новый caller не обновляет его. Metrics перестал вызывать parent.Err под publication locks. Другие nativeProbeScope paths, metrics interface equality, custom context/reentrancy/compiler/private fixtures и Windows/runtime приёмка остаются OPEN. Worker/Manager/WFP/samplers/native false gate не менялись.
+
+Source/unverified: 6 Go + 4 docs, включая 2 новых компонента; diff просмотрен, gofmt6+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v525-native-observation-fence"></a>
+
+## V2-525 — optional native observation / continuity и context identity
+
+Native scope раньше вызывал ctx.Err под value locks и проверял только номер эпохи; netepoch source подтверждает, что down не увеличивает номер. Теперь caller/action publication подготавливается вне locks, а scope сохраняет original path до native work и проверяет path identity/current/down/power вместе с прежними owner/config/clock checks. Foreground fence повторяется до draft/final write.
+
+Срок выполненного факта отделён от жизни foreground action: после own cancel Background-read по-прежнему проверяет original intent/path/owner/TTL. Никакой новый probe/forwarding authority или mandatory health outcome из cache не возникает.
+
+Metrics/adapter parent используют общий exact identity helper: reflect.Value.Comparable проверяет само значение, включая вложенные interfaces, прежде чем выполнять equality. Неустановленная identity делает optional observation unavailable; Done/deadline не используются как замена. Adapter parent также повторяет сохранённый fence после App.mu. Query actor/context factories и остальные App lifetime getters под locks остаются OPEN.
+
+Source/unverified: 5 Go + 4 docs; diff просмотрен, gofmt5 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v526-app-lifetime"></a>
+
+## V2-526 — original App lifetime вне value-lock callbacks
+
+`App.ctxFence` фиксирует исходный root lifetime. Wails startup резервирует оригинальную подготовку и читает Context вне App.mu до ресурсов; после проверки closing/current публикует metadata. Ready/final startup predicates и прямые root checks lifecycle/retry/DNS/power/restart/protection/update/UI/diagnostic/tray/proxy recovery используют общий value-only helper. DNS/netwatch берут App snapshot до registry locks, без обратного захвата App.mu.
+
+Проверка всех NewApp-конструкторов обнаружила три headless multi-assignment initializer. Их restricted App получает original lifetime отдельно, после регистрации прежнего cleanup и до native work; installedImageChanged установлен до callbacks. Wails startup, vault/network preparation и code acceptance этим не разрешаются. Уже связанный App не перепривязывается к другому контексту.
+
+Живой fence не означает readiness/trust/retirement/forwarding; zero fence не имеет fallback на raw getters. Real ctx остаётся настоящим SDK/network parent. Отмена startup не запускает acquisitions; иная недоступность original context даёт конечную sticky startup failure. Child context factories/cancel, caller ctx getters и adapter owner mutex ещё требуют разбора. Private fixtures с прямым присваиванием ctx требуют отдельной разрешённой миграции; их не меняли.
+
+Source/unverified: 26 Go + 4 docs, один новый helper; diff просмотрен, gofmt25+1+5 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v527-context-value-locks"></a>
+
+## V2-527 — staging/adapter context work вне value locks
+
+Staging сначала сохраняет original App parent/lifetime/registration/path. Context getters и создание real value wrappers выполняются вне App/epoch locks; перед возвратом проверяются исходные source/path/down/power/lifetime. Уже привязанный старый путь не заменяется новым. Этот этап не создаёт cancel child, timer, goroutine, native owner или forwarding authority.
+
+Adapter registry теперь защищает только exact owner slot. Исходный parent сохраняется до constructor/query; mutex освобождён на время real WithTimeout, actual native-query frame и original cancel retirement. Slot остаётся занят до обычного возврата исходных frame/cancel; pending/abnormal не дают replacement. Final own-pointer/parent-fence/deadline gate не вызывает original getters и не стирает successor. Actual query и retirement body сохранены; это не OS-quiescence/RSS/latency proof.
+
+Foreground beginOperation, bindUpdateOperationLocked, proxy context factories и callbacks отмены под App.mu остаются следующим объёмом.
+
+Source/unverified: 2 Go + 4 docs; diff просмотрен, gofmt2+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.

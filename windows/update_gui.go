@@ -18,8 +18,8 @@ func prepareUpdateGUIImage(ctx context.Context, expectedSHA string) (image *core
 		return nil, core.ErrUpdateGUIBootstrap
 	}
 	app := NewApp()
-	updateGUIBootstrapOwners = app // before the first native acquisition
-	app.ctx, app.installedImageChanged = ctx, true
+	updateGUIBootstrapOwners = app   // before the first native acquisition
+	app.installedImageChanged = true // restricted before any original context callback
 	app.updateMu.Lock()
 	defer app.updateMu.Unlock()
 	app.operationMu.Lock()
@@ -36,6 +36,9 @@ func prepareUpdateGUIImage(ctx context.Context, expectedSHA string) (image *core
 			finalErr = errors.Join(finalErr, core.ErrUpdateGUIBootstrap)
 		}
 	}()
+	if err := app.bindHeadlessLifetime(ctx); err != nil {
+		return nil, core.ErrUpdateGUIBootstrap
+	}
 	root, verified, err := app.prepareInstalledUpdateCandidate(ctx, false, expectedSHA)
 	if err != nil {
 		return app.pairImage, err
@@ -102,7 +105,7 @@ func (a *App) updateGUIDOMReady(ctx context.Context) {
 	}
 	retained := strictProtectionRetained()
 	a.mu.Lock()
-	if ctx.Err() != nil || a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || a.installedImageChanged {
+	if ctx.Err() != nil || !a.appLifetimeCurrentLocked() || a.closing.Load() || a.installedImageChanged {
 		a.mu.Unlock()
 		return
 	}

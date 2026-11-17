@@ -70,7 +70,7 @@ func (a *App) prepareManualDiagnostic(timeout time.Duration, requests int, bodyB
 	defer a.mu.Unlock()
 	registration := a.intentRegistrationLocked()
 	if timeout <= 0 || timeout > 90*time.Second || requests < 0 || bodyBytes < 0 ||
-		a.diagnosticTask != nil || a.ctx == nil || a.ctx.Err() != nil || a.vault == nil ||
+		a.diagnosticTask != nil || !a.appLifetimeCurrentLocked() || a.vault == nil ||
 		a.closing.Load() || a.restartCommit != nil || a.releaseCommit != nil || !registration.currentLocked(a) {
 		return nil, nil, errSecretTestUnavailable
 	}

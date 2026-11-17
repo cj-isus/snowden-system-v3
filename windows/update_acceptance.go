@@ -98,7 +98,7 @@ func verifyUpdateCodeAcceptance(ctx context.Context, expectedSHA string) (finalE
 	}
 	app := NewApp()
 	updateCodeAcceptanceOwners = app
-	app.ctx, app.installedImageChanged = ctx, true
+	app.installedImageChanged = true // restricted before any original context callback
 	app.updateMu.Lock()
 	defer app.updateMu.Unlock()
 	app.operationMu.Lock()
@@ -109,6 +109,9 @@ func verifyUpdateCodeAcceptance(ctx context.Context, expectedSHA string) (finalE
 			updateCodeAcceptanceOwners = nil
 		}
 	}()
+	if err := app.bindHeadlessLifetime(ctx); err != nil {
+		return core.ErrHelperCleanup
+	}
 	root, verified, err := app.prepareInstalledUpdateCandidate(ctx, false, expectedSHA)
 	if err != nil {
 		return err

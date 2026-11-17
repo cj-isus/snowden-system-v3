@@ -64,6 +64,13 @@ type workerReply struct {
 }
 
 func writeWorkerFrame(w io.Writer, value any, limit int) error {
+	return writeWorkerFrameGuarded(w, value, limit, nil)
+}
+
+// Encoding may outlive an issued candidate. An optional original-owner guard
+// runs after the bounded encoding, before even the first header write. It is
+// synchronous, not a timeout, resource retirement or atomic pipe-write proof.
+func writeWorkerFrameGuarded(w io.Writer, value any, limit int, beforeWrite func() error) error {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetEscapeHTML(false) // avoid up to 6x expansion of a bounded raw config
@@ -71,6 +78,11 @@ func writeWorkerFrame(w io.Writer, value any, limit int) error {
 		return errWorkerProtocol
 	}
 	raw := buffer.Bytes()
+	if beforeWrite != nil {
+		if err := beforeWrite(); err != nil {
+			return err
+		}
+	}
 	var header [4]byte
 	binary.BigEndian.PutUint32(header[:], uint32(len(raw)))
 	if _, err := io.Copy(w, bytes.NewReader(header[:])); err != nil {

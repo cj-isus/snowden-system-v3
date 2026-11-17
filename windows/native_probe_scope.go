@@ -20,6 +20,7 @@ type nativeProbeScope struct {
 	clock   *metadata.ObservedClock
 	intent  uint64
 	source  *core.OperationSource // exact original App intent; own operation cancel does not retag cached facts
+	path    *networkPathSource    // original continuity source, independent of this action's local cancel
 	epoch   int
 	pin     string
 	lease   tunnelLease
@@ -37,7 +38,11 @@ type nativeProbeObservation struct {
 // publication gate. Order matches observer_publication.go. Caller must release
 // before invoking any lifecycle/native work, or acquiring App.mu again.
 func (s *nativeProbeScope) lockCurrent(a *App, ctx context.Context) (func(), time.Time, error) {
-	if a == nil || s == nil || s.applied == nil || s.config == nil || s.manager == nil || s.engine == nil || s.clock == nil || ctx == nil || ctx.Err() != nil || s.epoch <= 0 {
+	if a == nil || s == nil || s.applied == nil || s.config == nil || s.manager == nil || s.engine == nil || s.clock == nil || s.path == nil || s.epoch <= 0 {
+		return nil, time.Time{}, core.ErrNativeScopeUnavailable
+	}
+	publication := capturePublicationContext(ctx)
+	if publication == nil {
 		return nil, time.Time{}, core.ErrNativeScopeUnavailable
 	}
 	runtime_.mu.Lock()
@@ -65,9 +70,10 @@ func (s *nativeProbeScope) lockCurrent(a *App, ctx context.Context) (func(), tim
 		}
 	}()
 	cc := s.applied
-	if ctx.Err() != nil || !a.protectionDesired || a.startupErr != nil || a.watchdogBlocked.Load() || a.profileTransition || a.closing.Load() || a.trustBlocked || a.operationID != s.intent || a.intentSource != s.source || !s.source.Current() || a.observedClock != s.clock ||
+	if !publication.current() || !a.protectionDesired || a.startupErr != nil || a.watchdogBlocked.Load() || a.profileTransition || a.closing.Load() || a.trustBlocked || a.operationID != s.intent || a.intentSource != s.source || !s.source.Current() || a.observedClock != s.clock ||
 		a.probeFactory != nil || a.tunnelBoundary != nil || a.policy != nil || nativeProbeHelperSHA256 != s.pin || !canonicalApprovalSHA256(s.pin) ||
-		netEpoch.num != s.epoch || cc.SessionID == 0 || cc.SessionID != s.config.SessionID || cc.OwnerID != s.config.OwnerID || cc.OwnerGeneration != s.config.OwnerGeneration ||
+		netEpoch.num != s.epoch || netEpoch.path != s.path || !s.path.current.Load() || netEpoch.knownDown || netEpoch.powerBlocked.Load() ||
+		cc.SessionID == 0 || cc.SessionID != s.config.SessionID || cc.OwnerID != s.config.OwnerID || cc.OwnerGeneration != s.config.OwnerGeneration ||
 		cc.TUNName != render.TUNInterfaceName || cc.TUNName != s.config.TUNName || cc.SelectorDefault != s.config.SelectorDefault || cc.Profile != s.config.Profile || cc.Validity != s.config.Validity {
 		return nil, time.Time{}, core.ErrNativeScopeUnavailable
 	}
@@ -75,7 +81,7 @@ func (s *nativeProbeScope) lockCurrent(a *App, ctx context.Context) (func(), tim
 	if err == nil {
 		_, err = s.config.Validity.Remaining(now)
 	}
-	if err != nil || !s.started.IsZero() && now.Before(s.started) || ctx.Err() != nil {
+	if err != nil || !s.started.IsZero() && now.Before(s.started) || !publication.current() || !s.source.Current() || !s.path.current.Load() || a.closing.Load() || a.watchdogBlocked.Load() || netEpoch.powerBlocked.Load() {
 		return nil, time.Time{}, core.ErrNativeScopeUnavailable
 	}
 	handedOff = true
@@ -85,11 +91,12 @@ func (s *nativeProbeScope) lockCurrent(a *App, ctx context.Context) (func(), tim
 // Caller holds operationMu. Only this explicit native action may reach the OS;
 // injected/local probe components opt out before runtime or interface queries.
 func (a *App) captureNativeProbeScope(ctx context.Context, intent uint64) (*nativeProbeScope, error) {
-	if ctx == nil {
+	publication := capturePublicationContext(ctx)
+	if publication == nil || !publication.hasOperation || !publication.hasPath || publication.path == nil {
 		return nil, core.ErrNativeScopeUnavailable
 	}
-	operation, ok := ctx.Value(appOperationContextKey{}).(*appOperationScope)
-	if !ok || operation == nil || operation.app != a || operation.intent != intent || !operation.intentSource.Current() {
+	operation := publication.operation
+	if operation == nil || operation.app != a || operation.intent != intent || !operation.intentSource.Current() {
 		return nil, core.ErrNativeScopeUnavailable
 	}
 	a.mu.Lock()
@@ -106,7 +113,7 @@ func (a *App) captureNativeProbeScope(ctx context.Context, intent uint64) (*nati
 		return nil, core.ErrNativeScopeUnavailable
 	}
 	scope := &nativeProbeScope{applied: applied, config: applied.Clone(), manager: manager, engine: engine, clock: clock,
-		intent: intent, source: operation.intentSource, epoch: currentChannelEpoch(), pin: nativeProbeHelperSHA256}
+		intent: intent, source: operation.intentSource, path: publication.path, epoch: currentChannelEpoch(), pin: nativeProbeHelperSHA256}
 	release, started, err := scope.lockCurrent(a, ctx)
 	if err != nil {
 		return nil, err

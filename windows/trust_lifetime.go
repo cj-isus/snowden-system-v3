@@ -60,7 +60,7 @@ func (a *App) retainSessionClock(cc *render.ClientConfig) error {
 // Applied cc is immutable: persist from a copy, never mutate live snapshots.
 func (a *App) checkpointSessionClock(cc *render.ClientConfig) bool {
 	intent, desired := a.probeIntent()
-	if !desired || a.ctx == nil || a.ctx.Err() != nil {
+	if !desired || !a.appLifetimeCurrent() {
 		return false
 	}
 	a.operationMu.Lock()

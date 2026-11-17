@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/netip"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -153,9 +152,7 @@ func (owner *nativeWFPSessionOwner) readPolicyMode(ctx context.Context, sublayer
 		if recovered := recover(); recovered != nil || !complete && finalErr == nil {
 			finalErr = core.ErrNativeScopeUnavailable
 		}
-		if ctx != nil {
-			finalErr = errors.Join(finalErr, ctx.Err())
-		}
+		finalErr = errors.Join(finalErr, owner.queryScope(ctx))
 		if finalErr != nil {
 			rules, validSublayer = nil, false
 		}
@@ -166,13 +163,16 @@ func (owner *nativeWFPSessionOwner) readPolicyMode(ctx context.Context, sublayer
 		}
 	}()
 	defer wfpCleanupStep(&finalErr, func() error { return reader.cleanup(owner.handle) })
+	if err := owner.queryScope(ctx); err != nil {
+		return nil, false, err
+	}
 	if ctx == nil || ctx.Err() != nil || !owner.callsReturned() || owner.handle == 0 || owner.closeStarted || owner.closed || reader.memory != nil || reader.enum != 0 || reader.freeStarted || reader.destroyStarted ||
 		unsafe.Sizeof(diagnosticWFPEnumTemplate{}) != 72 || unsafe.Sizeof(diagnosticWFPSublayer{}) != 72 {
 		return nil, false, core.ErrNativeScopeUnavailable
 	}
 	if owner.transaction == nil || owner.transaction.phase == wfpTransactionFinished {
 		ownsTransaction = true // retain the original pending transaction even on Begin error
-		if err := owner.beginTransaction(true); err != nil {
+		if err := owner.beginReadTransaction(ctx); err != nil {
 			return nil, false, err
 		}
 	} else if owner.transaction.phase != wfpTransactionActive {
@@ -194,18 +194,24 @@ func (owner *nativeWFPSessionOwner) readPolicyMode(ctx context.Context, sublayer
 		}
 	}
 	reader.template = diagnosticWFPEnumTemplate{provider: &owner.provider, flags: 8 | 16, actionMask: ^uint32(0)}
+	if err := owner.queryScope(ctx); err != nil {
+		return nil, false, err
+	}
 	if err := reader.startQuery(); err != nil {
 		return nil, false, err
 	}
 	code, _, _ := diagnosticWFPEnumCreate.Call(uintptr(owner.handle), uintptr(unsafe.Pointer(&reader.template)), uintptr(unsafe.Pointer(&reader.enum)))
 	reader.queryPending = false
 	runtime.KeepAlive(owner)
+	if err := owner.queryScope(ctx); err != nil {
+		return nil, false, err
+	}
 	if uint32(code) == uint32(windows.FWP_E_PROVIDER_NOT_FOUND) && reader.enum == 0 {
 		state, err := owner.inspectObjects(ctx)
 		if err != nil || state.providerPresent {
 			return nil, false, core.ErrNativeScopeUnavailable
 		}
-		resultErr := ctx.Err()
+		resultErr := owner.queryScope(ctx)
 		complete = true
 		return nil, validSublayer, resultErr
 	}
@@ -214,7 +220,7 @@ func (owner *nativeWFPSessionOwner) readPolicyMode(ctx context.Context, sublayer
 	}
 	seen := map[wf.RuleID]bool{}
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := owner.queryScope(ctx); err != nil {
 			return nil, false, err
 		}
 		reader.count = 0
@@ -224,6 +230,9 @@ func (owner *nativeWFPSessionOwner) readPolicyMode(ctx context.Context, sublayer
 		code, _, _ = diagnosticWFPEnumRead.Call(uintptr(owner.handle), uintptr(reader.enum), 16, uintptr(unsafe.Pointer(&reader.memory)), uintptr(unsafe.Pointer(&reader.count)))
 		reader.queryPending = false
 		runtime.KeepAlive(owner)
+		if err := owner.queryScope(ctx); err != nil {
+			return nil, false, err // original page is retained for unconditional cleanup
+		}
 		if code != 0 || reader.count > 16 || reader.count > 0 && reader.memory == nil || len(rules)+int(reader.count) > 32 {
 			return nil, false, core.ErrNativeScopeUnavailable
 		}
@@ -251,78 +260,9 @@ func (owner *nativeWFPSessionOwner) readPolicyMode(ctx context.Context, sublayer
 			return nil, false, err
 		}
 	}
-	resultErr := ctx.Err()
+	resultErr := owner.queryScope(ctx)
 	complete = true
 	return rules, validSublayer, resultErr
-}
-
-func decodeOwnedWFPRule(raw *diagnosticWFPFilter) (*wf.Rule, error) {
-	if raw == nil || raw.provider == nil || *raw.provider != windows.GUID(wfpProviderID) || raw.id == 0 || raw.count > 8 || raw.count > 0 && raw.conditions == nil || raw.weight.typeID != 4 || raw.weight.value == 0 || raw.effective.typeID != 4 || raw.effective.value == 0 || raw.flags & ^uint32(1|2|8|16|32|64) != 0 || raw.data.size != 0 || raw.action.key != (windows.GUID{}) || raw.context[0] != 0 || raw.reserved != nil {
-		return nil, core.ErrNativeScopeUnavailable
-	}
-	weight := *(*uint64)(unsafe.Pointer(raw.weight.value))
-	if weight != *(*uint64)(unsafe.Pointer(raw.effective.value)) {
-		return nil, core.ErrNativeScopeUnavailable
-	}
-	rule := &wf.Rule{ID: wf.RuleID(raw.key), KernelID: raw.id, Provider: wfpProviderID, Layer: wf.LayerID(raw.layer), Sublayer: wf.SublayerID(raw.sublayer), Weight: weight,
-		Action: wf.Action(raw.action.typeID), Persistent: raw.flags&1 != 0, BootTime: raw.flags&2 != 0, HardAction: raw.flags&8 != 0, PermitIfMissing: raw.flags&16 != 0, Disabled: raw.flags&32 != 0}
-	if rule.Action != wf.ActionPermit && rule.Action != wf.ActionBlock {
-		return nil, core.ErrNativeScopeUnavailable
-	}
-	for _, condition := range unsafe.Slice(raw.conditions, int(raw.count)) {
-		value, err := decodeWFPCondition(condition)
-		if err != nil {
-			return nil, err
-		}
-		rule.Conditions = append(rule.Conditions, &wf.Match{Field: wf.FieldID(condition.field), Op: wf.MatchType(condition.match), Value: value})
-	}
-	return rule, nil
-}
-
-func decodeWFPCondition(condition diagnosticWFPCondition) (any, error) {
-	v := condition.value
-	// Read only the active C union member's width. Padding/unused upper bytes
-	// are not required to be zero and must not change an otherwise exact match.
-	switch wf.FieldID(condition.field) {
-	case wf.FieldIPProtocol:
-		if v.typeID == 1 {
-			return wf.IPProto(*(*uint8)(unsafe.Pointer(&v.value))), nil
-		}
-	case wf.FieldFlags:
-		if v.typeID == 3 {
-			return wf.ConditionFlag(*(*uint32)(unsafe.Pointer(&v.value))), nil
-		}
-	case wf.FieldIPLocalPort, wf.FieldIPRemotePort:
-		if v.typeID == 2 {
-			return *(*uint16)(unsafe.Pointer(&v.value)), nil
-		}
-	case wf.FieldIPLocalInterface:
-		if v.typeID == 4 && v.value != 0 {
-			return *(*uint64)(unsafe.Pointer(v.value)), nil
-		}
-	case wf.FieldIPRemoteAddress:
-		if v.typeID == 3 {
-			x := *(*uint32)(unsafe.Pointer(&v.value))
-			return netip.AddrFrom4([4]byte{byte(x >> 24), byte(x >> 16), byte(x >> 8), byte(x)}), nil
-		}
-	case wf.FieldALEAppID:
-		if v.typeID == 12 && v.value != 0 {
-			blob := (*diagnosticWFPBlob)(unsafe.Pointer(v.value))
-			if blob.size >= 2 && blob.size <= 65522 && blob.size%2 == 0 && blob.data != nil {
-				units := unsafe.Slice(blob.data, int(blob.size/2))
-				if units[len(units)-1] != 0 {
-					break
-				}
-				for _, unit := range units[:len(units)-1] {
-					if unit == 0 {
-						return nil, core.ErrNativeScopeUnavailable
-					}
-				}
-				return windows.UTF16ToString(units), nil
-			}
-		}
-	}
-	return nil, core.ErrNativeScopeUnavailable
 }
 
 // Existing root readers also use this retained native lane. An uncertain page,
@@ -339,7 +279,7 @@ type nativeWFPReadSnapshot struct {
 
 func readOwnedWFPPolicy(ctx context.Context, sublayer bool) ([]*wf.Rule, bool, error) {
 	value, err := withOwnedWFPReader(ctx, func(owner *nativeWFPSessionOwner) (nativeWFPReadSnapshot, error) {
-		if err := owner.openSession(); err != nil {
+		if err := owner.openSessionContext(ctx); err != nil {
 			return nativeWFPReadSnapshot{}, err
 		}
 		rules, valid, err := owner.readPolicy(ctx, sublayer)
@@ -367,9 +307,7 @@ func withOwnedWFPReader[T any](ctx context.Context, read func(*nativeWFPSessionO
 				finalErr = errors.Join(finalErr, core.ErrHelperCleanup, err)
 			}
 		}
-		if ctx != nil && ctx.Err() != nil {
-			finalErr = errors.Join(finalErr, ctx.Err())
-		}
+		finalErr = errors.Join(finalErr, wfpOperationScope(ctx))
 		if finalErr != nil {
 			value = zero
 		}
@@ -380,8 +318,8 @@ func withOwnedWFPReader[T any](ctx context.Context, read func(*nativeWFPSessionO
 		}
 		wfpReadLane.owner = nil
 	}
-	if ctx == nil || ctx.Err() != nil {
-		return zero, core.ErrNativeScopeUnavailable
+	if err := wfpOperationScope(ctx); err != nil {
+		return zero, err
 	}
 	owner := &nativeWFPSessionOwner{}
 	wfpReadLane.owner = owner

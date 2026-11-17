@@ -32,22 +32,55 @@ func (a *App) intentRegistrationLocked() intentRegistration {
 // Staging outside the serialized lifecycle slot may only inherit this exact
 // request. The actual original path is a negative continuity fence, not network
 // availability/proof; scopeContext never replaces an existing stale path.
-func (a *App) contextForIntent(registration intentRegistration) (context.Context, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || !registration.currentLocked(a) {
+func (a *App) contextForIntent(registration intentRegistration) (ctx context.Context, finalErr error) {
+	returned := false
+	defer func() {
+		if !returned {
+			_ = recover() // no context payload in a staging error; Goexit still unwinds caller
+			ctx, finalErr = nil, context.Canceled
+		}
+	}()
+	if a == nil {
 		return nil, context.Canceled
 	}
-	ctx := netEpoch.scopeContext(a.ctx)
-	path, _ := ctx.Value(networkPathContextKey{}).(*networkPathSource)
-	var sources core.OperationSources
-	if path != nil {
-		sources = core.OperationSources{Intent: registration.source, Path: &path.current, Closing: &a.closing}
-	}
-	ctx = core.WithOperationSources(ctx, sources)
-	if !lifecyclePublicationCurrent(ctx) {
+	parent, lifetime, path, valid := func() (context.Context, core.OperationFence, *networkPathSource, bool) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if !a.appLifetimeCurrentLocked() || a.closing.Load() || !registration.currentLocked(a) {
+			return nil, core.OperationFence{}, nil, false
+		}
+		return a.ctx, a.ctxFence, netEpoch.pathSource(), true // App -> epoch, value-only
+	}()
+	if !valid || path == nil {
 		return nil, context.Canceled
 	}
+	ctx = parent
+	if original, ok := parent.Value(networkPathContextKey{}).(*networkPathSource); ok && original != nil {
+		if original != path {
+			return nil, context.Canceled // an existing old binding never adopts a new route
+		}
+	} else {
+		ctx = context.WithValue(parent, networkPathContextKey{}, path)
+	}
+	ctx = core.WithOperationSources(ctx, core.OperationSources{Intent: registration.source, Path: &path.current, Closing: &a.closing})
+	publication := capturePublicationContext(ctx) // real context methods outside value locks
+	if publication == nil {
+		return nil, context.Canceled
+	}
+	current := func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if !lifetime.Current() || !a.appLifetimeCurrentLocked() || a.closing.Load() || !registration.currentLocked(a) {
+			return false
+		}
+		netEpoch.mu.Lock()
+		defer netEpoch.mu.Unlock()
+		return netEpoch.path == path && path.current.Load() && !netEpoch.knownDown && !netEpoch.powerBlocked.Load() && publication.current()
+	}()
+	if !current {
+		return nil, context.Canceled
+	}
+	returned = true
 	return ctx, nil
 }
 
@@ -55,7 +88,7 @@ func (a *App) contextForIntent(registration intentRegistration) (context.Context
 // and epoch cancellation. Unlike beginOperation this does not require running
 // protection, and creates no appOperationScope/probe/native/health authority.
 func (a *App) bindUpdateOperationLocked(registration intentRegistration) (context.Context, context.CancelFunc, error) {
-	if a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || !registration.currentLocked(a) {
+	if !a.appLifetimeCurrentLocked() || a.closing.Load() || !registration.currentLocked(a) {
 		return nil, nil, context.Canceled
 	}
 	ctx, cancel := netEpoch.bindOperation(a.ctx)

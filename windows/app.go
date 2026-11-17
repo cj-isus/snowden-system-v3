@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 // Намерение защиты независимо от состояния engine; сбой не равен Disconnect.
 type App struct {
 	ctx                        context.Context
+	ctxFence                   core.OperationFence // original startup lifetime, published once under mu
 	vault                      *secretvault.Manager
 	mu                         sync.Mutex
 	state                      AppState
@@ -150,7 +152,7 @@ func (a *App) prepareStartup(ctx context.Context) (profileErr error, startServic
 
 func (a *App) prepareStartupBody(ctx context.Context, outcome *startupOutcome) (error, bool) {
 	a.mu.Lock()
-	if a.startupAttempted {
+	if a.startupAttempted || a.ctx != nil {
 		a.mu.Unlock()
 		return nil, false
 	}
@@ -159,11 +161,27 @@ func (a *App) prepareStartupBody(ctx context.Context, outcome *startupOutcome) (
 	outcome.done = a.updateGUIStartupDone // only this original preparation may close it
 	outcome.registration = a.intentRegistrationLocked()
 	a.ctx = ctx
+	a.ctxFence = core.OperationFence{} // no positive lifetime before original capture returns
 	skip := ctx == nil || a.closing.Load() || a.quitRequested
 	a.mu.Unlock()
-	if skip || ctx.Err() != nil {
+	if skip {
 		return nil, false
 	}
+	fence, err := core.CaptureOperationFence(ctx) // original callbacks outside App.mu, before resources
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, false
+		}
+		a.markStartupFailure(errAppLifetimeUnavailable)
+		return errAppLifetimeUnavailable, false
+	}
+	a.mu.Lock()
+	if a.closing.Load() || a.quitRequested || !fence.Current() {
+		a.mu.Unlock()
+		return nil, false
+	}
+	a.ctxFence = fence // startupAttempted/operationMu retain this exact original ctx
+	a.mu.Unlock()
 
 	// Асинхронный durable-писатель журнала (V2-034) — до любых appendLog.
 	a.startLogWriter()
@@ -202,7 +220,7 @@ func (a *App) prepareStartupBody(ctx context.Context, outcome *startupOutcome) (
 	ready := func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if a.closing.Load() || a.quitRequested || ctx.Err() != nil {
+		if a.closing.Load() || a.quitRequested || !a.appLifetimeCurrentLocked() {
 			return false
 		}
 		if a.startupIntent.currentLocked(a) {
@@ -247,7 +265,7 @@ func (a *App) prepareStartupBody(ctx context.Context, outcome *startupOutcome) (
 	a.startTray()
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return profileErr, !a.installedImageChanged && !a.closing.Load() && !a.quitRequested && ctx.Err() == nil
+	return profileErr, !a.installedImageChanged && !a.closing.Load() && !a.quitRequested && a.appLifetimeCurrentLocked()
 }
 
 // The ordinary startup and a DOM-ready accepted update share these producers.
@@ -284,7 +302,7 @@ func (a *App) prepareNetworkServicesBody() bool {
 	restricted := func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || a.quitRequested || a.installedImageChanged || a.startupErr != nil
+		return !a.appLifetimeCurrentLocked() || a.closing.Load() || a.quitRequested || a.installedImageChanged || a.startupErr != nil
 	}()
 	if restricted {
 		return false

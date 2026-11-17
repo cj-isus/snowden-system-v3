@@ -33,9 +33,23 @@ func (manager *Manager) completeOperationLocked(operation *lifecycleOperation) b
 	}
 	var watch *lifetimeWatch
 	if manager.state == StateRunning {
+		if err := errors.Join(operation.terminalTrust.current(), operation.terminalContext.current()); err != nil {
+			manager.state, manager.lifetimeErr = StateError, err
+			return false
+		}
 		var err error
 		watch, err = manager.prepareLifetimeLocked()
 		if err != nil {
+			manager.state, manager.lifetimeErr = StateError, err
+			return false
+		}
+		if err := errors.Join(operation.terminalTrust.current(), operation.terminalContext.current()); err != nil {
+			if watch != nil {
+				// This exact reservation has not spawned either task or made a
+				// native call. Drop it without inventing an observer done receipt.
+				watch.cancel() // private stdlib child of Background, no custom callbacks
+				manager.lifetimeWatch = nil
+			}
 			manager.state, manager.lifetimeErr = StateError, err
 			return false
 		}
@@ -84,6 +98,7 @@ func (manager *Manager) finishLifecycle(ctx context.Context, operation *lifecycl
 	var sourceErr error
 	var proxyErr error
 	var currentProbe Probe
+	var trustBudget *lifecycleTrustBudget
 	if state == StateRunning && !lifetimeCleanup {
 		manager.mu.RLock()
 		ours := manager.active == operation
@@ -92,18 +107,28 @@ func (manager *Manager) finishLifecycle(ctx context.Context, operation *lifecycl
 		if !ours {
 			return ErrInvalidState
 		}
-		_, trustErr = lifetimeRemaining(currentProbe) // callback outside Manager locks, including restored-old constraints
+		trustBudget, trustErr = observeLifecycleTrust(currentProbe) // includes restored-old constraints
 		sourceErr = validateLifecycleSource(ctx, currentProbe)
 		if trustErr == nil && sourceErr == nil && terminalContextCause(ctx) == nil {
 			proxyErr = manager.validateAppliedProxy(ctx) // original native handle, never under terminal value locks
 		}
+		if trustErr == nil && sourceErr == nil && proxyErr == nil && terminalContextCause(ctx) == nil {
+			// Source/native readback may consume the preceding observation's
+			// whole budget. Take an actual new sample after those calls return.
+			trustBudget, trustErr = observeLifecycleTrust(currentProbe)
+		}
 	}
+	positive := state == StateRunning && !lifetimeCleanup && lifetimeErr == nil && trustErr == nil && sourceErr == nil && proxyErr == nil
+	completion, completionErr := prepareLifecycleCompletion(ctx, currentProbe, manager, positive)
 	lockManager()
 	if operation == nil || manager.active != operation {
 		unlockManager()
 		return ErrInvalidState
 	}
-	cause := errors.Join(terminalContextCause(ctx), lifetimeErr, trustErr, sourceErr, proxyErr)
+	if state == StateRunning && !lifetimeCleanup && trustErr == nil {
+		trustErr = trustBudget.current()
+	}
+	cause := errors.Join(completion.current(), completionErr, lifetimeErr, trustErr, sourceErr, proxyErr)
 	if operation.stopRequested {
 		cause = errors.Join(cause, context.Canceled)
 	}
@@ -112,18 +137,26 @@ func (manager *Manager) finishLifecycle(ctx context.Context, operation *lifecycl
 			cause = ErrEngineWorkerUnavailable
 		} else {
 			var releaseSource func()
-			releaseSource, cause = guardLifecycleCompletion(ctx, currentProbe, manager)
+			releaseSource, cause = guardLifecycleCompletion(completion)
 			if cause == nil {
 				previous := manager.state
-				manager.state = StateRunning // terminal decision while source lease is held
-				cause = releaseLifecycleCompletion(releaseSource)
+				cause = errors.Join(trustBudget.current(), completion.current()) // source guard may itself have waited
 				if cause == nil {
+					manager.state = StateRunning // provisional decision under source lease
+				}
+				cause = errors.Join(cause, releaseLifecycleCompletion(releaseSource), trustBudget.current(), completion.current())
+				if cause == nil {
+					operation.terminalTrust = trustBudget
+					operation.terminalContext = completion
 					if manager.completeOperationLocked(operation) {
 						unlockManager()
 						operation.cancel()
 						return nil
 					}
-					cause = ErrHelperCleanup // original sampler receipt is mandatory
+					cause = errors.Join(trustBudget.current(), completion.current())
+					if cause == nil {
+						cause = ErrHelperCleanup // original sampler receipt is mandatory
+					}
 				}
 				manager.state = previous // active owner/done retained for actual failure cleanup
 			}

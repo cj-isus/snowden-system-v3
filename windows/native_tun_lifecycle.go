@@ -21,6 +21,7 @@ type nativeTUNLifecycleScope struct {
 	engine                    *core.Engine
 	clock                     *metadata.ObservedClock
 	operation                 context.Context
+	operationFence            core.OperationFence // original scope lifetime, never refreshed by callers
 	path                      *networkPathSource
 	owner, generation, intent uint64
 	epoch                     int
@@ -35,7 +36,11 @@ type nativeTUNLifecycleScope struct {
 // Same lock order as existing publication scopes: runtime -> Manager -> App ->
 // epoch -> clock. All native/RPC/interface/filter work happens after release.
 func (scope *nativeTUNLifecycleScope) lockCurrent(ctx context.Context) (func(), time.Time, error) {
-	if scope == nil || scope.app == nil || scope.candidate == nil || scope.config == nil || scope.manager == nil || scope.engine == nil || scope.clock == nil || scope.operation == nil || scope.operation.Err() != nil || ctx == nil || ctx.Err() != nil || scope.path == nil || scope.epoch <= 0 {
+	if scope == nil || scope.app == nil || scope.candidate == nil || scope.config == nil || scope.manager == nil || scope.engine == nil || scope.clock == nil || scope.operation == nil || !scope.operationFence.Current() || scope.path == nil || scope.epoch <= 0 {
+		return nil, time.Time{}, core.ErrNativeScopeUnavailable
+	}
+	publication := capturePublicationContext(ctx)
+	if publication == nil {
 		return nil, time.Time{}, core.ErrNativeScopeUnavailable
 	}
 	runtime_.mu.Lock()
@@ -58,10 +63,10 @@ func (scope *nativeTUNLifecycleScope) lockCurrent(ctx context.Context) (func(), 
 		runtime_.mu.Unlock()
 	}
 	cc := scope.candidate
-	if ctx.Err() != nil || scope.operation.Err() != nil || !a.protectionDesired || a.profileTransition || a.closing.Load() || a.trustBlocked || a.restartCommit != nil || a.installedImageChanged ||
+	if !publication.current() || !scope.operationFence.Current() || !a.protectionDesired || a.profileTransition || a.closing.Load() || a.trustBlocked || a.restartCommit != nil || a.installedImageChanged ||
 		a.operationID != scope.intent || a.observedClock != scope.clock || a.probeFactory != nil || a.tunnelBoundary != nil || a.policy != nil ||
 		nativeProbeHelperSHA256 != scope.pin || !canonicalApprovalSHA256(scope.pin) || netEpoch.num != scope.epoch ||
-		netEpoch.path != scope.path || !scope.path.current.Load() || netEpoch.knownDown || netEpoch.powerBlocked.Load() || !lifecyclePublicationCurrent(ctx) ||
+		netEpoch.path != scope.path || !scope.path.current.Load() || netEpoch.knownDown || netEpoch.powerBlocked.Load() ||
 		cc.SessionID == 0 || cc.SessionID != scope.config.SessionID || cc.TUNName != render.TUNInterfaceName || cc.TUNName != scope.config.TUNName ||
 		cc.SelectorDefault != scope.config.SelectorDefault || cc.ExpectedEgress != scope.config.ExpectedEgress || cc.Profile != scope.config.Profile || cc.Validity != scope.config.Validity {
 		release()
@@ -71,7 +76,7 @@ func (scope *nativeTUNLifecycleScope) lockCurrent(ctx context.Context) (func(), 
 	if err == nil {
 		_, err = scope.config.Validity.Remaining(now)
 	}
-	if err != nil || !scope.started.IsZero() && now.Before(scope.started) || ctx.Err() != nil || scope.operation.Err() != nil {
+	if err != nil || !scope.started.IsZero() && now.Before(scope.started) || !publication.current() || !scope.operationFence.Current() {
 		release()
 		return nil, time.Time{}, core.ErrNativeScopeUnavailable
 	}
@@ -93,6 +98,10 @@ func (a *App) captureTUNLifecycleScope(ctx context.Context, cc *render.ClientCon
 	if !valid {
 		return nil, core.ErrNativeScopeUnavailable
 	}
+	operationFence, err := core.CaptureOperationFence(ctx)
+	if err != nil {
+		return nil, core.ErrNativeScopeUnavailable
+	}
 	runtime_.mu.Lock()
 	manager, engine := runtime_.manager, runtime_.engine
 	runtime_.mu.Unlock()
@@ -102,7 +111,7 @@ func (a *App) captureTUNLifecycleScope(ctx context.Context, cc *render.ClientCon
 	owner, generation := manager.Owner()
 	path, _ := ctx.Value(networkPathContextKey{}).(*networkPathSource)
 	scope := &nativeTUNLifecycleScope{app: a, candidate: cc, config: cc.Clone(), manager: manager, engine: engine,
-		clock: a.trustClock(), operation: ctx, path: path, owner: owner, generation: generation, intent: intent,
+		clock: a.trustClock(), operation: ctx, operationFence: operationFence, path: path, owner: owner, generation: generation, intent: intent,
 		epoch: currentChannelEpoch(), pin: nativeProbeHelperSHA256, expected: expected.Unmap()}
 	release, started, err := scope.lockCurrent(ctx)
 	if err != nil {

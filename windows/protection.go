@@ -15,6 +15,12 @@ type protectionPolicy interface {
 	Release() error
 }
 
+// Optional negative stage for original actor retirement. Nil means general
+// permits were revoked, not that a complete direct-traffic barrier was proved.
+type protectionRetirementPolicy interface {
+	RevokeDirect() error
+}
+
 type strictWFPPolicy struct{}
 
 var errRuntimeOwnerUnavailable = errors.New("engine has no lifecycle owner; cleanup unconfirmed")
@@ -86,7 +92,7 @@ func (a *App) beginOperation(id uint64, original ...*core.OperationSource) (cont
 	if len(original) > 1 || (len(original) == 1 && (original[0] == nil || original[0] != a.intentSource)) {
 		return nil, nil, false // captured Start/Switch cannot adopt a successor's source
 	}
-	if a.ctx == nil || a.ctx.Err() != nil || a.startupErr != nil || a.watchdogBlocked.Load() || !a.protectionDesired || a.profileTransition || a.proxyConflict || a.closing.Load() || a.restartCommit != nil || a.installedImageChanged || a.operationID != id || id == 0 || !a.intentSource.Current() {
+	if !a.appLifetimeCurrentLocked() || a.startupErr != nil || a.watchdogBlocked.Load() || !a.protectionDesired || a.profileTransition || a.proxyConflict || a.closing.Load() || a.restartCommit != nil || a.installedImageChanged || a.operationID != id || id == 0 || !a.intentSource.Current() {
 		return nil, nil, false
 	}
 	ctx, cancel := netEpoch.bindOperation(a.ctx) // original App lifetime; never revive a canceled owner on Background

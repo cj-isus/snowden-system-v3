@@ -66,7 +66,7 @@ func (a *App) OpenUILifecycle() (*UILifecycleSessionView, error) {
 	session := hex.EncodeToString(nonce[:])
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() {
+	if !a.appLifetimeCurrentLocked() || a.closing.Load() {
 		return nil, errUILifecycleRequest
 	}
 	if a.uiLifecycle == nil {

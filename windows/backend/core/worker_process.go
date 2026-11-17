@@ -53,22 +53,27 @@ type ownedProcessLimits struct {
 // One Wait and one pipe-I/O goroutine have explicit completion channels.
 // An uncertain owner is retained and prevents replacement within that owner.
 type engineProcess struct {
-	instance       uint64
-	ancestor       guiAncestor // exact process bootstrap source, captured once before native acquisition
-	successorGUI   bool        // original spawn role; successor leaves the old GUI role Job
-	host           processHost
-	input          io.WriteCloser
-	output         io.ReadCloser
-	done           chan struct{}
-	waitErr        error // published by close(done)
-	ioDone         chan struct{}
-	captureIO      *ownedPipeIO // original worker/helper/TUN I/O result published only by its done
-	sequence       uint64
-	ready          bool
-	spawnAttempted bool // original one-attempt native preparation, never reset after cleanup
-	unusable       bool
-	pipesClosed    bool
-	drained        bool // no process created, or exit + I/O completion + empty job established
+	instance          uint64
+	ancestor          guiAncestor // exact process bootstrap source, captured once before native acquisition
+	successorGUI      bool        // original spawn role; successor leaves the old GUI role Job
+	host              processHost
+	input             io.WriteCloser
+	output            io.ReadCloser
+	done              chan struct{}
+	waitErr           error // published by close(done)
+	ioDone            chan struct{}
+	captureIO         *ownedPipeIO // original worker/helper/TUN I/O result published only by its done
+	sequence          uint64
+	serviceDNSPending *engineServiceDNSCommand // original parent command only; never inherited by a replacement worker
+	nativeConsume     *engineNativeTUNConsume  // exact original parent consume; shared invalidation revokes it
+	tunOpening        *engineTUNScopeOpen      // exact parent open reservation, never a target-handle cleanup receipt
+	tunClosing        *engineTUNScopeClose     // exact parent close operation; actual ACK is retained separately
+	probePending      *engineProbePublication  // unpublished original reply/permit candidate through parent cleanup
+	ready             bool
+	spawnAttempted    bool // original one-attempt native preparation, never reset after cleanup
+	unusable          bool
+	pipesClosed       bool
+	drained           bool // no process created, or exit + I/O completion + empty job established
 }
 
 var engineProcessSequence atomic.Uint64
@@ -113,100 +118,10 @@ func (p *engineProcess) ioRetirementReady() error {
 	return p.captureIO.retirementReady()
 }
 
-// A single exchange owns both pipes. Timeout invalidates the protocol instead
-// of allowing a retry against an unknown command result. Retirement follows.
-func (p *engineProcess) exchange(ctx context.Context, request *workerRequest, limit time.Duration) (workerReply, error) {
-	if p.unusable || p.exited() {
-		return workerReply{}, ErrEngineWorkerUnavailable
+func (p *engineProcess) request(ctx *workerRPCContext, request workerRequest, limit time.Duration) (workerReply, error) {
+	if p == nil || ctx == nil || ctx.Context == nil {
+		return workerReply{}, errWorkerProtocol // no raw/metadata parent and no ID reserved
 	}
-	if err := p.ioRetirementReady(); err != nil {
-		p.unusable = true
-		return workerReply{}, errors.Join(errWorkerProtocol, err)
-	}
-	if err := contextError(ctx); err != nil {
-		p.unusable = true // a request may already have reserved its sequence
-		return workerReply{}, err
-	}
-	// Revocation/Stop must remain possible after a root query fails. All other
-	// commands, including hello and admission, require the original custody.
-	positive := request == nil || request.Action != "stop" && request.Action != "dns_pause" && request.Action != "tun_scope_close"
-	if positive {
-		if err := p.ancestorScope(ctx, true); err != nil {
-			p.unusable = true
-			return workerReply{}, err
-		}
-	}
-	if request != nil && workerStateReplyAction(request.Action) && !request.replyState.matches(p, request) {
-		p.unusable = true
-		return workerReply{}, errWorkerProtocol // no unbound/stale state command reaches either pipe
-	}
-	ctx, cancel := context.WithTimeout(ctx, limit)
-	defer cancel()
-	intentDone, operationDone, dependencyDone := operationSourceDone(ctx)
-	type workerExchange struct {
-		*ownedPipeIO // finite header/effects only; no pointer back to the potentially large reply
-		reply        workerReply
-	}
-	exchange := &workerExchange{ownedPipeIO: &ownedPipeIO{done: make(chan struct{}), effects: new(ownedPipeEffects)}}
-	p.captureIO, p.ioDone = exchange.ownedPipeIO, exchange.done
-	go func() {
-		finished := false
-		defer func() {
-			if recovered := recover(); recovered != nil || !finished {
-				exchange.err = errors.Join(exchange.err, errWorkerProtocol)
-			}
-			close(exchange.done) // goroutine end; original raw pending/return facts remain separate
-		}()
-		exchange.err = contextError(ctx) // the goroutine may start after intent/path revocation
-		if exchange.err == nil && request != nil {
-			exchange.err = writeWorkerFrame(ownedPipeWriter{ctx: ctx, writer: p.input, failure: errWorkerProtocol, effects: exchange.effects}, request, maxWorkerRequestBytes)
-		}
-		if exchange.err == nil {
-			exchange.err = readWorkerFrame(ownedPipeReader{ctx: ctx, reader: p.output, failure: errWorkerProtocol, effects: exchange.effects}, &exchange.reply, maxWorkerReplyBytes)
-		}
-		if exchange.err != nil {
-			if !errors.Is(exchange.err, context.Canceled) && !errors.Is(exchange.err, context.DeadlineExceeded) {
-				exchange.err = errWorkerProtocol // omit raw pipe/codec values and paths
-			}
-		} else {
-			expectedID := uint64(0)
-			if request != nil {
-				expectedID = request.ID
-			}
-			if exchange.reply.Version != workerProtocolVersion || exchange.reply.ID != expectedID || !validNativePreparedReply(request, exchange.reply) {
-				exchange.err = errWorkerProtocol // retain correlation failure even if the caller is canceled
-			} else {
-				exchange.err = workerCommandReplyFailure(request, exchange.reply)
-			}
-		}
-		finished = true
-	}()
-	var waitErr error
-	select {
-	case <-exchange.done:
-	case <-intentDone:
-		waitErr = context.Canceled
-	case <-operationDone:
-		waitErr = context.Canceled
-	case <-dependencyDone:
-		waitErr = context.Canceled
-	case <-ctx.Done():
-		waitErr = ctx.Err()
-	}
-	if err := errors.Join(waitErr, contextError(ctx), exchange.completedFailure()); err != nil {
-		p.unusable = true
-		return workerReply{}, err // only original-owner retirement may follow; no stale reply escapes
-	}
-	if positive {
-		if err := p.ancestorScope(ctx, true); err != nil {
-			p.unusable = true
-			return workerReply{}, err // no Start/admission observation after original root custody failed
-		}
-	}
-	return exchange.reply, nil // done published it and the original sources still permit observation
-}
-
-func (p *engineProcess) request(ctx context.Context, request workerRequest, limit time.Duration) (workerReply, error) {
 	if err := contextError(ctx); err != nil {
 		return workerReply{}, err // do not reserve an ID for already-revoked work
 	}
@@ -214,6 +129,21 @@ func (p *engineProcess) request(ctx context.Context, request workerRequest, limi
 		return workerReply{}, errWorkerProtocol
 	}
 	p.sequence++
+	if pending := p.serviceDNSPending; request.Action != "current" && pending != nil && (!pending.requested || pending.requestID != p.sequence) {
+		p.serviceDNSPending = nil // a newer non-current command revokes the old DNS owner before exchange
+	}
+	if pending := p.nativeConsume; request.Action != "current" && pending != nil && (!pending.requested || pending.requestID != p.sequence) {
+		p.nativeConsume = nil // the original native consume alone retains its slot through exchange
+	}
+	if pending := p.tunOpening; request.Action != "current" && pending != nil && (!pending.requested || pending.requestID != p.sequence) {
+		p.tunOpening = nil // only this original open command retains its preparation slot
+	}
+	if pending := p.tunClosing; request.Action != "current" && pending != nil && (!pending.requested || pending.requestID != p.sequence) {
+		p.tunClosing = nil // newer work cannot inherit the old close operation's success
+	}
+	if pending := p.probePending; request.Action != "current" && pending != nil && (!pending.requested || pending.requestID != p.sequence) {
+		p.probePending = nil // a later state-changing request supersedes this observation before exchange
+	}
 	request.Version, request.ID = workerProtocolVersion, p.sequence
 	return p.exchange(ctx, &request, limit)
 }
@@ -222,8 +152,8 @@ func (p *engineProcess) request(ctx context.Context, request workerRequest, limi
 // A revoked original source before reservation has neither used a protocol ID
 // nor started this exchange. Any reservation/unusable/exit remains uncertain
 // and must follow the existing original-process retirement path.
-func (p *engineProcess) sourceCanceledBeforeRequest(ctx context.Context, sequence uint64, err error) bool {
-	return p != nil && errors.Is(err, context.Canceled) && !OperationSourcesCurrent(ctx) &&
+func (p *engineProcess) sourceCanceledBeforeRequest(ctx *workerRPCContext, sequence uint64, err error) bool {
+	return p != nil && ctx != nil && ctx.Context != nil && errors.Is(err, context.Canceled) && !OperationSourcesCurrent(ctx) &&
 		p.sequence == sequence && !p.unusable && !p.exited()
 }
 
@@ -362,7 +292,10 @@ func (p *engineProcess) closePipes() (result error) {
 	return nil
 }
 
-func (e *Engine) startIsolatedLocked(ctx context.Context) error {
+func (e *Engine) startIsolatedLocked(ctx *workerRPCContext, attempt *engineStartOperation) error {
+	if ctx == nil || attempt == nil || e.startPending != attempt {
+		return ErrEngineWorkerUnavailable
+	}
 	e.clearForwardingPermitsLocked()
 	if e.process != nil {
 		return ErrEngineCleanupFailed // original process must be retired before replacement
@@ -375,7 +308,8 @@ func (e *Engine) startIsolatedLocked(ctx context.Context) error {
 		return errors.New("engine worker config exceeds allowed bounds")
 	}
 	process := newOwnedProcess()
-	e.process = process // before any native preparation or process creation
+	e.process = process       // before any native preparation or process creation
+	attempt.process = process // exact original partial owner before native acquisition
 	var err error
 	if process == nil {
 		err = ErrEngineWorkerUnavailable
@@ -408,12 +342,19 @@ func (e *Engine) startIsolatedLocked(ctx context.Context) error {
 		}
 	}
 	if err != nil || contextError(ctx) != nil {
+		attempt.retireAttempted = true // outer finalizer must not repeat an interrupted reap
 		return e.retireIsolatedFailureLocked(ErrEngineWorkerUnavailable, err, contextError(ctx))
 	}
 	return nil
 }
 
 func (e *Engine) retireIsolatedLocked() error {
+	if e.tunScope != nil && e.process != nil && e.tunScope.process == e.process {
+		e.tunScope.retirementAttempted = true // before any fallible original retirement step
+	}
+	if e.process != nil {
+		e.process.serviceDNSPending = nil // hand off before any fallible original reap, including abnormal return
+	}
 	e.clearForwardingPermitsLocked()
 	if e.process == nil {
 		return e.cleanupErr
@@ -445,13 +386,16 @@ func (e *Engine) stopIsolatedLocked() error {
 		return e.cleanupErr
 	}
 	if e.process.ready && !e.process.unusable && !e.process.exited() {
-		_, _ = e.process.request(context.Background(), workerRequest{Action: "stop"}, workerCloseTimeout)
+		_, _ = e.process.requestStop()
 	}
 	// A close reply is not cleanup proof; kernel handles/job accounting decide.
 	return e.retireIsolatedLocked()
 }
 
-func (e *Engine) isolatedCommandLocked(ctx context.Context, request workerRequest) (workerReply, error) {
+func (e *Engine) isolatedCommandLocked(ctx *workerRPCContext, request workerRequest) (workerReply, error) {
+	if ctx == nil || ctx.Context == nil {
+		return workerReply{}, errWorkerProtocol
+	}
 	if request.Action != "current" && request.Action != "switch" || request.Selector != "proxy" {
 		return workerReply{}, ErrSelectorSwitchUnavailable
 	}

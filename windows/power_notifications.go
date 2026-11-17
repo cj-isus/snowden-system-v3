@@ -98,7 +98,7 @@ func (a *App) recoverPowerContinuityBeforeOperation(intent uint64) error {
 	default:
 		return errServiceDNSObserverUnavailable
 	}
-	if !a.operationCurrent(intent) || a.ctx == nil || a.ctx.Err() != nil {
+	if !a.operationCurrent(intent) || !a.appLifetimeCurrent() {
 		return context.Canceled
 	}
 	if err := a.stopCoreGenerationLocked(stopFailure, intent); err != nil {
@@ -126,7 +126,7 @@ func (a *App) recoverDisconnectedPowerObservers(ctx context.Context) {
 	scope := func() (uint64, bool) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return a.operationID, ctx.Err() == nil && a.ctx != nil && a.ctx.Err() == nil && a.startupErr == nil && !a.protectionDesired &&
+		return a.operationID, ctx.Err() == nil && a.appLifetimeCurrentLocked() && a.startupErr == nil && !a.protectionDesired &&
 			!a.profileTransition && !a.closing.Load() && a.restartCommit == nil && !a.installedImageChanged &&
 			(a.state.State == "stopped" || a.state.State == "error")
 	}

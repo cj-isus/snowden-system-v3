@@ -159,12 +159,13 @@ var netWatch = &netWatcher{}
 
 // startNetWatch — запустить наблюдателя ровно один раз (из app.startup).
 func (a *App) startNetWatch() {
+	appLifetime := a.appLifetimeFence() // never acquire App.mu after netWatch.mu
 	netWatch.mu.Lock()
 	if netWatch.started {
 		netWatch.mu.Unlock()
 		return
 	}
-	if a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() {
+	if !appLifetime.Current() || a.closing.Load() {
 		netWatch.mu.Unlock()
 		return
 	}

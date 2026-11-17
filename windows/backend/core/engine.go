@@ -57,18 +57,21 @@ type boxInstance interface {
 // После успешного Start менеджер закрывает operationCtx — это НЕ должно
 // убивать туннель: соединения sing-box привязаны к контексту бокса.
 type Engine struct {
-	mu               sync.Mutex
-	box              boxInstance
-	rawJSON          []byte
-	runCtx           context.Context
-	runCancel        context.CancelFunc
-	cleanupErr       error
-	workerCustody    *workerIngressCustody // only serveEngineWorker supplies this negative capability
-	isolated         bool
-	process          *engineProcess
-	forwardingPermit *engineForwardingPermit // private original-worker receipt, never decoded from public reports
-	nativePermit     *engineNativeTUNPermit  // separate prepared native lane; no ordinary forwarding authority
-	tunScope         *engineTUNScope         // original target process owns its duplicated actor handle
+	mu                sync.Mutex
+	box               boxInstance
+	rawJSON           []byte
+	runCtx            context.Context
+	runCancel         context.CancelFunc
+	cleanupErr        error
+	workerCustody     *workerIngressCustody // only serveEngineWorker supplies this negative capability
+	isolated          bool
+	process           *engineProcess
+	startPending      *engineStartOperation   // exact pre-native start reservation; Stop revokes it
+	reloadPending     *engineReloadOperation  // original replacement owner across no-process/rollback gaps
+	forwardingPermit  *engineForwardingPermit // private original-worker receipt, never decoded from public reports
+	forwardingConsume *engineForwardingPermit // exact in-flight metadata handoff; any shared invalidation revokes it
+	nativePermit      *engineNativeTUNPermit  // separate prepared native lane; no ordinary forwarding authority
+	tunScope          *engineTUNScope         // original target process owns its duplicated actor handle
 	// Optional per-engine factory for deterministic lifecycle fault injection.
 	// Production uses newSingBox; it is not a shared/global test hook.
 	newBox func(context.Context, []byte) (boxInstance, error)
@@ -86,29 +89,6 @@ func NewIsolatedEngine(rawJSON []byte) *Engine {
 	return &Engine{rawJSON: append([]byte(nil), rawJSON...), isolated: true}
 }
 
-// Start запускает бокс. Повторный запуск без Stop — ошибка.
-func (e *Engine) Start(ctx context.Context) error {
-	if err := contextError(ctx); err != nil {
-		return err
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := contextError(ctx); err != nil {
-		return err
-	}
-	if e.cleanupErr != nil {
-		return e.cleanupErr
-	}
-	if e.box != nil || e.process != nil {
-		return ErrEngineAlreadyRunning
-	}
-	if len(e.rawJSON) == 0 {
-		return ErrEngineNotConfigured
-	}
-	// Собственный контекст времени жизни: только Stop/Reload закрывают его.
-	return e.startForOperation(ctx)
-}
-
 // Stop останавливает бокс (идемпотентно) и закрывает контекст времени жизни.
 func (e *Engine) Stop() error {
 	e.mu.Lock()
@@ -118,6 +98,17 @@ func (e *Engine) Stop() error {
 
 // Caller holds mu. Never forget an owner whose cleanup did not succeed.
 func (e *Engine) closeBoxLocked() (result error) {
+	e.startPending = nil // revoke preparation even before any process was created
+	e.reloadPending = nil
+	return e.closeBoxResourcesLocked()
+}
+
+// Caller holds Engine.mu. A registered reload uses this resource close while
+// retaining its own metadata reservation; public Stop revokes it above.
+func (e *Engine) closeBoxResourcesLocked() (result error) {
+	if e.process != nil {
+		e.process.serviceDNSPending = nil // Stop/reload close revokes the original DNS slot before callbacks
+	}
 	e.clearForwardingPermitsLocked()
 	if e.isolated {
 		return e.stopIsolatedLocked()
@@ -151,55 +142,6 @@ func (e *Engine) closeBoxLocked() (result error) {
 	return nil
 }
 
-// Reload заменяет конфиг на лету. Новый конфиг парсится sing-box ДО закрытия
-// старого бокса: битый апдейт не разрывает живой защищённый канал. Если новый
-// бокс не стартовал — предыдущий конфиг восстанавливается (rollback).
-func (e *Engine) Reload(ctx context.Context, rawJSON []byte) error {
-	if err := contextError(ctx); err != nil {
-		return err
-	}
-	if len(rawJSON) == 0 {
-		return errors.Join(ErrReloadRejected, errors.New("reload: empty config"))
-	}
-	if e.isolated && len(rawJSON) > maxWorkerConfigBytes {
-		return errors.Join(ErrReloadRejected, errors.New("reload: config exceeds worker bound"))
-	}
-	normalized, err := validatedRuntimeOptions(ctx, rawJSON)
-	if err != nil {
-		return errors.Join(ErrReloadRejected, err)
-	}
-
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := contextError(ctx); err != nil {
-		return err
-	}
-	if e.cleanupErr != nil {
-		return e.cleanupErr
-	}
-	if e.box == nil && e.process == nil {
-		return ErrEngineNotRunning
-	}
-
-	oldJSON := append([]byte(nil), e.rawJSON...)
-	if err := e.closeBoxLocked(); err != nil {
-		return fmt.Errorf("reload: close old box: %w", err)
-	}
-	e.rawJSON = normalized // the owned bytes that passed both validators, not a later caller slice
-	if err := e.startForOperation(ctx); err != nil {
-		if contextError(ctx) != nil || e.cleanupErr != nil {
-			return err // canceled or unretired candidate must never resurrect the old box
-		}
-		// Rollback: вернуть прежний рабочий конфиг, чтобы защищённый канал жил.
-		e.rawJSON = oldJSON
-		if restartErr := e.startForOperation(ctx); restartErr != nil {
-			return errors.Join(err, restartErr)
-		}
-		return errors.Join(errEngineReloadRolledBack, fmt.Errorf("reload: %w", err))
-	}
-	return nil
-}
-
 // Copy the applied bytes while Manager owns the lifecycle operation. Never
 // rebuild rollback configuration from descriptors or current secret values.
 func (e *Engine) rawSnapshot() []byte {
@@ -212,6 +154,9 @@ func (e *Engine) rawSnapshot() []byte {
 // operation detaches the callback: its later timeout cannot kill the tunnel.
 // This is cooperative cancellation, not a hard bound on third-party Close.
 func (e *Engine) startForOperation(ctx context.Context) (err error) {
+	if e.isolated {
+		return ErrEngineWorkerUnavailable // isolated startup requires a prepared context/current attempt
+	}
 	if err := contextError(ctx); err != nil {
 		return err
 	}
@@ -220,9 +165,6 @@ func (e *Engine) startForOperation(ctx context.Context) (err error) {
 		return err // before worker/factory/listeners/routes or protocol credentials
 	}
 	e.rawJSON = normalized // apply the validated graph; do not re-interpret caller aliases/defaults
-	if e.isolated {
-		return e.startIsolatedLocked(ctx)
-	}
 	lifetime := context.Background()
 	if e.workerCustody != nil {
 		lifetime = context.WithValue(lifetime, workerIngressCustodyKey{}, e.workerCustody)
@@ -279,90 +221,23 @@ func (e *Engine) SwitchDefault(selectorTag, tag string) (string, error) {
 	return e.SwitchDefaultContext(context.Background(), selectorTag, tag)
 }
 
-func (e *Engine) SwitchDefaultContext(ctx context.Context, selectorTag, tag string) (string, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := contextError(ctx); err != nil {
-		return "", err
-	}
-	if e.cleanupErr != nil {
-		return "", e.cleanupErr
-	}
-	if e.isolated {
-		if selectorTag != "proxy" || !validWorkerTag(tag) {
-			return "", ErrSelectorSwitchUnavailable
-		}
-		e.clearForwardingPermitsLocked()
-		command := workerRequest{Action: "switch", Selector: selectorTag, Tag: tag}
-		scope, err := prepareWorkerStateReply(e.process, e.rawJSON, command)
-		if err != nil {
-			return "", e.retireIsolatedFailureLocked(err)
-		}
-		command.replyState = scope
-		reply, err := e.isolatedCommandLocked(ctx, command)
-		if err != nil {
-			return "", err
-		}
-		if len(scope.targetRaw) == 0 {
-			return "", e.retireIsolatedFailureLocked(errWorkerProtocol)
-		}
-		if err := contextError(ctx); err != nil {
-			return "", e.retireIsolatedFailureLocked(err) // worker may already have changed; never leave unknown mutation live
-		}
-		if err := e.publishSelectorConfiguration(scope.targetRaw); err != nil {
-			// Parent/worker snapshots must not diverge, even on sync failure.
-			return "", e.retireIsolatedFailureLocked(errors.New("engine selector snapshot sync failed"))
-		}
-		subject, err := configurationSubject(e.rawJSON)
-		if err != nil || reply.Subject != subject {
-			return "", e.retireIsolatedFailureLocked(errWorkerProtocol)
-		}
-		if err := contextError(ctx); err != nil || e.process != scope.process || scope.process.exited() {
-			return "", e.retireIsolatedFailureLocked(ErrEngineWorkerUnavailable, err)
-		}
-		return reply.Previous, nil
-	}
-	if e.box == nil {
-		return "", ErrEngineNotRunning
-	}
-	out, ok := e.box.Outbound().Outbound(selectorTag)
-	if !ok {
-		return "", fmt.Errorf("%w: outbound %q not found", ErrSelectorSwitchUnavailable, selectorTag)
-	}
-	sel, isSel := out.(selectorControl)
-	if !isSel {
-		return "", fmt.Errorf("%w: %q is not a selector", ErrSelectorSwitchUnavailable, selectorTag)
-	}
-	previous := sel.Now()
-	if previous == tag {
-		return previous, nil // уже активен: идемпотентно
-	}
-	if !sel.SelectOutbound(tag) {
-		return previous, fmt.Errorf("%w: outbound %q is not a selector candidate", ErrSelectorSwitchUnavailable, tag)
-	}
-	if err := e.rewriteSelectorDefault(selectorTag, tag); err != nil {
-		// Селектор переключён, но конфиг-хранилище не обновлено — рассинхрон
-		// хуже отказа: откатываем выбор и отдаём ошибку (вызывающий → Reload).
-		sel.SelectOutbound(previous)
-		return previous, fmt.Errorf("sync raw config after switch: %w", err)
-	}
-	return previous, nil
-}
-
 // CurrentDefault — тег, активный в селекторе сейчас (диагностика/тесты).
 func (e *Engine) CurrentDefault(selectorTag string) (string, error) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if e.cleanupErr != nil {
-		return "", e.cleanupErr
+		err := e.cleanupErr
+		e.mu.Unlock()
+		return "", err
 	}
 	if e.isolated {
+		e.mu.Unlock()
 		if selectorTag != "proxy" {
 			return "", ErrSelectorSwitchUnavailable
 		}
-		reply, err := e.isolatedCommandLocked(context.Background(), workerRequest{Action: "current", Selector: selectorTag})
-		return reply.Previous, err
+		identity, err := e.CurrentRuntime(context.Background()) // prepares/cancels outside Engine.mu
+		return identity.DefaultOutbound, err
 	}
+	defer e.mu.Unlock()
 	if e.box == nil {
 		return "", ErrEngineNotRunning
 	}

@@ -60,7 +60,7 @@ func (w *netWatcher) networkOwners(app *App) (*networkPollerOwner, *serviceDNSHa
 // A failed task's finalizer may need operationMu. Join BEFORE acquiring it;
 // never turn a wait timeout into permission to replace the original owner.
 func (a *App) joinTerminalNetworkObserversBeforeStart(intent uint64) error {
-	if a.ctx == nil || a.ctx.Err() != nil || !a.operationCurrent(intent) {
+	if !a.appLifetimeCurrent() || !a.operationCurrent(intent) {
 		return errors.Join(errServiceDNSObserverUnavailable, context.Canceled)
 	}
 	poller, owner, err := netWatch.networkOwners(a)
@@ -81,7 +81,7 @@ func (a *App) joinTerminalNetworkObserversBeforeStart(intent uint64) error {
 	if err := joinTerminalNetworkTask(wait, terminal, owner.done, errServiceDNSObserverUnavailable); err != nil {
 		return err
 	}
-	if a.ctx.Err() != nil || !a.operationCurrent(intent) {
+	if !a.appLifetimeCurrent() || !a.operationCurrent(intent) {
 		return errors.Join(errServiceDNSObserverUnavailable, context.Canceled)
 	}
 	return nil
@@ -97,7 +97,8 @@ func (owner *serviceDNSHandoff) awaitStarted(ctx context.Context) error {
 // Each replacement requires its original task's full done. A failed producer
 // and its linked DNS task are replaced together, never with overlapping loops.
 func (a *App) reconcileServiceDNSAfterRetirement(ctx context.Context, previous *core.Manager, previousEngine *core.Engine) (*serviceDNSHandoff, error) {
-	if ctx == nil || ctx.Err() != nil || a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() {
+	appLifetime := a.appLifetimeFence() // before runtime/owner/registry locks
+	if ctx == nil || ctx.Err() != nil || !appLifetime.Current() || a.closing.Load() {
 		return nil, errServiceDNSObserverUnavailable
 	}
 	runtime_.mu.Lock()
@@ -145,7 +146,7 @@ func (a *App) reconcileServiceDNSAfterRetirement(ctx context.Context, previous *
 		}
 	}
 	netWatch.mu.Lock()
-	if netWatch.app != a || netWatch.poller != poller || netWatch.dns != owner || a.closing.Load() || a.ctx.Err() != nil || ctx.Err() != nil {
+	if netWatch.app != a || netWatch.poller != poller || netWatch.dns != owner || a.closing.Load() || !appLifetime.Current() || ctx.Err() != nil {
 		netWatch.mu.Unlock()
 		return nil, errServiceDNSObserverUnavailable
 	}

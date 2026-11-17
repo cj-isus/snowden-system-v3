@@ -24,11 +24,14 @@ func applyWFPBaseContext(ctx context.Context, exePath string) error {
 	if err := wfpOperationScope(ctx); err != nil {
 		return err
 	}
-	appID, err := readOwnedWFPAppID(ctx, exePath)
-	if err != nil {
-		return err
+	if exePath == "" {
+		return core.ErrNativeImageUnavailable
 	}
 	return withWFPPolicyWriter(ctx, wfpPolicyArm, func(owner *nativeWFPPolicyOwner) error {
+		appID, err := owner.session.applicationAppID(ctx, exePath)
+		if err != nil {
+			return err
+		}
 		objects, err := owner.session.inspectObjects(ctx)
 		if err != nil {
 			return err
@@ -132,7 +135,22 @@ func revokeWFPTUN() error {
 }
 
 func revokeWFPTUNContext(ctx context.Context) error {
-	return withWFPPolicyWriter(ctx, wfpPolicyRestrict, func(owner *nativeWFPPolicyOwner) error {
+	return changeWFPTUNPermits(ctx, wfpPolicyRestrict)
+}
+
+// A cleanup stage only. It removes general forwarding before original actors
+// retire; their diagnostic filter is not adopted as full-barrier evidence.
+func revokeWFPTUNBeforeRetirement() error {
+	return changeWFPTUNPermits(context.Background(), wfpPolicyRevoke)
+}
+
+func (strictWFPPolicy) RevokeDirect() error { return revokeWFPTUNBeforeRetirement() }
+
+func changeWFPTUNPermits(ctx context.Context, action wfpPolicyAction) error {
+	if action != wfpPolicyRevoke && action != wfpPolicyRestrict {
+		return core.ErrNativeScopeUnavailable
+	}
+	return withWFPPolicyWriter(ctx, action, func(owner *nativeWFPPolicyOwner) error {
 		rules, err := owner.session.readRuleIdentities(ctx)
 		if err != nil {
 			return err
@@ -201,28 +219,56 @@ func verifyWFPPolicyAction(ctx context.Context, owner *nativeWFPPolicyOwner, act
 			return core.ErrNativeScopeUnavailable
 		}
 		return verifyWFPScopeContext(ctx, true, owner.batch.expectedLUID, nil, false, &owner.session)
+	case wfpPolicyRevoke:
+		batch := owner.batch
+		if batch == nil || batch.action != wfpPolicyRevoke || batch.transaction == nil || batch.transaction.batch != batch {
+			return core.ErrHelperCleanup
+		}
+		return verifyWFPGeneralPermitsAbsent(ctx, &owner.session)
 	case wfpPolicyRestrict:
-		rules, err := owner.session.readRuleIdentities(ctx)
-		if err != nil {
-			return err
+		batch := owner.batch
+		if batch == nil || batch.action != wfpPolicyRestrict || batch.transaction == nil || batch.transaction.batch != batch {
+			return core.ErrHelperCleanup
 		}
-		for _, rule := range rules {
-			if rule.ID == wf.RuleID(wfpStableGUID(20)) || rule.ID == wf.RuleID(wfpStableGUID(21)) {
-				return fmt.Errorf("WFP general permit retirement unconfirmed")
+		if batch.transaction.commitConfirmed {
+			// Revoke first even if the base is damaged. Only the post-commit
+			// snapshot may certify that the complete direct barrier remains;
+			// absence of general permits alone is not protected traffic.
+			if err := verifyWFPScopeContext(ctx, false, 0, nil, true, &owner.session); err != nil {
+				return errors.Join(core.ErrHelperCleanup, err)
 			}
+			return nil
 		}
-		return ctx.Err()
+		if batch.transaction.commitAttempted {
+			return core.ErrHelperCleanup // an unconfirmed commit is never a pre-commit snapshot
+		}
+		return verifyWFPGeneralPermitsAbsent(ctx, &owner.session)
 	case wfpPolicyRelease:
 		return verifyWFPPolicyAbsent(ctx, &owner.session)
 	}
 	return core.ErrNativeScopeUnavailable
 }
 
+// Negative revocation fact only; a healthy complete barrier is checked by the
+// separate Restrict post-commit verifier, never inferred from these identities.
+func verifyWFPGeneralPermitsAbsent(ctx context.Context, session *nativeWFPSessionOwner) error {
+	rules, err := session.readRuleIdentities(ctx)
+	if err != nil {
+		return err
+	}
+	for _, rule := range rules {
+		if rule.ID == wf.RuleID(wfpStableGUID(20)) || rule.ID == wf.RuleID(wfpStableGUID(21)) {
+			return fmt.Errorf("WFP general permit retirement unconfirmed")
+		}
+	}
+	return session.queryScope(ctx)
+}
+
 func verifyWFPPolicyAbsent(ctx context.Context, session *nativeWFPSessionOwner) (finalErr error) {
 	ownsTransaction := session.transaction == nil || session.transaction.phase == wfpTransactionFinished
 	if ownsTransaction {
-		defer func() { finalErr = errors.Join(finalErr, session.abortTransaction(), ctx.Err()) }()
-		if err := session.beginTransaction(true); err != nil {
+		defer func() { finalErr = errors.Join(finalErr, session.abortTransaction(), session.queryScope(ctx)) }()
+		if err := session.beginReadTransaction(ctx); err != nil {
 			return err
 		}
 	}
@@ -237,5 +283,5 @@ func verifyWFPPolicyAbsent(ctx context.Context, session *nativeWFPSessionOwner) 
 	if objects.providerPresent || objects.sublayerPresent || len(rules) != 0 {
 		return fmt.Errorf("WFP owned policy removal unconfirmed")
 	}
-	return ctx.Err()
+	return session.queryScope(ctx)
 }

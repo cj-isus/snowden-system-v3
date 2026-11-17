@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -37,8 +36,11 @@ var killSwitchStatePathFn = func() string {
 var errProtectionRecoveryRequired = errors.New("сохранено устаревшее или повреждённое состояние защиты; сначала явно нажмите Отключить с правами администратора")
 
 func strictProtectionRetained() bool {
+	if strictMarkers.pending.Load() || strictMarkers.uncertain.Load() {
+		return true // absence cannot erase an unfinished/unknown storage operation
+	}
 	_, err := os.Stat(killSwitchStatePathFn())
-	return err == nil || !os.IsNotExist(err)
+	return err == nil || !os.IsNotExist(err) || strictMarkers.pending.Load() || strictMarkers.uncertain.Load()
 }
 
 // Accept every spelling of retired helper flags, including incomplete/invalid
@@ -133,44 +135,7 @@ func armStrictKillSwitch(path, exe string, apply func(string) error) error {
 }
 
 func armStrictKillSwitchContext(ctx context.Context, path, exe string, apply func(string) error) error {
-	if err := wfpOperationScope(ctx); err != nil {
-		return err
-	}
-	data, err := os.ReadFile(path)
-	if err == nil {
-		var state killSwitchState
-		if json.Unmarshal(data, &state) != nil || state.Policy != "strict-wfp" || state.HelperPID != 0 {
-			return errProtectionRecoveryRequired
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("%w: %w", errProtectionRecoveryRequired, err)
-	} else {
-		data, err = json.Marshal(killSwitchState{AppliedAt: time.Now(), Policy: "strict-wfp"})
-		if err != nil {
-			return err
-		}
-		if err := wfpOperationScope(ctx); err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return fmt.Errorf("WFP strict marker directory: %w", err)
-		}
-		if err := wfpOperationScope(ctx); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, data, 0o600); err != nil {
-			return fmt.Errorf("WFP strict marker: %w", err)
-		}
-	}
-	// Intent must survive apply failure/crash. Never remove it here.
-	if err := wfpOperationScope(ctx); err != nil {
-		return err
-	}
-	err = apply(exe)
-	if scopeErr := wfpOperationScope(ctx); scopeErr != nil {
-		return errors.Join(err, scopeErr)
-	}
-	return err
+	return strictMarkers.arm(ctx, path, exe, apply)
 }
 
 func disarmKillSwitch() error {
@@ -180,13 +145,5 @@ func disarmKillSwitch() error {
 // Caller has explicitly requested Disconnect and confirmed engine cleanup.
 // Attempt both backends and retain recovery intent on any error.
 func releaseKillSwitch(path string, removeWFP func() error, legacy KillSwitchRunner) error {
-	wfpErr := removeWFP()
-	legacyErr := removeKillSwitch(legacy)
-	if err := errors.Join(wfpErr, legacyErr); err != nil {
-		return fmt.Errorf("kill switch cleanup: %w", err)
-	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("kill switch marker cleanup: %w", err)
-	}
-	return nil
+	return strictMarkers.release(path, removeWFP, legacy)
 }

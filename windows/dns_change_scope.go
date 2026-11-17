@@ -61,7 +61,7 @@ func (change *serviceDNSChange) bindEvent(event networkControlEvent) *serviceDNS
 
 // App.mu held. These are request/custody restrictions, never path evidence.
 func (change serviceDNSChange) intentCurrentLocked(a *App) bool {
-	return a.ctx != nil && a.ctx.Err() == nil && change.intent != 0 && a.operationID == change.intent &&
+	return a.appLifetimeCurrentLocked() && change.intent != 0 && a.operationID == change.intent &&
 		a.intentSource == change.source && change.source.Current() && a.protectionDesired && !a.profileTransition &&
 		!a.closing.Load() && !a.trustBlocked && a.restartCommit == nil && !a.installedImageChanged
 }

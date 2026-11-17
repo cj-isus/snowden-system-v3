@@ -61,7 +61,7 @@ type retryTimer struct {
 // failClosedState — true, если текущее состояние = fail-closed без живого
 // туннеля (обе фактические формы). Требует удержания a.mu.
 func (a *App) failClosedState() bool {
-	if a.ctx == nil || a.ctx.Err() != nil || a.profileTransition || a.trustBlocked || a.proxyConflict || a.restartCommit != nil || a.releaseCommit != nil || a.installedImageChanged || a.state.BlockedReason == "cleanup_unconfirmed" || a.state.BlockedReason == "restart_failed" {
+	if !a.appLifetimeCurrentLocked() || a.profileTransition || a.trustBlocked || a.proxyConflict || a.restartCommit != nil || a.releaseCommit != nil || a.installedImageChanged || a.state.BlockedReason == "cleanup_unconfirmed" || a.state.BlockedReason == "restart_failed" {
 		return false // no old-profile retry or network wakeup over unresolved local custody
 	}
 	if a.state.State == "error" {

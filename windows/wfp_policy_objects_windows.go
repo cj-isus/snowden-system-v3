@@ -50,12 +50,19 @@ func (owner *nativeWFPSessionOwner) inspectObjects(ctx context.Context) (state n
 			finalErr = core.ErrNativeScopeUnavailable
 		}
 		finalErr = errors.Join(finalErr, owner.reader.free())
+		finalErr = errors.Join(finalErr, owner.queryScope(ctx))
+		if finalErr != nil {
+			state = nativeWFPObjectState{}
+		}
 	}()
+	if err := owner.queryScope(ctx); err != nil {
+		return state, err
+	}
 	if ctx == nil || ctx.Err() != nil || !owner.callsReturned() || owner.handle == 0 || owner.closed || owner.closeStarted || owner.transaction == nil || owner.transaction.phase != wfpTransactionActive ||
 		owner.reader.memory != nil || owner.reader.freeStarted || unsafe.Sizeof(nativeWFPProvider{}) != 64 || unsafe.Sizeof(diagnosticWFPSublayer{}) != 72 {
 		return state, core.ErrNativeScopeUnavailable
 	}
-	if err := owner.queryObject(wfpGetProvider, owner.provider, uint32(windows.FWP_E_PROVIDER_NOT_FOUND)); err != nil {
+	if err := owner.queryObject(ctx, wfpGetProvider, owner.provider, uint32(windows.FWP_E_PROVIDER_NOT_FOUND)); err != nil {
 		return state, err
 	}
 	if owner.reader.memory != nil {
@@ -69,10 +76,10 @@ func (owner *nativeWFPSessionOwner) inspectObjects(ctx context.Context) (state n
 	if err := owner.reader.free(); err != nil {
 		return state, err
 	}
-	if err := ctx.Err(); err != nil {
+	if err := owner.queryScope(ctx); err != nil {
 		return state, err
 	}
-	if err := owner.queryObject(diagnosticWFPGetSublayer, windows.GUID(wfpSublayerID), uint32(windows.FWP_E_SUBLAYER_NOT_FOUND)); err != nil {
+	if err := owner.queryObject(ctx, diagnosticWFPGetSublayer, windows.GUID(wfpSublayerID), uint32(windows.FWP_E_SUBLAYER_NOT_FOUND)); err != nil {
 		return state, err
 	}
 	if owner.reader.memory != nil {
@@ -84,16 +91,19 @@ func (owner *nativeWFPSessionOwner) inspectObjects(ctx context.Context) (state n
 		state.sublayerOwned = sublayer.provider != nil && *sublayer.provider == owner.provider
 		state.sublayerValid = state.sublayerOwned && sublayer.flags == 1 && sublayer.weight == ^uint16(0) && sublayer.data.size == 0
 	}
-	resultErr := ctx.Err()
+	resultErr := owner.queryScope(ctx)
 	complete = true
 	return state, resultErr
 }
 
-func (owner *nativeWFPSessionOwner) queryObject(proc *windows.LazyProc, key windows.GUID, notFound uint32) error {
+func (owner *nativeWFPSessionOwner) queryObject(ctx context.Context, proc *windows.LazyProc, key windows.GUID, notFound uint32) error {
 	if !owner.callsReturned() || owner.reader.memory != nil || owner.reader.freeStarted {
 		return core.ErrHelperCleanup
 	}
 	if err := proc.Find(); err != nil {
+		return err
+	}
+	if err := owner.queryScope(ctx); err != nil {
 		return err
 	}
 	if err := owner.reader.startQuery(); err != nil {
@@ -103,6 +113,9 @@ func (owner *nativeWFPSessionOwner) queryObject(proc *windows.LazyProc, key wind
 	code, _, _ := proc.Call(uintptr(owner.handle), uintptr(unsafe.Pointer(&owner.reader.queryKey)), uintptr(unsafe.Pointer(&owner.reader.memory)))
 	owner.reader.queryPending = false
 	runtime.KeepAlive(owner)
+	if err := owner.queryScope(ctx); err != nil {
+		return err // the original allocation is still owned and independently freed
+	}
 	if uint32(code) == notFound && owner.reader.memory == nil {
 		return nil
 	}
@@ -226,10 +239,10 @@ func (owner *nativeWFPPolicyOwner) addRule(spec wfpRuleSpec) error {
 		switch condition.Field {
 		case wf.FieldALEAppID:
 			value, ok := condition.Value.(string)
-			if !ok || len(value) == 0 || len(value) > 32760 || condition.Op != wf.MatchTypeEqual || write.text[1] != nil {
+			if !ok || condition.Op != wf.MatchTypeEqual || write.text[1] != nil {
 				return core.ErrNativeScopeUnavailable
 			}
-			write.text[1], err = windows.UTF16FromString(value)
+			write.text[1], err = encodeWFPAppIDText(value)
 			if err != nil {
 				return err
 			}
@@ -300,14 +313,15 @@ func (owner *nativeWFPSessionOwner) imageAppID(ctx context.Context, path string)
 			finalErr = core.ErrNativeImageUnavailable
 		}
 		finalErr = errors.Join(finalErr, owner.reader.free())
-		if ctx != nil {
-			finalErr = errors.Join(finalErr, ctx.Err())
-		}
+		finalErr = errors.Join(finalErr, owner.queryScope(ctx))
 		if finalErr != nil {
 			appID = ""
 		}
 	}()
-	if ctx == nil || ctx.Err() != nil || !owner.callsReturned() || !filepath.IsAbs(path) || len(path) > 32760 || owner.closed || owner.closeStarted || owner.reader.memory != nil || owner.reader.freeStarted || owner.reader.enum != 0 || owner.reader.destroyStarted {
+	if err := owner.queryScope(ctx); err != nil {
+		return "", err
+	}
+	if ctx == nil || ctx.Err() != nil || !owner.callsReturned() || len(path) > maxWFPAppIDTextBytes || !filepath.IsAbs(path) || owner.closed || owner.closeStarted || owner.reader.memory != nil || owner.reader.freeStarted || owner.reader.enum != 0 || owner.reader.destroyStarted {
 		return "", core.ErrNativeImageUnavailable
 	}
 	for _, proc := range []*windows.LazyProc{wfpImageAppID, diagnosticWFPFree} {
@@ -316,8 +330,11 @@ func (owner *nativeWFPSessionOwner) imageAppID(ctx context.Context, path string)
 		}
 	}
 	var err error
-	owner.queryPath, err = windows.UTF16FromString(path)
+	owner.queryPath, err = encodeWFPAppIDText(path)
 	if err != nil {
+		return "", errors.Join(core.ErrNativeImageUnavailable, err)
+	}
+	if err := owner.queryScope(ctx); err != nil {
 		return "", err
 	}
 	if err := owner.reader.startQuery(); err != nil {
@@ -326,16 +343,15 @@ func (owner *nativeWFPSessionOwner) imageAppID(ctx context.Context, path string)
 	code, _, _ := wfpImageAppID.Call(uintptr(unsafe.Pointer(&owner.queryPath[0])), uintptr(unsafe.Pointer(&owner.reader.memory)))
 	owner.reader.queryPending = false
 	runtime.KeepAlive(owner)
+	if err := owner.queryScope(ctx); err != nil {
+		return "", err // record native outputs before checking a late source failure
+	}
 	if code != 0 || owner.reader.memory == nil {
 		return "", core.ErrNativeImageUnavailable
 	}
-	value, err := decodeWFPCondition(diagnosticWFPCondition{field: windows.GUID(wf.FieldALEAppID), value: diagnosticWFPValue{typeID: 12, value: uintptr(owner.reader.memory)}})
+	appID, err = decodeWFPAppIDBlob((*diagnosticWFPBlob)(owner.reader.memory))
 	if err != nil {
-		return "", err
-	}
-	appID, ok := value.(string)
-	if !ok || appID == "" {
-		return "", core.ErrNativeImageUnavailable
+		return "", errors.Join(core.ErrNativeImageUnavailable, err)
 	}
 	complete = true
 	return appID, nil

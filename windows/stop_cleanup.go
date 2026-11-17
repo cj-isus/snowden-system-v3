@@ -35,11 +35,26 @@ func appCleanupStep(name string, sequence *appCleanupSequence, call func() error
 	returned = true
 }
 
-// operationMu held. Preserve the original publication/protection/Manager/helper
-// order, including cleanup after an abnormal event or policy callback. Release
-// is a separate positive phase and is never registered as an unwind action.
+// operationMu held. Revoke general forwarding, retire the original actors, then
+// freshly confirm the retained barrier (or final revocation for Disconnect).
+// All negative steps are registered before callbacks, including abnormal unwind.
+// Release remains a separate positive phase, never an unwind action.
 func (a *App) stopResourceCleanup(sequence *appCleanupSequence, reason StopReason, manager *core.Manager, orphanedEngine bool, policyRequired *bool) (result error) {
+	policy := a.protectionPolicy()
+	retirement, staged := policy.(protectionRetirementPolicy)
 	defer sequence.finish(&result)
+	defer appCleanupStep("confirm final direct protection", sequence, func() error {
+		if !*policyRequired {
+			return nil
+		}
+		if reason.releasesProtection() {
+			if staged {
+				return retirement.RevokeDirect() // damaged base may still need explicit Release
+			}
+			return nil // preserve the existing injected policy's manual recovery contract
+		}
+		return policy.BlockDirect()
+	})
 	defer appCleanupStep("retire original App helpers", sequence, a.retireCaptureHelpers)
 	if manager != nil {
 		defer appCleanupStep("stop original Manager", sequence, func() error {
@@ -53,8 +68,13 @@ func (a *App) stopResourceCleanup(sequence *appCleanupSequence, reason StopReaso
 	}
 	defer appCleanupStep("retain direct protection", sequence, func() error {
 		*policyRequired = tunRequested() || strictProtectionRetained()
-		if *policyRequired && !reason.releasesProtection() {
-			return a.protectionPolicy().BlockDirect()
+		if *policyRequired {
+			if staged {
+				return retirement.RevokeDirect()
+			}
+			if !reason.releasesProtection() {
+				return policy.BlockDirect()
+			}
 		}
 		return nil
 	})

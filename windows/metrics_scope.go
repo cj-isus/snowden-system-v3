@@ -9,11 +9,12 @@ import (
 // Telemetry identity only. No copied probe PASS, new intent, path permission,
 // secret/config clone, native check or protection grant is manufactured here.
 type metricsScope struct {
-	app     *App
-	parent  context.Context
-	metrics *metricsState
-	subject appProbeSubject
-	control *core.OperationSource
+	app         *App
+	parent      context.Context
+	parentFence core.OperationFence // original parent metadata, checked without context callbacks
+	metrics     *metricsState
+	subject     appProbeSubject
+	control     *core.OperationSource
 }
 
 func (a *App) captureMetricsScope() *metricsScope {
@@ -26,13 +27,17 @@ func (a *App) captureMetricsScope() *metricsScope {
 	if parent == nil || parent.Err() != nil || !clashAPIBuilt {
 		return nil
 	}
+	parentFence, err := core.CaptureOperationFence(parent)
+	if err != nil {
+		return nil
+	}
 	runtime_.mu.Lock()
 	cc, metrics := runtime_.cc, runtime_.metrics
 	runtime_.mu.Unlock()
 	if cc == nil || metrics == nil {
 		return nil
 	}
-	scope := &metricsScope{app: a, parent: parent, metrics: metrics, subject: a.appliedProbeSubject(cc)}
+	scope := &metricsScope{app: a, parent: parent, parentFence: parentFence, metrics: metrics, subject: a.appliedProbeSubject(cc)}
 	release, ok := scope.subject.lockCurrent(a, parent, cc)
 	if !ok {
 		return nil
@@ -49,7 +54,7 @@ func (a *App) captureMetricsScope() *metricsScope {
 // registry/state lock. Only pointer/value reads run under this lease.
 func (scope *metricsScope) currentLocked() bool {
 	a := scope.app
-	return scope.metrics != nil && scope.metrics.id != "" && runtime_.metrics == scope.metrics && a.state.State == "running" && a.ctx == scope.parent && scope.parent.Err() == nil &&
+	return scope.metrics != nil && scope.metrics.id != "" && runtime_.metrics == scope.metrics && a.state.State == "running" && sameContextIdentity(a.ctx, scope.parent) && scope.parentFence.Current() &&
 		a.startupErr == nil && !a.watchdogBlocked.Load() && !a.quitRequested && !a.metricsSealed.Load() &&
 		netEpoch.controlSource == scope.control && (scope.control == nil || scope.control.Current())
 }

@@ -33,7 +33,7 @@ func (a *App) restartIntent() (intentRegistration, error) {
 // Caller owns App.mu; ordered UI admission captures this exact source before
 // any serializer wait. A later Stop cannot be adopted as the restart's intent.
 func (a *App) restartIntentLocked() (intentRegistration, error) {
-	if a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || !a.intentSource.Current() {
+	if !a.appLifetimeCurrentLocked() || a.closing.Load() || !a.intentSource.Current() {
 		return intentRegistration{}, context.Canceled
 	}
 	if a.installedImageChanged {
@@ -51,7 +51,7 @@ func (a *App) restartIntentLocked() (intentRegistration, error) {
 func (a *App) restartIntentCurrent(registration intentRegistration) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.ctx != nil && a.ctx.Err() == nil && !a.closing.Load() && a.restartCommit == nil && a.releaseCommit == nil && !a.installedImageChanged && registration.currentLocked(a)
+	return a.appLifetimeCurrentLocked() && !a.closing.Load() && a.restartCommit == nil && a.releaseCommit == nil && !a.installedImageChanged && registration.currentLocked(a)
 }
 
 // A caller retains its initiating intent through update serialization/staging.
@@ -60,7 +60,7 @@ func (a *App) beginRestartHandoff(expected intentRegistration) (*restartHandoff,
 	request, err := func() (stopRequest, error) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if !expected.currentLocked(a) || a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() {
+		if !expected.currentLocked(a) || !a.appLifetimeCurrentLocked() || a.closing.Load() {
 			return stopRequest{}, context.Canceled
 		}
 		return a.registerStopLocked(stopRestart)
@@ -92,7 +92,7 @@ func (h *restartHandoff) commit() error {
 		defer runtime_.mu.Unlock()
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if !h.request.currentLocked(a) || a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || a.restartCommit != nil || a.releaseCommit != nil || a.installedImageChanged || a.protectionDesired != h.request.resumeRequested ||
+		if !h.request.currentLocked(a) || !a.appLifetimeCurrentLocked() || a.closing.Load() || a.restartCommit != nil || a.releaseCommit != nil || a.installedImageChanged || a.protectionDesired != h.request.resumeRequested ||
 			a.profileTransition != h.request.profileTransition || a.state.State != "stopped" || runtime_.manager != nil || runtime_.engine != nil || runtime_.cc != nil {
 			return false
 		}

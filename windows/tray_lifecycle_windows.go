@@ -220,7 +220,7 @@ func (a *App) startTray() {
 	ctx := func() context.Context {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || a.quitRequested {
+		if !a.appLifetimeCurrentLocked() || a.closing.Load() || a.quitRequested {
 			return nil
 		}
 		return a.ctx

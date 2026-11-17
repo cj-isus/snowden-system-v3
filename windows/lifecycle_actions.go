@@ -43,7 +43,7 @@ func (a *App) startBlockLocked(explicit bool) string {
 	if a.closing.Load() {
 		return "closing"
 	}
-	if a.ctx == nil || a.ctx.Err() != nil {
+	if !a.appLifetimeCurrentLocked() {
 		return "app_unavailable"
 	}
 	return ""

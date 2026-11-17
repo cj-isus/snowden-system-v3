@@ -76,7 +76,7 @@ func (a *App) prepareProtectionArm(original context.Context) (context.Context, c
 	registration := intentRegistration{intent: operation.intent, source: operation.intentSource}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.ctx == nil || a.ctx.Err() != nil || !registration.currentLocked(a) || !a.protectionDesired || a.profileTransition ||
+	if !a.appLifetimeCurrentLocked() || !registration.currentLocked(a) || !a.protectionDesired || a.profileTransition ||
 		a.closing.Load() || a.releaseCommit != nil || a.restartCommit != nil {
 		return nil, nil, nil, context.Canceled
 	}

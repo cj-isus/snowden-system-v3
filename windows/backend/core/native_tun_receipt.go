@@ -40,7 +40,7 @@ type nativeTUNObservationSource struct {
 	used      bool
 	engine    *Engine
 	scope     *engineTUNScope
-	operation context.Context
+	operation *nativeTUNOperation // immutable captured metadata; never a raw callback context under source.mu
 	runtime   RuntimeIdentity
 	egress    string
 	completed time.Time
@@ -56,7 +56,7 @@ func (source *nativeTUNObservationSource) burn() {
 
 // Caller holds this Engine.mu, then source.mu. A wrong engine, canceled/changed
 // operation, old scope/process/epoch or rejected comparison burns the attempt.
-func (source *nativeTUNObservationSource) claimLocked(engine *Engine, operation context.Context, subject, selector, expected string) (string, string, uint64, error) {
+func (source *nativeTUNObservationSource) claimLocked(engine *Engine, operation *nativeTUNOperation, subject, selector, expected string) (string, string, uint64, error) {
 	if source == nil {
 		return "", "", 0, ErrNativeScopeUnavailable
 	}
@@ -68,7 +68,7 @@ func (source *nativeTUNObservationSource) claimLocked(engine *Engine, operation 
 	source.used = true
 	actual, actualOK := nativeReportedAddress(source.egress)
 	wanted, wantedOK := nativeReportedAddress(expected)
-	if source.engine != engine || engine == nil || contextError(operation) != nil || contextError(source.operation) != nil || operation.Done() == nil || operation.Done() != source.operation.Done() ||
+	if source.engine != engine || engine == nil || operation == nil || source.operation == nil || contextError(operation) != nil || contextError(source.operation) != nil || operation.Done() == nil || operation.Done() != source.operation.Done() ||
 		!engine.isolated || engine.cleanupErr != nil || engine.process == nil || engine.process.exited() || engine.tunScope != nil || source.scope == nil ||
 		!source.scope.closed || source.scope.retired || source.scope.process != engine.process || source.scope.instance != engine.process.instance || source.runtime.Instance != engine.process.instance || source.runtime.ForwardingAdmitted ||
 		source.scope.request.Subject != subject || source.scope.request.Selector != selector || source.scope.request.Epoch != source.runtime.AdmissionEpoch ||
@@ -79,9 +79,9 @@ func (source *nativeTUNObservationSource) claimLocked(engine *Engine, operation 
 }
 
 // Caller retains Engine.mu across confirmation AND its consuming worker probe.
-func (engine *Engine) confirmNativeObservationLocked(ctx, operation context.Context, source *nativeTUNObservationSource, subject, selector, expected string) (string, error) {
+func (engine *Engine) confirmNativeObservationLocked(ctx *workerRPCContext, operation *nativeTUNOperation, source *nativeTUNObservationSource, subject, selector, expected string) (string, error) {
 	engine.clearForwardingPermitsLocked()
-	if contextError(ctx) != nil {
+	if ctx == nil || ctx.Context == nil || contextError(ctx) != nil {
 		source.burn()
 		return "", ErrNativeScopeUnavailable
 	}

@@ -13,7 +13,7 @@ type workerStateReplyScope struct {
 	id                       uint64
 	action, selector, target string
 	before, after, selected  string
-	raw, targetRaw           []byte
+	raw, targetRaw           []byte // original immutable graph header and prepared selector publication
 }
 
 func workerStateReplyAction(action string) bool {
@@ -42,7 +42,7 @@ func prepareWorkerStateReply(process *engineProcess, raw []byte, request workerR
 		return nil, err
 	}
 	scope := &workerStateReplyScope{process: process, id: process.sequence + 1, action: request.Action, selector: request.Selector, target: request.Tag,
-		before: hex.EncodeToString(digest[:])}
+		raw: raw, before: hex.EncodeToString(digest[:])}
 	scope.after = scope.before
 	index := -1
 	for i, outbound := range cfg.Outbounds {
@@ -65,8 +65,6 @@ func prepareWorkerStateReply(process *engineProcess, raw []byte, request workerR
 		return nil, ErrSelectorSwitchUnavailable
 	}
 	switch request.Action {
-	case "start":
-		scope.raw = raw // original owned slice retained until this exchange actually returns
 	case "switch":
 		if !validWorkerTag(request.Tag) {
 			return nil, ErrSelectorSwitchUnavailable

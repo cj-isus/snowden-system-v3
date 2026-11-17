@@ -148,7 +148,7 @@ func (h *restartHandoff) codeAcceptanceCurrent() bool {
 // runtime_.mu and App.mu held; values only, no SDK/native/Manager work.
 func (h *restartHandoff) codeAcceptanceCurrentLocked() bool {
 	a := h.app
-	return a.restartCommit == h && a.releaseCommit == nil && h.request.currentLocked(a) && a.ctx != nil && a.ctx.Err() == nil && !a.closing.Load() && !h.launched &&
+	return a.restartCommit == h && a.releaseCommit == nil && h.request.currentLocked(a) && a.appLifetimeCurrentLocked() && !a.closing.Load() && !h.launched &&
 		(h.rendererEpoch == 0 || a.installedImageChanged && a.updateGUIRendererEpoch == h.rendererEpoch) &&
 		a.protectionDesired == h.request.resumeRequested && a.profileTransition == h.request.profileTransition &&
 		runtime_.manager == nil && runtime_.engine == nil && runtime_.cc == nil

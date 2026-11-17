@@ -60,7 +60,7 @@ func (a *App) startBgProbes() {
 	ctx := func() context.Context {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if a.ctx == nil || a.ctx.Err() != nil || a.closing.Load() || a.quitRequested || a.startupErr != nil {
+		if !a.appLifetimeCurrentLocked() || a.closing.Load() || a.quitRequested || a.startupErr != nil {
 			return nil
 		}
 		return a.ctx

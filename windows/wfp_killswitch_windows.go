@@ -15,7 +15,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -183,31 +182,25 @@ func verifyWFPScopeContext(ctx context.Context, requireTUN bool, expectedLUID ui
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	exe, err := os.Executable()
+	if owner == nil {
+		_, err := withOwnedWFPReader(ctx, func(current *nativeWFPSessionOwner) (struct{}, error) {
+			if err := current.openSessionContext(ctx); err != nil {
+				return struct{}{}, err
+			}
+			return struct{}{}, verifyWFPScopeContext(ctx, requireTUN, expectedLUID, diagnostic, strictDiagnostic, current)
+		})
+		return err
+	}
+	appID, err := owner.applicationAppID(ctx, "")
 	if err != nil {
 		return err
 	}
-	var rules []*wf.Rule
-	var validSublayer bool
-	if owner != nil {
-		rules, validSublayer, err = owner.readPolicy(ctx, true)
-	} else {
-		rules, validSublayer, err = readOwnedWFPPolicy(ctx, true)
-	}
+	rules, validSublayer, err := owner.readPolicy(ctx, true)
 	if err != nil {
 		return fmt.Errorf("WFP verify owned policy: %w", err)
 	}
 	if !validSublayer {
 		return fmt.Errorf("WFP verify: sublayer ownership/persistence/weight mismatch")
-	}
-	var appID string
-	if owner != nil {
-		appID, err = owner.imageAppID(ctx, exe)
-	} else {
-		appID, err = readOwnedWFPAppID(ctx, exe)
-	}
-	if err != nil {
-		return err
 	}
 	want := map[wf.RuleID]wfpRuleSpec{}
 	for _, spec := range wfpBaseRuleSpecs(appID) {
@@ -254,7 +247,7 @@ func verifyWFPScopeContext(ctx context.Context, requireTUN bool, expectedLUID ui
 			return fmt.Errorf("WFP verify: обязательный filter %q отсутствует", spec.name)
 		}
 	}
-	return ctx.Err()
+	return owner.queryScope(ctx)
 }
 
 // Compare security-relevant shape, including AppID/LUID and conditions on a

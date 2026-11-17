@@ -36,7 +36,7 @@ func (outcome *startupOutcome) finish(profileErr *error, startServices *bool) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		if outcome.done != nil {
-			a.updateGUIStorageReady = *profileErr == nil && a.startupErr == nil && a.ctx != nil && a.ctx.Err() == nil && !a.closing.Load() && !a.quitRequested
+			a.updateGUIStorageReady = *profileErr == nil && a.startupErr == nil && a.appLifetimeCurrentLocked() && !a.closing.Load() && !a.quitRequested
 		}
 		return
 	}

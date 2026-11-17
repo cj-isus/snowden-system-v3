@@ -37,6 +37,8 @@ type LifecycleSourceProbe interface {
 // locks (App -> epoch), never runtime/Manager locks, callbacks or external I/O.
 // A successful lease remains held through the terminal state decision. Failed
 // acquisition must release every partial lock; release must be synchronous.
+// Manager supplies restricted core metadata, without arbitrary Value fallback.
+// Capture platform context values with LifecycleCompletionPreparationProbe.
 type LifecycleCompletionProbe interface {
 	LifecycleSourceProbe
 	GuardLifecycleCompletion(context.Context, *Manager) (func(), error)
@@ -62,7 +64,7 @@ func validateLifecycleSource(ctx context.Context, probe Probe) error {
 // Caller holds Manager.mu, so this must not call ValidateLifecycle (which may
 // acquire runtime/Manager locks). The separate downstream-only API avoids a
 // lock inversion at the final state decision.
-func guardLifecycleCompletion(ctx context.Context, probe Probe, manager *Manager) (release func(), err error) {
+func guardLifecycleCompletion(prepared *lifecycleCompletion) (release func(), err error) {
 	err = errors.New("lifecycle completion guard did not return") // negative default during unwind
 	defer func() {
 		if err != nil && release != nil {
@@ -71,22 +73,18 @@ func guardLifecycleCompletion(ctx context.Context, probe Probe, manager *Manager
 		}
 	}()
 	err = cleanupCall("guard lifecycle completion", func() error {
-		if err := contextError(ctx); err != nil {
+		if err := prepared.current(); err != nil {
 			return err
 		}
-		if source, ok := probe.(LifecycleCompletionProbe); ok {
-			var guardErr error
-			release, guardErr = source.GuardLifecycleCompletion(ctx, manager)
-			if guardErr == nil && release == nil {
-				guardErr = errors.New("lifecycle completion lease unavailable")
-			}
-			return guardErr
+		if prepared.guard == nil {
+			return errors.New("lifecycle completion guard unavailable")
 		}
-		if _, scoped := probe.(LifecycleSourceProbe); scoped {
-			return errors.New("platform lifecycle completion guard unavailable")
+		var guardErr error
+		release, guardErr = prepared.guard()
+		if guardErr == nil && release == nil {
+			guardErr = errors.New("lifecycle completion lease unavailable")
 		}
-		release = func() {} // existing explicit legacy/noop contract, not a platform source lease
-		return nil
+		return errors.Join(guardErr, prepared.current())
 	})
 	return release, err
 }

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"net"
 	"net/url"
 	"strings"
@@ -11,12 +12,6 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	M "github.com/sagernet/sing/common/metadata"
 )
-
-type engineForwardingPermit struct {
-	instance                 uint64
-	subject, selector, token string
-	epoch                    uint64
-}
 
 type engineProtectedProbe struct {
 	engine            *Engine
@@ -77,7 +72,7 @@ func NewEngineProbeWithNativeObservation(engine *Engine, raw []byte, selector st
 func (probe engineProtectedProbe) Run(ctx context.Context) *ProbeReport {
 	if probe.engine != nil {
 		probe.engine.mu.Lock()
-		if !probe.nativeRequired && probe.engine.nativePermit.busyLocked(probe.engine) {
+		if !probe.nativeRequired && (probe.engine.nativePermit.busyLocked(probe.engine) || probe.engine.nativeProbeBusyLocked()) {
 			probe.engine.mu.Unlock()
 			return workerProbeFailure() // a background probe cannot steal this native owner
 		}
@@ -92,71 +87,183 @@ func (probe engineProtectedProbe) Run(ctx context.Context) *ProbeReport {
 		probe.native.burn()
 		return workerProbeFailure()
 	}
+	publication := &engineProbePublication{}
+	completed := false
+	defer func() {
+		if !completed {
+			defer probe.engine.discardProbePublication(publication)
+			probe.native.burn()
+		}
+	}()
 	operation, release, err := probe.request.reserve(ctx)
 	if err != nil {
-		probe.native.burn()
 		return &ProbeReport{Results: []ProbeResult{{Name: "бюджет probe", Status: "unavailable", Detail: "protected diagnostic budget unavailable; path not measured"}}}
 	}
-	defer release()
+	releaseAttempted := false
+	releaseDiagnostic := func() {
+		if !releaseAttempted {
+			releaseAttempted = true // do not retry an interrupted original cancel/unlink
+			release()
+			publication.released = true // private phase fact, never set by an attempted/unknown release
+		}
+	}
+	defer releaseDiagnostic()
 	request := *probe.request // retained probe cannot mutate/reuse a previous nonce
 	var report *ProbeReport
 	if probe.nativeRequired {
-		report, err = probe.engine.probeOwnedWorkerWithNative(operation, ctx, probe.native, probe.subject, probe.selector, &request)
+		report, err = probe.engine.probeOwnedWorkerWithNative(operation, ctx, probe.native, probe.subject, probe.selector, &request, publication)
 	} else {
-		report, err = probe.engine.probeOwnedWorker(operation, probe.subject, probe.selector, &request)
+		report, err = probe.engine.probeOwnedWorker(operation, ctx, probe.subject, probe.selector, &request, publication)
 	}
 	if err != nil {
 		return workerProbeFailure(err)
 	}
+	releaseDiagnostic() // quota/context cleanup must return before publishing a reply or parent permit
+	report, err = probe.engine.publishProbeAfterRelease(publication, report)
+	if err != nil {
+		return workerProbeFailure(err)
+	}
+	completed = true
 	return report
 }
 
-func (e *Engine) probeOwnedWorker(ctx context.Context, subject, selector string, request *workerProbeRequest) (*ProbeReport, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.probeOwnedWorkerLocked(ctx, subject, selector, request, nil)
-}
-
-func (e *Engine) probeOwnedWorkerWithNative(ctx, operation context.Context, source *nativeTUNObservationSource, subject, selector string, request *workerProbeRequest) (*ProbeReport, error) {
-	ctx = withOriginalOperationSources(ctx, operation) // confirmation and consuming probe share original negative sources
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	nonce, err := e.confirmNativeObservationLocked(ctx, operation, source, subject, selector, request.ExpectedEgress)
+func (e *Engine) probeOwnedWorker(ctx, operation context.Context, subject, selector string, request *workerProbeRequest, publication *engineProbePublication) (*ProbeReport, error) {
+	ctx = withOriginalOperationSources(ctx, operation)
+	original, scopeErr := snapshotNativeTUNOperation(operation)
+	var rpc *workerRPCContext
+	var cancel context.CancelFunc
+	if scopeErr == nil {
+		rpc, cancel, scopeErr = prepareWorkerProbeRPCContext(ctx, request)
+	}
+	cancelAttempted := false
+	cancelRPC := func() {
+		if cancel != nil && !cancelAttempted {
+			cancelAttempted = true
+			cancel()
+		}
+	}
+	defer cancelRPC()
+	report, err := func() (*ProbeReport, error) {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if scopeErr != nil {
+			if e.nativePermit.busyLocked(e) || e.nativeProbeBusyLocked() {
+				return workerProbeFailure(), nil // preserve the original native no-steal contract
+			}
+			e.clearForwardingPermitsLocked()
+			return nil, scopeErr
+		}
+		return e.probeOwnedWorkerLocked(rpc, original, subject, selector, request, nil, publication)
+	}()
 	if err != nil {
 		return nil, err
 	}
-	owned := *request
-	owned.NativeNonce = nonce
-	return e.probeOwnedWorkerLocked(ctx, subject, selector, &owned, source)
+	cancelRPC()
+	if err := e.acceptProbeRPCCleanup(publication); err != nil {
+		return nil, err
+	}
+	return report, nil
 }
 
-func (e *Engine) probeOwnedWorkerLocked(ctx context.Context, subject, selector string, request *workerProbeRequest, native *nativeTUNObservationSource) (*ProbeReport, error) {
-	if native == nil && e.nativePermit.busyLocked(e) {
+func (e *Engine) probeOwnedWorkerWithNative(ctx, operation context.Context, source *nativeTUNObservationSource, subject, selector string, request *workerProbeRequest, publication *engineProbePublication) (*ProbeReport, error) {
+	completed := false
+	defer func() {
+		if !completed {
+			source.burn() // abnormal source preparation cannot leave a reusable observation
+		}
+	}()
+	ctx = withOriginalOperationSources(ctx, operation) // confirmation and consuming probe share original negative sources
+	original, err := snapshotNativeTUNOperation(operation)
+	var rpc *workerRPCContext
+	var cancel context.CancelFunc
+	if err == nil {
+		rpc, cancel, err = prepareWorkerProbeRPCContext(ctx, request)
+	}
+	if err != nil {
+		e.mu.Lock()
+		e.clearForwardingPermitsLocked() // preserve failed-claim invalidation without context callbacks
+		e.mu.Unlock()
+		source.burn()
+		completed = true
+		return nil, errors.Join(ErrNativeScopeUnavailable, err)
+	}
+	cancelAttempted := false
+	cancelRPC := func() {
+		if !cancelAttempted {
+			cancelAttempted = true
+			cancel()
+		}
+	}
+	defer cancelRPC()
+	report, err := func() (*ProbeReport, error) {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		nonce, err := e.confirmNativeObservationLocked(rpc, original, source, subject, selector, request.ExpectedEgress)
+		if err != nil {
+			return nil, err
+		}
+		owned := *request
+		owned.NativeNonce = nonce
+		return e.probeOwnedWorkerLocked(rpc, original, subject, selector, &owned, source, publication)
+	}()
+	if err != nil {
+		completed = true
+		return nil, err
+	}
+	cancelRPC()
+	if err := e.acceptProbeRPCCleanup(publication); err != nil {
+		return nil, err
+	}
+	completed = true
+	return report, nil
+}
+
+func (e *Engine) probeOwnedWorkerLocked(ctx *workerRPCContext, operation *nativeTUNOperation, subject, selector string, request *workerProbeRequest, native *nativeTUNObservationSource, publication *engineProbePublication) (*ProbeReport, error) {
+	if e.tunScope != nil {
+		return workerProbeFailure(), ErrNativeScopeUnavailable // actual scoped ownership must finish before another worker probe
+	}
+	if native == nil && (e.nativePermit.busyLocked(e) || e.nativeProbeBusyLocked()) {
 		return workerProbeFailure(), nil // also cover a native preparation after Run's first guard
 	}
 	e.clearForwardingPermitsLocked() // a failed/new claiming observation cannot reuse an old result
+	if ctx == nil || ctx.Context == nil || publication == nil || publication.origin.process != nil {
+		return nil, ErrForwardingNotAdmitted
+	}
 	if err := contextError(ctx); err != nil {
 		return nil, err
+	}
+	if operation == nil || contextError(operation) != nil {
+		return nil, ErrForwardingNotAdmitted
 	}
 	current, err := configurationSubject(e.rawJSON)
 	if err != nil || current != subject || !e.isolated || e.process == nil || e.cleanupErr != nil {
 		return nil, ErrForwardingNotAdmitted
 	}
-	instance := e.process.instance
+	process := e.process
+	instance := process.instance
+	publication.origin = engineProcessOrigin{process: process, instance: instance, raw: e.rawJSON}
+	publication.operation, publication.rpc = operation, ctx
+	process.probePending = publication
 	command := workerRequest{Action: "probe", Selector: "proxy", Tag: selector, Subject: subject, Probe: request}
-	reply, err := e.process.request(ctx, command, time.Duration(request.TimeoutMillis)*time.Millisecond+workerControlTimeout)
+	sequence := process.sequence
+	publication.requestID, publication.requested = sequence+1, true
+	reply, err := process.request(ctx, command, time.Duration(request.TimeoutMillis)*time.Millisecond+workerControlTimeout)
 	if err != nil {
+		if process.sourceCanceledBeforeRequest(ctx, sequence, err) {
+			publication.requested = false
+			return nil, err // no request/ID; the discarded parent candidate cannot authorize a retry
+		}
 		return nil, e.retireIsolatedFailureLocked(err)
 	}
-	if contextError(ctx) != nil || e.process == nil || e.process.instance != instance || e.process.exited() || reply.Code != "ok" || !validWorkerProbeReport(&command, reply) {
-		return nil, e.retireIsolatedFailureLocked(errWorkerProtocol, contextError(ctx))
+	if contextError(ctx) != nil || contextError(operation) != nil || e.process != process || process.instance != instance || process.exited() || reply.Code != "ok" || !validWorkerProbeReport(&command, reply) {
+		return nil, e.retireIsolatedFailureLocked(errWorkerProtocol, contextError(ctx), contextError(operation))
 	}
 	report := reply.Report.Clone()
 	if request.TUN && request.NativeNonce != "" && reply.Admitted {
 		return nil, e.retireIsolatedFailureLocked(errWorkerProtocol) // native claiming probe requires the original closed phase
 	}
 	if reply.NativeAdmissionToken != "" {
-		if native == nil || native.engine != e || native.scope == nil || native.scope.process != e.process || native.scope.request.Nonce != request.NativeNonce ||
+		if native == nil || native.operation == nil || native.engine != e || native.scope == nil || native.scope.process != e.process || native.scope.request.Nonce != request.NativeNonce ||
 			native.runtime.Instance != instance || native.runtime.AdmissionEpoch != reply.AdmissionEpoch || contextError(native.operation) != nil || !probePassed(report) {
 			return nil, e.retireIsolatedFailureLocked(errWorkerProtocol)
 		}
@@ -167,7 +274,7 @@ func (e *Engine) probeOwnedWorkerLocked(ctx context.Context, subject, selector s
 		if !time.Now().Before(until) {
 			return nil, e.retireIsolatedFailureLocked(ErrNativeScopeUnavailable)
 		}
-		e.nativePermit = &engineNativeTUNPermit{process: e.process, instance: instance, epoch: reply.AdmissionEpoch, subject: subject, selector: selector, token: reply.NativeAdmissionToken, source: native, busyUntil: until, diagnostic: report.Clone()}
+		publication.native = &engineNativeTUNPermit{process: e.process, instance: instance, epoch: reply.AdmissionEpoch, subject: subject, selector: selector, token: reply.NativeAdmissionToken, source: native, busyUntil: until, diagnostic: report.Clone()}
 		return pendingTUNActivation(report), nil // product/Manager still require compiled final platform commit
 	}
 	if request.TUN && !reply.Admitted {
@@ -183,40 +290,16 @@ func (e *Engine) probeOwnedWorkerLocked(ctx context.Context, subject, selector s
 		if request.TUN && reply.Admitted {
 			return report, nil // existing phase observation never mints a parent permit
 		}
-		e.forwardingPermit = &engineForwardingPermit{instance: instance, subject: subject, selector: selector, epoch: reply.AdmissionEpoch, token: reply.AdmissionToken}
+		if contextError(ctx) != nil || contextError(operation) != nil {
+			return nil, e.retireIsolatedFailureLocked(ErrForwardingNotAdmitted, contextError(ctx), contextError(operation))
+		}
+		if operation.Done() != nil {
+			publication.ordinary = &engineForwardingPermit{process: process, operation: operation, instance: instance, subject: subject, selector: selector, epoch: reply.AdmissionEpoch, token: reply.AdmissionToken}
+		} // without an original Done identity, an observation cannot issue a parent handoff
 	} else if reply.AdmissionToken != "" {
 		return nil, e.retireIsolatedFailureLocked(errWorkerProtocol)
 	}
 	return report, nil
-}
-
-// Only Manager can commit the private observation after its own fresh intent,
-// trust lifetime, actual engine and complete lifecycle gates. No public report
-// parameter or caller-supplied boolean is accepted. A failed attempt is consumed.
-func (e *Engine) admitForwarding(ctx context.Context) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	permit := e.forwardingPermit
-	e.clearForwardingPermitsLocked()
-	if err := contextError(ctx); err != nil {
-		return err
-	}
-	if permit == nil || !e.isolated || e.process == nil || e.cleanupErr != nil || e.process.instance != permit.instance {
-		return ErrForwardingNotAdmitted
-	}
-	subject, err := configurationSubject(e.rawJSON)
-	if err != nil || subject != permit.subject {
-		return ErrForwardingNotAdmitted
-	}
-	command := workerRequest{Action: "admit", Selector: "proxy", Tag: permit.selector, Subject: permit.subject, AdmissionEpoch: permit.epoch, AdmissionToken: permit.token}
-	reply, err := e.process.request(ctx, command, workerControlTimeout)
-	if err != nil {
-		return e.retireIsolatedFailureLocked(err)
-	}
-	if contextError(ctx) != nil || e.process == nil || e.process.instance != permit.instance || e.process.exited() || !validWorkerControlReply(&command, reply) {
-		return e.retireIsolatedFailureLocked(ErrForwardingNotAdmitted, contextError(ctx))
-	}
-	return nil
 }
 
 // Caller holds the worker Engine mutex. This is the current real selector and
