@@ -9,6 +9,18 @@ import (
 	"github.com/snowden-system/windows/backend/core"
 )
 
+const appStartupFailureMessage = "Подготовка приложения прервана. Нужен перезапуск после проверки очистки."
+
+// Public admission projection only. Never retain or unwrap the private cause:
+// Error/Format/Is/Unwrap on that value must not run under an App value lock or
+// expose startup paths/data through Wails. Keep the existing custody category.
+type appStartupUnavailableError struct{}
+
+func (*appStartupUnavailableError) Error() string { return appStartupFailureMessage }
+func (*appStartupUnavailableError) Unwrap() error { return core.ErrEngineCleanupFailed }
+
+var errAppStartupUnavailable = &appStartupUnavailableError{}
+
 // Original synchronous preparation only. done is closed after its outcome,
 // never before an abnormal return can revoke storage/network readiness.
 type startupOutcome struct {
@@ -75,7 +87,7 @@ func (a *App) markStartupFailure(cause error) bool {
 		return false // preserve the independently registered terminal phase
 	}
 	a.state.State, a.state.BlockedReason = "error", "cleanup_unconfirmed"
-	a.state.Error = "Подготовка приложения прервана. Нужен перезапуск после проверки очистки."
+	a.state.Error = appStartupFailureMessage
 	a.state.CoreBlockMsg = a.state.Error
 	a.state.CoreReady, a.state.ProbeRunning = false, false
 	a.nativeObservation = nil

@@ -83,26 +83,3 @@ func (a *App) contextForIntent(registration intentRegistration) (ctx context.Con
 	returned = true
 	return ctx, nil
 }
-
-// App.mu and operationMu held. Reuse the one existing update operation slot
-// and epoch cancellation. Unlike beginOperation this does not require running
-// protection, and creates no appOperationScope/probe/native/health authority.
-func (a *App) bindUpdateOperationLocked(registration intentRegistration) (context.Context, context.CancelFunc, error) {
-	if !a.appLifetimeCurrentLocked() || a.closing.Load() || !registration.currentLocked(a) {
-		return nil, nil, context.Canceled
-	}
-	ctx, cancel := netEpoch.bindOperation(a.ctx)
-	operation := core.NewOperationSource()
-	path, _ := ctx.Value(networkPathContextKey{}).(*networkPathSource)
-	var sources core.OperationSources
-	if path != nil {
-		sources = core.OperationSources{Intent: registration.source, Operation: operation, Path: &path.current, Closing: &a.closing}
-	}
-	ctx = core.WithOperationSources(ctx, sources)
-	retire := func() {
-		operation.Revoke() // before ordinary context cancellation; original cleanup remains independent
-		cancel()
-	}
-	a.operationCancel = retire
-	return ctx, retire, nil
-}

@@ -241,8 +241,9 @@ func (a *App) startCoreGenerationBody(id uint64, outcome *appLifecycleOutcome) {
 			return
 		}
 	}
-	ctx, cancel, ok := a.beginOperation(id, outcome.registration.source)
-	if !ok {
+	ctx, cancel, preparationErr := a.beginOperationContext(id, outcome.registration.source)
+	if preparationErr != nil {
+		outcome.rejectStartPreparation(preparationErr)
 		return
 	}
 	defer a.endOperation(cancel)
@@ -964,8 +965,11 @@ func (a *App) verifySessionProtection(cc *render.ClientConfig, report *core.Prob
 		return errSessionSuperseded
 	}
 	if cc.TUNName != "" {
-		ctx, cancel, ok := a.beginOperation(report.IntentGeneration)
-		if !ok {
+		ctx, cancel, preparationErr := a.beginOperationContext(report.IntentGeneration, report.OperationSource())
+		if preparationErr != nil {
+			if localRetirementFailure(preparationErr) {
+				return &sessionProtectionPreparationFault{registration: intentRegistration{intent: report.IntentGeneration, source: report.OperationSource()}, cause: preparationErr}
+			}
 			return errSessionSuperseded
 		}
 		defer a.endOperation(cancel)

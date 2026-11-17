@@ -1,6 +1,6 @@
 # Public Windows source snapshot
 
-This source snapshot includes the PC implementation through V527. It is not a verified executable or release. Tests, builds and live network checks were not run for this publication.
+This source snapshot includes the PC implementation through V533 plus reviewed in-progress V534 watchdog/context changes (V534 documentation and acceptance are unfinished). It is not a verified executable or release. Tests, builds and live network checks were not run for this publication.
 
 Embedded channel descriptors are disabled synthetic examples using documentation addresses. They contain no working VPN profile. Import a separately supplied trusted profile for actual operation. No private credentials, server operations records or installers are included in this PC update.
 

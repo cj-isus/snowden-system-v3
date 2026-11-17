@@ -4234,6 +4234,42 @@ Source/unverified: 26 Go + 4 docs, один новый helper; diff просмо
 
 Source/unverified: 2 Go + 4 docs; diff просмотрен, gofmt2+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
 
+### V2-528 — PC-01, ownership исходной отмены
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v528-operation-cancel): cancellation callbacks Stop/profile вне App.mu; повторная отмена не считается возвратом исходной. Slot/replacement и Stop cleanup/Release требуют обычного возврата original cancel. Proxy prepare/confirm включают retirement в свой return witness. Actual begin/update/proxy factories остаются OPEN.
+
+Source/unverified: 8 Go + 4 docs; вручную просмотрены 7 diff и 1 новый helper, gofmt8 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-529 — PC-01, actual context factories и pending owner
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v529-operation-context): исходный слот резервируется до actual WithCancel/getters, App.mu освобождается на время construction/cancel. Partial real child остаётся у исходного frame; delayed/abnormal completion не даёт successor. Final mode/intent/path/lifetime/owner gate проверяется отдельно. Boolean error propagation и runtime-приёмка ещё OPEN.
+
+Source/unverified: 9 Go + 4 docs; вручную просмотрены 8 diff и 1 новый helper, gofmt9 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-530 — PC-01, preparation error до lifecycle/UI
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v530-preparation-outcome): actual preparation error проходит все product consumers; original lifecycle outcome сохраняет custody failure. Benign Start получает finite terminal projection без native/retry proof. Protection preparation — отдельный local fault с original session/source gate, не native observation; proxy/Start UI удерживают unconfirmed слот. Stop early-cancel и runtime-приёмка ещё OPEN.
+
+Source/unverified: 9 Go + 4 docs; вручную просмотрены 9 diff, gofmt9 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-531 — PC-01, Stop preparation outcome до callback
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v531-stop-preparation): все три Stop-пути защищают исходную регистрацию до cancelOriginal. Callback panic/Goexit и join custody error сохраняют unconfirmed state; mutex transfer только после обычного успеха. Existing native Stop/Release unchanged. Busy-versus-failed admission и runtime-приёмка ещё OPEN.
+
+Source/unverified: 4 Go + 4 docs; вручную просмотрены 4 diff, gofmt4 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-532 — PC-01, busy-versus-failed operation slot
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v532-operation-slot): passive original unwind/ordinary-return facts выбирают denial reason, но не разрешают replacement занятого слота. Start snapshot/command/reservation согласованы, watchdog failure независим, proxy/UI различают busy и cleanup-unconfirmed. Startup-error formatting и runtime-приёмка ещё OPEN.
+
+Source/unverified: 4 Go + 1 static TS label + 4 docs; вручную просмотрены 5 diff, gofmt4 exit0. Тесты/сборки/typecheck/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+### V2-533 — PC-01, finite startup admission errors
+
+[Source-срез](../../tasks/TH-01-FORWARDING-ADMISSION.md#pc-v533-startup-rejection): private startup cause не форматируется/не раскрывается в public error graph под App.mu; finite text/static cleanup class и исходные readiness/source gates сохранены. Startup UI hint отражает sticky interruption. Actual watchdog constructor/alias value-lock scope и runtime-приёмка ещё OPEN.
+
+Source/unverified: 2 Go + 1 static TS label + 4 docs; вручную просмотрены 3 diff, gofmt2 exit0. Тесты/сборки/typecheck/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
 Абсолютный запрет владельца на тестирование/сборки/исполнение сети сохраняется.
 
 1. ПК-владельцу: закончить W4c original-helper/WFP admission, сохранив закрытый

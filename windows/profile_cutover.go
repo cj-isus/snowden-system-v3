@@ -42,14 +42,28 @@ func (a *App) retireProfileSessionRegistered(expected intentRegistration, scope 
 	}
 	a.profileTransition = true
 	a.cancelFailClosedRetryLocked()
-	if a.operationCancel != nil {
-		a.operationCancel()
-	}
+	cancellation := a.operationCancellation
+	cancelUnavailable := (a.operationCancel == nil) != (cancellation == nil)
 	a.state.CoreReady = false
 	a.state.ProbeRunning = false
 	a.state.BlockedReason = "profile_update_pending"
-	a.pushStateLocked()
 	a.mu.Unlock()
+	sequence := new(appCleanupSequence)
+	appCleanupStep("cancel original profile operation", sequence, func() error {
+		if cancelUnavailable {
+			return core.ErrEngineCleanupFailed
+		}
+		if cancellation != nil {
+			return cancellation.join() // outside App.mu; outer endOperation alone clears its slot
+		}
+		return nil
+	})
+	if sequence.result != nil {
+		err := errors.Join(core.ErrEngineCleanupFailed, sequence.result)
+		a.finishProfileTransition(id, false, err)
+		return id, err
+	}
+	a.pushState()
 	runtime_.mu.Lock()
 	hasManager := runtime_.manager != nil
 	orphanedEngine := !hasManager && runtime_.engine != nil

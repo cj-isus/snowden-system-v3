@@ -68,7 +68,9 @@ func (a *App) beginRestartHandoff(expected intentRegistration) (*restartHandoff,
 	if err != nil {
 		return nil, err
 	}
-	a.operationMu.Lock()
+	if err := a.acquireStopRequest(request); err != nil {
+		return nil, err
+	}
 	transferred := false
 	defer func() {
 		if !transferred {

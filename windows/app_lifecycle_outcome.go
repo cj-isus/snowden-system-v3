@@ -11,13 +11,14 @@ import (
 // Receipt for the original Start/Switch frame, not another scheduler or engine
 // owner. After acquire, every field and App.lifecycleOutcome use operationMu.
 type appLifecycleOutcome struct {
-	app          *App
-	registration intentRegistration
-	stage        string
-	locked       bool
-	conflict     bool
-	returned     bool
-	cleanup      *appStopAttempt
+	app                *App
+	registration       intentRegistration
+	stage              string
+	locked             bool
+	conflict           bool
+	returned           bool
+	cleanup            *appStopAttempt
+	preparationFailure error // finite local custody failure, even if the body returned normally
 }
 
 // Capture before any serializer/pre-acquisition wait. Negative cleanup must
@@ -50,6 +51,41 @@ func (outcome *appLifecycleOutcome) originalCurrent() bool {
 	return outcome.registration.currentLocked(outcome.app)
 }
 
+// operationMu held. A preparation failure cannot become ordinary cancellation
+// or successful rollback merely because its finite error returned normally.
+func (outcome *appLifecycleOutcome) rejectPreparation(cause error) {
+	if localRetirementFailure(cause) {
+		outcome.preparationFailure = core.ErrEngineCleanupFailed
+	}
+}
+
+// A benign rejected Start created no new native work. Publish its finite result
+// for the exact original starting request, without inventing a retirement/retry
+// receipt or changing protection intent. The original outcome guards UI unwind.
+func (outcome *appLifecycleOutcome) rejectStartPreparation(cause error) {
+	outcome.rejectPreparation(cause)
+	if outcome.preparationFailure != nil {
+		return
+	}
+	message := lifecycleFailureText("запуск", cause, false)
+	a := outcome.app
+	changed := func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if !outcome.registration.currentLocked(a) || !a.protectionDesired || a.profileTransition || a.closing.Load() || a.state.State != "starting" {
+			return false
+		}
+		a.state.State, a.state.Error = "error", message
+		a.state.CoreReady, a.state.ProbeRunning = false, false
+		a.state.ProxyMode, a.state.ActiveID = "", ""
+		a.state.Active, a.nativeObservation = nil, nil
+		return true
+	}()
+	if changed {
+		a.pushState()
+	}
+}
+
 func (outcome *appLifecycleOutcome) release() {
 	if !outcome.locked {
 		return
@@ -66,7 +102,7 @@ func (outcome *appLifecycleOutcome) release() {
 func (outcome *appLifecycleOutcome) finish(result *error) {
 	payload := recover()
 	defer outcome.release()
-	if outcome.returned && payload == nil && !outcome.conflict {
+	if outcome.returned && payload == nil && !outcome.conflict && outcome.preparationFailure == nil {
 		return // preserve ordinary errors and verified rollback without rewrapping
 	}
 	if outcome.registration.source != nil {
@@ -75,8 +111,11 @@ func (outcome *appLifecycleOutcome) finish(result *error) {
 	if !outcome.locked {
 		outcome.acquire() // negative cleanup still serializes after a pre-acquisition unwind
 	}
-	cause := errors.Join(core.ErrEngineCleanupFailed,
-		fmt.Errorf("%s: операция не вернулась нормально (%T)", outcome.stage, payload))
+	cause := outcome.preparationFailure
+	if cause == nil || !outcome.returned || payload != nil || outcome.conflict {
+		cause = errors.Join(cause, core.ErrEngineCleanupFailed,
+			fmt.Errorf("%s: операция не вернулась нормально (%T)", outcome.stage, payload))
+	}
 	var localResult error
 	if result == nil {
 		result = &localResult

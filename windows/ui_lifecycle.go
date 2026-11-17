@@ -208,9 +208,11 @@ func (a *App) RequestUILifecycle(request UILifecycleRequest) (receipt *UILifecyc
 	var err error
 	attempt.handlerEntered = true
 	if request.Action == "stop" {
-		a.operationMu.Lock()
-		defer a.operationMu.Unlock()
-		err = a.stopCoreRegisteredLocked(stopDisconnect, attempt.stopRequest.intentRegistration)
+		err = a.acquireStopRequest(attempt.stopRequest)
+		if err == nil {
+			defer a.operationMu.Unlock()
+			err = a.stopCoreRegisteredLocked(stopDisconnect, attempt.stopRequest.intentRegistration)
+		}
 	} else if request.Action == "mode_proxy" || request.Action == "mode_tun" {
 		err = a.switchModeRegistered(request.Action == "mode_tun", attempt.registration)
 	} else if request.Action == "update" {

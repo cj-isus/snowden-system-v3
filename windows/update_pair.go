@@ -178,12 +178,18 @@ func (a *App) closeUpdateCodeAcceptance() error {
 }
 
 func (a *App) beginCommittedUpdate(h *restartHandoff) (context.Context, context.CancelFunc, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if h == nil || h.app != a || a.restartCommit != h || !h.request.currentLocked(a) || a.closing.Load() || a.installedImageChanged {
-		return nil, nil, context.Canceled
+	preparation, err := func() (*appOperationPreparation, error) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if h == nil || h.app != a || a.restartCommit != h || !h.request.currentLocked(a) || a.closing.Load() || a.installedImageChanged {
+			return nil, context.Canceled
+		}
+		return a.reserveOperationContextLocked(h.request.intentRegistration, appCommittedUpdateOperation, nil, h, false)
+	}()
+	if err != nil {
+		return nil, nil, err
 	}
-	return a.bindUpdateOperationLocked(h.request.intentRegistration)
+	return preparation.build()
 }
 
 // Caller holds updateMu. No engine/native helper remains after the existing

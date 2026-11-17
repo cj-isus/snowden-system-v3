@@ -2,10 +2,28 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/snowden-system/windows/backend/core"
 )
+
+var (
+	errProfileReconciliationRequired = errors.New("Start: смена профиля не завершена; повторите импорт или явно отключите VPN")
+	errAppClosing                    = errors.New("Start: приложение закрывается")
+)
+
+// App.mu held. An occupied slot always denies a replacement; metadata only
+// chooses the reason. No Context/cancel getter, callback, wait or slot mutation.
+func (a *App) operationSlotBlockLocked() string {
+	owner, cancelPresent := a.operationCancellation, a.operationCancel != nil
+	if owner == nil && !cancelPresent {
+		return ""
+	}
+	if owner == nil || !cancelPresent || owner.knownFailure() {
+		return "cleanup_unconfirmed"
+	}
+	return "lifecycle_busy"
+}
 
 // App.mu held. These are local request-registration predicates, not evidence
 // that an Engine, profile, native boundary or protected path can be admitted.
@@ -37,6 +55,9 @@ func (a *App) startBlockLocked(explicit bool) string {
 		return "lifecycle_busy"
 	case "stopped", "error":
 		// A fresh public request may reconcile a stopped/error predecessor.
+		if reason := a.operationSlotBlockLocked(); reason != "" {
+			return reason
+		}
 	default:
 		return "state_unavailable"
 	}
@@ -49,7 +70,8 @@ func (a *App) startBlockLocked(explicit bool) string {
 	return ""
 }
 
-// Error construction belongs only to the actual command, never the snapshot.
+// Finite command errors are separate from the value-only snapshot. In
+// particular, never format/unwrap the private startup cause under App.mu.
 func (a *App) startRejectionLocked(explicit bool) (string, error) {
 	reason := a.startBlockLocked(explicit)
 	switch reason {
@@ -62,15 +84,18 @@ func (a *App) startRejectionLocked(explicit bool) (string, error) {
 	case "update_restart_required":
 		return reason, errInstalledImageChanged
 	case "startup_unavailable":
-		return reason, fmt.Errorf("Start: подготовка приложения прервана: %w", a.startupErr)
+		return reason, errAppStartupUnavailable
 	case "cleanup_unconfirmed":
+		if a.operationSlotBlockLocked() == "cleanup_unconfirmed" {
+			return reason, core.ErrEngineCleanupFailed
+		}
 		return reason, errWatchdogUnavailable
 	case "profile_reconciliation_required":
-		return reason, fmt.Errorf("Start: смена профиля не завершена; повторите импорт или явно отключите VPN")
+		return reason, errProfileReconciliationRequired
 	case "lifecycle_busy":
-		return reason, fmt.Errorf("Start: операция уже выполняется (состояние %s)", a.state.State)
+		return reason, errAppOperationBusy
 	case "closing":
-		return reason, fmt.Errorf("Start: приложение закрывается")
+		return reason, errAppClosing
 	case "app_unavailable":
 		return reason, context.Canceled
 	case "":

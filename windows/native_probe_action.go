@@ -34,8 +34,11 @@ func (a *App) RunNativeProbe() (resultErr error) {
 
 func (a *App) runNativeProbeBody(outcome *nativeProbeActionOutcome) error {
 	intent := outcome.registration.intent
-	parent, end, ok := a.beginOperation(intent, outcome.registration.source)
-	if !ok {
+	parent, end, preparationErr := a.beginOperationContext(intent, outcome.registration.source)
+	if preparationErr != nil {
+		if localRetirementFailure(preparationErr) {
+			return preparationErr // actual finite local custody failure, not an optional scope result
+		}
 		return core.ErrNativeScopeUnavailable
 	}
 	defer a.endOperation(end)

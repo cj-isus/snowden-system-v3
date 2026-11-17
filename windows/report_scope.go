@@ -52,7 +52,55 @@ func protectionFault(report *core.ProbeReport, cause error) error {
 	return &sessionProtectionFault{report: owned, cause: cause}
 }
 
+// Local context custody failed before a native protection observation began.
+// This carries original negative identity, never an invented restricted report.
+type sessionProtectionPreparationFault struct {
+	registration intentRegistration
+	cause        error
+}
+
+func (*sessionProtectionPreparationFault) Error() string {
+	return "session protection preparation cleanup unconfirmed"
+}
+func (fault *sessionProtectionPreparationFault) Unwrap() error {
+	if fault == nil {
+		return nil
+	}
+	return fault.cause
+}
+
+// The caller has released the verification serializer. Reacquire through the
+// existing original lifecycle outcome, recheck the same session/registration,
+// and retain this local fault even if its negative cleanup subsequently returns.
+func (a *App) failProtectionPreparation(cc *render.ClientConfig, fault *sessionProtectionPreparationFault) (resultErr error) {
+	outcome := &appLifecycleOutcome{app: a, registration: fault.registration, stage: "подготовка проверки защиты"}
+	defer outcome.finish(&resultErr)
+	if !outcome.acquire() {
+		return core.ErrEngineCleanupFailed
+	}
+	current := func() bool {
+		runtime_.mu.Lock()
+		defer runtime_.mu.Unlock()
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return cc != nil && runtime_.cc == cc && runtime_.manager != nil && fault.registration.currentLocked(a) &&
+			a.protectionDesired && !a.profileTransition && !a.closing.Load()
+	}()
+	if !current {
+		outcome.returned = true
+		return errSessionSuperseded
+	}
+	outcome.rejectPreparation(fault.cause)
+	outcome.returned = true
+	return fault.cause
+}
+
 func (a *App) blockProtectionFailure(cc *render.ClientConfig, cause error, reason string) {
+	var preparation *sessionProtectionPreparationFault
+	if errors.As(cause, &preparation) && preparation != nil {
+		_ = a.failProtectionPreparation(cc, preparation)
+		return
+	}
 	var fault *sessionProtectionFault
 	if errors.As(cause, &fault) && fault != nil && fault.report != nil {
 		a.blockUnsafePath(cc, reason, fault.report, fcUnknown)

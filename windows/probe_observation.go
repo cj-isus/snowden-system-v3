@@ -506,9 +506,10 @@ func (a *App) probeCoreBody(outcome *appLifecycleOutcome) error {
 		return context.Canceled
 	}
 	id := outcome.registration.intent
-	ctx, cancel, ok := a.beginOperation(id, outcome.registration.source)
-	if !ok {
-		return fmt.Errorf("probe: защита не включена")
+	ctx, cancel, preparationErr := a.beginOperationContext(id, outcome.registration.source)
+	if preparationErr != nil {
+		outcome.rejectPreparation(preparationErr)
+		return preparationErr
 	}
 	defer a.endOperation(cancel)
 	runtime_.mu.Lock()

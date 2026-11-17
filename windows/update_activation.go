@@ -48,12 +48,18 @@ func checkInstalledUpdateVersion(manifest *update.Manifest) error {
 // borrow beginOperation's protectionDesired=true requirement. Stop/epoch/Close
 // still cancel the existing single operation slot, without a second registry.
 func (a *App) beginUpdateOperation(intent intentRegistration, recovery bool) (context.Context, context.CancelFunc, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.closing.Load() || !intent.currentLocked(a) || a.restartCommit != nil || a.profileTransition || a.installedImageChanged != recovery {
-		return nil, nil, context.Canceled
+	preparation, err := func() (*appOperationPreparation, error) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.closing.Load() || !intent.currentLocked(a) || a.restartCommit != nil || a.profileTransition || a.installedImageChanged != recovery {
+			return nil, context.Canceled
+		}
+		return a.reserveOperationContextLocked(intent, appUpdateOperation, nil, nil, recovery)
+	}()
+	if err != nil {
+		return nil, nil, err
 	}
-	return a.bindUpdateOperationLocked(intent)
+	return preparation.build()
 }
 
 func (a *App) activationCurrent(intent intentRegistration, rendererEpoch uint64) bool {

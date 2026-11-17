@@ -236,9 +236,10 @@ func (a *App) switchChannelCoreBody(id uint64, channelID string, expected *rende
 	if expected != nil && !a.sessionCurrent(expected) {
 		return errSessionSuperseded
 	}
-	ctx, cancel, ok := a.beginOperation(id, outcome.registration.source)
-	if !ok {
-		return context.Canceled
+	ctx, cancel, preparationErr := a.beginOperationContext(id, outcome.registration.source)
+	if preparationErr != nil {
+		outcome.rejectPreparation(preparationErr)
+		return preparationErr
 	}
 	defer a.endOperation(cancel)
 	// Keep the actual Manager/cleanup/trust error when the network cancels

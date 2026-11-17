@@ -92,6 +92,7 @@ type App struct {
 	publicProfiles          publicProfileSourceState
 	onboardingCommit        importCommitFn
 	operationCancel         context.CancelFunc
+	operationCancellation   *appOperationCancellation // exact original constructor/cancel owner; guarded by mu
 	operationID             uint64
 	intentSource            *core.OperationSource   // original App intent, survives normal operation completion; guarded by mu
 	startupIntent           intentRegistration      // immutable initial bootstrap identity; never adopts a later user action

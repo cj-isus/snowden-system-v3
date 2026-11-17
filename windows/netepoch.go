@@ -35,10 +35,11 @@ type networkEpoch struct {
 	started         time.Time // момент начала текущей эпохи
 	netCls          string    // класс сети на момент начала (mobile/wifi/ethernet/«»)
 	operationSerial uint64
-	operationCancel context.CancelFunc    // one serialized App lifecycle operation
-	path            *networkPathSource    // original process-local continuity source, never a physical-path attestation
-	pathIdentity    uint64                // presentation identity of constructed sources only; guarded by mu, saturates
-	controlSource   *core.OperationSource // latest actual event, including down; DNS-control denial only
+	operationCancel context.CancelFunc        // one serialized App lifecycle operation
+	operationOwner  *appOperationCancellation // original pending/constructed App owner; held through actual cancellation return
+	path            *networkPathSource        // original process-local continuity source, never a physical-path attestation
+	pathIdentity    uint64                    // presentation identity of constructed sources only; guarded by mu, saturates
+	controlSource   *core.OperationSource     // latest actual event, including down; DNS-control denial only
 	knownDown       bool
 	// Native power callback uses only these atomics, never this mutex.
 	powerBlocked atomic.Bool
@@ -197,6 +198,11 @@ func (e *networkEpoch) bumpEvent(kind, cls string, now time.Time) (int, networkC
 func (e *networkEpoch) bindOperation(parent context.Context) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(parent)
 	e.mu.Lock()
+	if e.operationOwner != nil {
+		e.mu.Unlock()
+		cancel() // legacy/private callers cannot overwrite an owned App preparation
+		return ctx, cancel
+	}
 	source := e.pathSourceLocked()
 	ctx = context.WithValue(ctx, networkPathContextKey{}, source)
 	previous := e.operationCancel
@@ -217,6 +223,30 @@ func (e *networkEpoch) bindOperation(parent context.Context) (context.Context, c
 			e.operationCancel = nil
 		}
 		e.mu.Unlock()
+	}
+}
+
+// Exact original path/owner registration only; no constructor, getter or actual
+// cancellation executes under Epoch.mu. App.operationMu serializes producers.
+func (e *networkEpoch) bindOperationOwner(owner *appOperationCancellation, path *networkPathSource) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if owner == nil || path == nil || e.path != path || !path.current.Load() || e.knownDown || e.powerBlocked.Load() ||
+		!owner.operation.Current() || e.operationOwner != nil || e.operationCancel != nil || e.operationSerial == ^uint64(0) {
+		return false
+	}
+	e.operationSerial++ // a stale legacy cancel cannot clear this new exact owner
+	e.operationOwner, e.operationCancel = owner, owner.request
+	return true
+}
+
+// Only the original callback's ordinary return releases this exact epoch slot.
+// A path event may already have removed its notification, never its owner.
+func (e *networkEpoch) releaseOperationOwner(owner *appOperationCancellation) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if owner != nil && e.operationOwner == owner {
+		e.operationOwner, e.operationCancel = nil, nil
 	}
 }
 

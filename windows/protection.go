@@ -85,32 +85,30 @@ const (
 
 func (r StopReason) releasesProtection() bool { return r == stopDisconnect }
 
-// Caller holds operationMu. a.mu is never held while calling Manager/network.
+// Private compatibility adapter. Product callers preserve the actual error
+// through beginOperationContext; a boolean is not a cleanup outcome.
 func (a *App) beginOperation(id uint64, original ...*core.OperationSource) (context.Context, context.CancelFunc, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if len(original) > 1 || (len(original) == 1 && (original[0] == nil || original[0] != a.intentSource)) {
-		return nil, nil, false // captured Start/Switch cannot adopt a successor's source
+	ctx, cancel, err := a.beginOperationContext(id, original...)
+	return ctx, cancel, err == nil
+}
+
+// Caller holds operationMu. a.mu is never held while calling Manager/network.
+func (a *App) beginOperationContext(id uint64, original ...*core.OperationSource) (context.Context, context.CancelFunc, error) {
+	preparation, err := func() (*appOperationPreparation, error) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if len(original) > 1 || (len(original) == 1 && (original[0] == nil || original[0] != a.intentSource)) {
+			return nil, context.Canceled // captured Start/Switch cannot adopt a successor's source
+		}
+		if !a.appLifetimeCurrentLocked() || a.startupErr != nil || a.watchdogBlocked.Load() || !a.protectionDesired || a.profileTransition || a.proxyConflict || a.closing.Load() || a.restartCommit != nil || a.installedImageChanged || a.operationID != id || id == 0 || !a.intentSource.Current() {
+			return nil, context.Canceled
+		}
+		return a.reserveOperationContextLocked(a.intentRegistrationLocked(), appForegroundOperation, nil, nil, false)
+	}()
+	if err != nil {
+		return nil, nil, err
 	}
-	if !a.appLifetimeCurrentLocked() || a.startupErr != nil || a.watchdogBlocked.Load() || !a.protectionDesired || a.profileTransition || a.proxyConflict || a.closing.Load() || a.restartCommit != nil || a.installedImageChanged || a.operationID != id || id == 0 || !a.intentSource.Current() {
-		return nil, nil, false
-	}
-	ctx, cancel := netEpoch.bindOperation(a.ctx) // original App lifetime; never revive a canceled owner on Background
-	operation := core.NewOperationSource()
-	scope := &appOperationScope{app: a, intent: id, intentSource: a.intentSource, operation: operation}
-	ctx = context.WithValue(ctx, appOperationContextKey{}, scope)
-	path, _ := ctx.Value(networkPathContextKey{}).(*networkPathSource)
-	var sources core.OperationSources
-	if path != nil {
-		sources = core.OperationSources{Intent: scope.intentSource, Operation: operation, Path: &path.current, Closing: &a.closing, Blocked: &a.watchdogBlocked}
-	}
-	ctx = core.WithOperationSources(ctx, sources)
-	retire := func() {
-		operation.Revoke() // before standard context cancellation work or epoch release
-		cancel()
-	}
-	a.operationCancel = retire
-	return ctx, retire, true
+	return preparation.build()
 }
 
 // App.mu held. Revoke the original source before registering a successor; an
@@ -138,11 +136,26 @@ func (a *App) operationCurrent(id uint64) bool {
 }
 
 func (a *App) endOperation(cancel context.CancelFunc) {
-	cancel()
-	// Serialized by operationMu: no successor can have registered a cancel.
+	// operationMu retains the original constructed operation through retirement.
+	// App.mu never encloses an actual CancelFunc or a cancellation join.
 	a.mu.Lock()
-	a.operationCancel = nil
+	owner := a.operationCancellation
+	valid := owner != nil && a.operationCancel != nil && cancel != nil
 	a.mu.Unlock()
+	if !valid {
+		panic(core.ErrEngineCleanupFailed)
+	}
+	cancel()
+	if err := owner.join(); err != nil {
+		panic(core.ErrEngineCleanupFailed) // retain original slot on abnormal/unknown cancellation
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.operationCancellation != owner || a.operationCancel == nil {
+		panic(core.ErrEngineCleanupFailed) // never clear a different owner's slot
+	}
+	a.operationCancel = nil
+	a.operationCancellation = nil
 }
 
 // Caller still owns operationMu. Network cancellation has no separate Stop
@@ -184,7 +197,9 @@ func (a *App) stopCoreFor(reason StopReason) error {
 	if err != nil {
 		return err
 	}
-	a.operationMu.Lock()
+	if err := a.acquireStopRequest(request); err != nil {
+		return err // cancellation uncertainty cannot authorize cleanup/release
+	}
 	defer a.operationMu.Unlock()
 	return a.stopCoreRegisteredLocked(reason, request.intentRegistration)
 }
@@ -194,6 +209,29 @@ type stopRequest struct {
 	wasRunning        bool
 	resumeRequested   bool
 	profileTransition bool
+	cancellation      *appOperationCancellation
+	cancelUnavailable bool
+}
+
+func (request stopRequest) cancelOriginal() {
+	if request.cancelUnavailable {
+		panic(core.ErrEngineCleanupFailed)
+	}
+	if request.cancellation != nil {
+		request.cancellation.request()
+	}
+}
+
+// operationMu held. The original operation may already have removed its own
+// slot; this captured record still proves the exact callback's actual return.
+func (request stopRequest) joinOriginal() error {
+	if request.cancelUnavailable {
+		return core.ErrEngineCleanupFailed
+	}
+	if request.cancellation != nil {
+		return request.cancellation.join()
+	}
+	return nil
 }
 
 // Caller holds App.mu. Capture resume facts with the exact stop registration,
@@ -207,9 +245,8 @@ func (a *App) registerStopLocked(reason StopReason) (stopRequest, error) {
 		return stopRequest{}, err
 	}
 	request.intentRegistration = a.intentRegistrationLocked()
-	if cancel := a.operationCancel; cancel != nil {
-		defer cancel() // revoke original work even if later registration bookkeeping unwinds
-	}
+	request.cancellation = a.operationCancellation
+	request.cancelUnavailable = (a.operationCancel == nil) != (request.cancellation == nil)
 	if reason.releasesProtection() {
 		a.protectionDesired = false
 		a.profileTransition = false

@@ -3085,3 +3085,95 @@ Adapter registry теперь защищает только exact owner slot. И
 Foreground beginOperation, bindUpdateOperationLocked, proxy context factories и callbacks отмены под App.mu остаются следующим объёмом.
 
 Source/unverified: 2 Go + 4 docs; diff просмотрен, gofmt2+1 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v528-operation-cancel"></a>
+
+## V2-528 — отмена исходной операции вне App value locks
+
+`appOperationCancellation` хранит exact original cancel и OperationSource, CAS начала, отдельные ordinary-return witness и unwind notification. Request сначала отзывает negative source; повторный/reentrant request не ждёт исходный callback и не доказывает его возврат. Join под существующим operationMu ждёт исходный frame; panic/Goexit unwind не становится успехом. Новых goroutine/timer/Context parent/native receipt нет.
+
+Foreground/update/proxy регистрируют record вместе с существующим CancelFunc; занятый или несогласованный слот нельзя перезаписать. EndOperation вызывает cancel/join вне App.mu и очищает обе записи только по exact original pointer после обычного возврата. Unknown/pending/failed оставляет original slot. Context constructors/getters/WithOperationSources пока выполняются под App.mu — это следующий обязательный объём.
+
+Stop legacy/UI/restart сохраняют original cancellation при регистрации и немедленно отзывают original intent source под App.mu. Actual cancel вызывается после Unlock до ожидания operationMu; после serializer выполняется join исходного record до cleanup/direct Release. Запрос не берёт cancellation нового владельца. StopRequest остаётся comparable. Profile сохраняет record, выполняет original join через существующий appCleanupStep вне App.mu до state event/native retirement; unknown/failed ведёт в reconciliation и не допускает профиль. Only outer endOperation освобождает его слот.
+
+Proxy prepare/confirm раньше делали только defer cancel; теперь общий endOperation включает освобождение original slot. Body-return flag сбрасывается на время actual retirement и восстанавливается только после обычного возврата; panic/Goexit cancellation не подтверждает завершение исходного proxy request.
+
+Это proof ordinary return только App-owned callback, не quiescence всех ancestor/raw-epoch cancellation, native actors, sockets или ОС. Никакой hard latency/RSS guarantee; pending callback может остаться pending. Compiler/private fixtures/concurrency/reentrancy/OS/performance acceptance OPEN. Initial V528 snapshots/pre1401 сохранены; после разрешённой Git-доставки продолжение заново привязано к own revision1404/pre1405 при неизменных source baselines.
+
+Source/unverified: 8 Go + 4 docs; вручную просмотрены 7 diff и 1 новый helper, gofmt8 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v529-operation-context"></a>
+
+## V2-529 — actual foreground/update/proxy factories вне value locks
+
+Новый immutable `appOperationPreparation` сохраняет original App parent/lifetime/registration/path и fixed mode/proxy/handoff/recovery inputs. Existing App operation/cancellation slot резервируется до любого real constructor/getter. OperationMu/updateMu остаются исходными сериализаторами; App/epoch/owner value locks не удерживаются во время WithCancel, Value/WithValue/WithOperationSources и fence capture. Fence metadata не подменяет actual Context parent.
+
+Existing cancellation owner теперь различает constructor attempt, ordinary factory return и unwind; real partial cancel публикуется сразу после WithCancel до следующих getters под коротким private copy mutex. Pending request отзывает original negative source; без child return он не выдумывает cancel/retirement. Join ждёт исходный factory frame, затем actual original cancel. Unknown/abnormal constructor/cancel сохраняет original slot. Отказ до входа в constructor может освободить слот только после известного обычного возврата без созданного child. Failed build использует существующий appCleanupStep; Goexit продолжает unwind исходного caller.
+
+Все четыре пути — foreground, ordinary/recovery update, committed update и local proxy recovery — строят контекст через один компонент после Unlock. Final short App→epoch gate проверяет exact owner/registration/lifetime, fixed mode constraints и captured path/current/down/power вместе с prepared publication fence. Delayed callback не может получить новый intent/path. Foreground требует прежние protection/watchdog/profile/proxy/image условия; update сохраняет отдельный stopped/recovery contract; committed update — exact handoff; proxy — actual local owner.current.
+
+Epoch binding не вызывает constructor/getter/cancel под mutex: он регистрирует notification того же original owner только для captured current path и свободного слота. Events могут убрать notification, но сохраняют owner до обычного возврата его actual cancel; release очищает только exact own pointer. Legacy raw bindOperation оставлен для прежних private fixtures, product callers больше нет; owned App slot он не перезаписывает. Ancestor/stdlib propagation не является доказательством общей quiescence. Стандартный WithCancel сохраняет свои AfterFunc/watcher semantics; нового явного исполнителя, native actor или forwarding authority нет.
+
+Следующий дефект: boolean beginOperation ещё сворачивает detailed preparation failure в false; исходные Start/Switch/probe outcomes должны отличать cleanup uncertainty от обычного stale admission и публиковать конечный результат, сохраняя original registration. Это не помечено закрытым. Compiler/private fixtures/concurrency/reentrancy/resources/native/OS/speed acceptance OPEN.
+
+Source/unverified: 9 Go + 4 docs; вручную просмотрены 8 diff и 1 новый helper, gofmt9 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v530-preparation-outcome"></a>
+
+## V2-530 — preparation error и original lifecycle/UI outcome
+
+Error-returning beginOperationContext заменяет boolean на всех пяти product-путях: Start, Switch, protected probe, mandatory protection verification и optional native diagnostic. Старый private boolean adapter сохранён для совместимости, product callers у него нет. Ordinary cancellation/stale admission и local cleanup failure больше не сводятся к одному false/общему сообщению.
+
+Original appLifecycleOutcome хранит finite preparation custody failure. Даже обычный возврат тела не разрешает early success; отзыв/negative cleanup/publish выполняются только по исходной регистрации через существующий outcome и оригинальный cleanup cohort. Последующий возврат Stop не стирает независимую uncertainty. Существующие ordinary errors/verified rollback без этого marker не переклассифицируются. Direct Release, новая authority, новый actor или synthetic retirement receipt не добавлены.
+
+Benign rejected Start публикует конечный error только для exact original current starting intent с прежними desired/profile/closing gates. Готовность и старые positive UI projections снимаются; message строится существующим finite presentation helper. Native work, новый retry и retirement receipt не создаются, protection intent не меняется. Stale successor не затрагивается; UI callback защищён исходным outcome.
+
+Ошибка подготовки mandatory protection до начала Observe получает отдельный local fault с исходной registration. После serializer caller через existing outcome проверяет тот же runtime cc/Manager и source, затем выполняет только original negative cleanup. Она не создаёт ProbeReport, MarkRestrictionObserved, фиктивный WFP результат или health evidence. Реальный post-Observe protectionFault/marker сохранён. Optional native diagnostic возвращает finite cleanup class без изменения mandatory health/intent.
+
+Proxy prepare/confirm при custody failure до native callback оставляют original request/Manager unconfirmed: return flag не выставляется, replacement не разрешён. UI использует существующее сообщение о неподтверждённом завершении. Общие Start snapshot/command gates отклоняют retained slot в stopped/error с прежним cleanup_unconfirmed reason. Public schema/bindings не меняются.
+
+Report-scope исходник дополнительно заморожен до любых правок при own pre1411, с совпадением inherited bytes; initial before/reviewed manifests сохранены. Следующий дефект: Stop/restart actual cancelOriginal вызывается до установки finishStopOutcome; callback panic/Goexit требует собственного оригинального outcome до callback, без Release/потери регистрации. Compiler/private fixtures/concurrency/reentrancy/native/OS/performance OPEN.
+
+Source/unverified: 9 Go + 4 docs; вручную просмотрены 9 diff, gofmt9 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v531-stop-preparation"></a>
+
+## V2-531 — original Stop preparation outcome до actual cancel
+
+Legacy stopCoreFor, UI Stop и beginRestartHandoff используют общий acquireStopRequest. Original direct deferred outcome установлен до actual cancelOriginal и до ожидания operationMu. Source/record остаются исходными: notification до serializer, original join после acquisition, без lookup cancellation нового владельца. Ordinary join custody error остаётся unconfirmed; panic/Goexit не обходят исходную negative publication и не создают handoff/Release receipt. Goexit по-прежнему продолжает unwind исходного caller, не становится Go/RPC возвратом.
+
+Acquired/transferred mutex facts различаются. Только normal nil-result передаёт operationMu caller; acquired failure/unwind освобождает его после failed publication, до acquisition чужой mutex не освобождается. Legacy/UI ставят свой unlock только после успеха; restart сохраняет прежний отдельный transfer в actual handoff token. Новый executor/native owner/context/timer не добавлен.
+
+Existing Stop failure publisher вынесен без изменения body: original source revoke, exact sameLocked gate, finite error/cleanup_unconfirmed и readiness=false, retry cancellation и защищённый event step. Этот publisher не вызывает native cleanup, protection Release и не очищает operation slot. Старый serialized finishStopOutcome и полный native Stop cleanup/Release body сохранены; stale registration не публикует поверх successor.
+
+UI использует существующий finite unconfirmed receipt: ordinary helper error может вернуть реальный outer RPC result, но не подтверждает inner cancel return; actual record сохраняет собственный failed/pending факт. Unknown callback/wait может остаться pending, без hard latency/OS quiescence доказательства. Следующий дефект — normal update/proxy slot в stopped/error сейчас попадает в cleanup_unconfirmed; admission/UI должны различать busy и witnessed failed return по passive owner metadata, без actual Context getters или timeout assumptions.
+
+Source/unverified: 4 Go + 4 docs; вручную просмотрены 4 diff, gofmt4 exit0. Тесты/сборки/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v532-operation-slot"></a>
+
+## V2-532 — busy operation и witnessed failed return
+
+KnownFailure использует только initialized original record pointers, nonblocking observations закрытых prepared/done notification и atomic ordinary-return flags. Оба notification проверяются независимо: отказ cancel не скрывается за ещё pending factory. Open notification/source revoke не объявляются ошибкой, timeout или гарантией будущего завершения. Context getters, originalCancel copy mutex, callbacks, waits и новые источники/owners не используются.
+
+OperationSlotBlockLocked различает empty, invalid tuple/known failed original return и ordinary occupied record. Любой занятый слот всегда запрещает replacement, даже если callback уже вернулся и original end ещё не очистил запись. Возможная гонка наблюдения влияет только на denial reason, не на разрешение. Start command/snapshot и actual context reservation используют тот же gate; initial/final lifetime/mode/intent/path/owner gates сохраняются.
+
+Busy получает отдельную finite typed error, не превращается в cleanup failure. Независимый watchdog fault сохраняет приоритет/причину. Proxy UI возвращает finite busy message отдельно от unconfirmed custody. Existing lifecycle_busy hint обобщён до операции приложения (update/proxy/connect), next step — дождаться её завершения. Новых API/schema/bindings/layout/style/polling изменений нет; одна строка статического TS label заморожена до edits по inherited hash, initial manifests сохранены.
+
+Классификация не очищает/отменяет/отзывает слот и не вызывает native cleanup/Release или retry; она не доказательство VPN health, OS retirement или quiescence. Original constructor/cancel/epoch/Stop logic сохранены. Следующий дефект — startup_unavailable всё ещё форматирует unknown a.startupErr через %w под App.mu; это требует finite safe rejection и private retained cause, не объявлено закрытым.
+
+Source/unverified: 4 Go + 1 static TS label + 4 docs; вручную просмотрены 5 diff, gofmt4 exit0. Тесты/сборки/typecheck/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.
+
+<a id="pc-v533-startup-rejection"></a>
+
+## V2-533 — startup rejection без unknown error callbacks под App.mu
+
+Actual startRejectionLocked раньше делал fmt.Errorf(%w, a.startupErr) под App.mu. Установленный Go fmt source подтверждает вызов Formatter.Format или error.Error при таком форматировании. Теперь public rejection имеет собственный fixed Error text и Unwrap только в static core.ErrEngineCleanupFailed; private original cause не хранится в public projection и не достигается через public Is/As/Unwrap. Sticky first-writer App.startupErr сохраняется для внутреннего контроля.
+
+App startup-failure state и public error используют один fixed message; прежний текст состояния сохранён. Остальные profile-transition/closing admission errors — fixed sentinels, fmt исключён из этого value-lock path. Snapshot reason, порядок отказов, intent/source/readiness/slot/mode gates не меняются. Negative category не является доказательством существования/retirement ресурсов или успешного перезапуска.
+
+Одна существующая TS startup_unavailable hint теперь описывает прерванную подготовку и перезапуск после проверки остановки VPN, не обещает восстановить sticky abnormal startup повторным импортом профиля в том же экземпляре. Public schema/bindings/layout/style/polling не менялись. Actual startup finalizer/native cleanup/source revocation/private first-cause behavior сохранены, кроме переиспользования fixed message.
+
+При чтении следующего пути найден actual alias: ensureWatchdog делает ctx:=a.ctx, ctx.Err и WithCancel(ctx) под runtime_.mu+App.mu, до reservation исходного task. Это не закрыто: нужен original pending owner до callbacks, real constructor/cancel вне value locks и сохранение actual started/done/failed return без replacement. Compiler/private fixtures/callback/Goexit/reentrancy/native/OS/performance OPEN.
+
+Source/unverified: 2 Go + 1 static TS label + 4 docs; вручную просмотрены 3 diff, gofmt2 exit0. Тесты/сборки/typecheck/native/сеть не запускались. Полный PC-00…09/TH-00…08 и Windows-приёмка OPEN.

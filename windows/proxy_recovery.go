@@ -77,13 +77,15 @@ func validProxyRecoveryID(text string) bool {
 
 func proxyRecoveryUIError(err error) error {
 	switch {
+	case errors.Is(err, errAppOperationBusy):
+		return errAppOperationBusy
 	case errors.Is(err, core.ErrProxyRecoveryConsentExpired):
 		return errors.New("Подтверждение истекло или уже использовано. Подготовьте восстановление заново.")
 	case errors.Is(err, core.ErrProxyRecoveryConsentInvalid), errors.Is(err, context.Canceled):
 		return errors.New("Запрос восстановления устарел или отменён. Настройки не сбрасываются автоматически.")
 	case errors.Is(err, core.ErrProxyPriorOwnerRunning):
 		return errors.New("Прежний экземпляр Snowden ещё работает. Закройте его перед восстановлением.")
-	case errors.Is(err, core.ErrProxyStateUncertain):
+	case errors.Is(err, core.ErrProxyStateUncertain), errors.Is(err, core.ErrEngineCleanupFailed):
 		return errors.New("Завершение восстановления или освобождение его ресурсов не подтверждено. Повторная операция заблокирована; используйте остановку VPN.")
 	default:
 		return errors.New("Восстановление сейчас недоступно: нужны сохранённые изменения Snowden и свободное управление прокси. При необходимости сначала остановите VPN.")
@@ -101,17 +103,18 @@ func (owner *appProxyRecovery) currentLocked(app *App) bool {
 // operationMu held. The existing source contract is used with this actual local
 // request's negative lifetime; no network-health or Engine admission is created.
 func (a *App) proxyRecoveryContext(owner *appProxyRecovery) (context.Context, context.CancelFunc, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if !owner.currentLocked(a) {
-		return nil, nil, context.Canceled
+	preparation, err := func() (*appOperationPreparation, error) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if owner == nil || !owner.currentLocked(a) {
+			return nil, context.Canceled
+		}
+		return a.reserveOperationContextLocked(owner.registration, appProxyRecoveryOperation, owner, nil, false)
+	}()
+	if err != nil {
+		return nil, nil, err
 	}
-	ctx, cancel := context.WithCancel(a.ctx)
-	operation := core.NewOperationSource()
-	ctx = core.WithOperationSources(ctx, core.OperationSources{Intent: owner.registration.source, Operation: operation, Path: &owner.current, Closing: &a.closing})
-	retire := func() { operation.Revoke(); cancel() }
-	a.operationCancel = retire
-	return ctx, retire, nil
+	return preparation.build()
 }
 
 // operationMu held. A profileless actor is installed in the actual runtime so
@@ -175,8 +178,16 @@ func (a *App) PrepareProxyRecovery(request ProxyRecoveryPrepareRequest) (view *P
 	owner.prepareEntered = true
 	a.mu.Unlock()
 	ctx, cancel, err := a.proxyRecoveryContext(owner)
+	if localRetirementFailure(err) {
+		return nil, proxyRecoveryUIError(err) // original request stays unconfirmed; no native preparation entered
+	}
 	if err == nil {
-		defer cancel()
+		defer func() {
+			bodyReturned := returned
+			returned = false // cancellation failure also retains this original proxy request
+			a.endOperation(cancel)
+			returned = bodyReturned
+		}()
 		err = a.proxyRecoveryRuntime(owner, !resume)
 	}
 	var preview *core.ProxyRecoveryPreview
@@ -239,8 +250,16 @@ func (a *App) ConfirmProxyRecovery(request ProxyRecoveryConfirmRequest) (view *P
 	owner.confirmEntered = true
 	a.mu.Unlock()
 	ctx, cancel, err := a.proxyRecoveryContext(owner)
+	if localRetirementFailure(err) {
+		return nil, proxyRecoveryUIError(err) // preserve original request/Manager on unknown context cleanup
+	}
 	if err == nil {
-		defer cancel()
+		defer func() {
+			bodyReturned := returned
+			returned = false
+			a.endOperation(cancel)
+			returned = bodyReturned
+		}()
 		err = a.proxyRecoveryRuntime(owner, false)
 	}
 	var value *core.ProxyRecoveryResult
